@@ -221,6 +221,72 @@ class ModelMetrics:
         }
 
     @staticmethod
+    def compute_backtesting_metrics(
+        y_true: np.ndarray,
+        y_score: np.ndarray,
+        n_folds: int = 6,
+    ) -> pd.DataFrame:
+        """Calcule des métriques de backtesting par walk-forward.
+
+        Simule une validation temporelle en découpant les données en
+        n_folds séquentiels et en calculant les métriques sur chaque fold.
+
+        Args:
+            y_true: Labels binaires (0/1).
+            y_score: Probabilités prédites.
+            n_folds: Nombre de folds temporels.
+
+        Returns:
+            DataFrame avec colonnes 'month', 'auc', 'gini', 'ks', 'psi'.
+        """
+        n = len(y_true)
+        fold_size = n // n_folds
+        records = []
+
+        for i in range(n_folds):
+            start = i * fold_size
+            end = min((i + 1) * fold_size, n)
+            y_t = y_true[start:end]
+            y_s = y_score[start:end]
+
+            if len(np.unique(y_t)) < 2:
+                continue
+
+            auc_val = ModelMetrics.auc(y_t, y_s)
+            records.append({
+                "month": i + 1,
+                "auc": round(auc_val, 4),
+                "gini": round(2.0 * auc_val - 1.0, 4),
+                "ks": round(ModelMetrics.ks_statistic(y_t, y_s), 4),
+                "psi": round(
+                    ModelMetrics.psi(y_score[:fold_size], y_s) if i > 0 else 0.0,
+                    4,
+                ),
+            })
+
+        return pd.DataFrame(records)
+
+    @staticmethod
+    def hhi(shares: np.ndarray) -> float:
+        """Calcule l'indice de Herfindahl-Hirschman (HHI).
+
+        Mesure la concentration du portefeuille. Standard Bâle III / IFRS 7.
+        HHI < 0.15 → diversifié, 0.15-0.25 → modéré, > 0.25 → concentré.
+
+        Args:
+            shares: Parts de marché (doivent sommer à ~1).
+
+        Returns:
+            Valeur HHI entre 0 et 1.
+        """
+        shares = np.asarray(shares, dtype=float)
+        total = shares.sum()
+        if total == 0:
+            return 0.0
+        proportions = shares / total
+        return float(np.sum(proportions ** 2))
+
+    @staticmethod
     def classification_table(
         y_true: np.ndarray,
         y_score: np.ndarray,

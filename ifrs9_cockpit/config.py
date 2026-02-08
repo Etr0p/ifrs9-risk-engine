@@ -37,6 +37,9 @@ class SegmentConfig:
         base_default_rate: Taux de défaut de base du segment.
         unemployment_sensitivity: Sensibilité au chômage (multiplicateur).
         gdp_sensitivity: Sensibilité au PIB (multiplicateur).
+        interest_rate_sensitivity: Sensibilité au taux directeur BCE.
+        hpi_sensitivity: Sensibilité aux prix immobiliers.
+        inflation_sensitivity: Sensibilité à l'inflation (IPC).
         income_range: Tuple (min, max) du revenu annuel en euros.
         avg_credit_score: Score de crédit moyen du segment.
     """
@@ -46,6 +49,9 @@ class SegmentConfig:
     base_default_rate: float
     unemployment_sensitivity: float
     gdp_sensitivity: float
+    interest_rate_sensitivity: float
+    hpi_sensitivity: float
+    inflation_sensitivity: float
     income_range: Tuple[int, int]
     avg_credit_score: int
 
@@ -58,6 +64,9 @@ SEGMENTS: List[SegmentConfig] = [
         base_default_rate=0.08,
         unemployment_sensitivity=2.5,   # Très sensibles au chômage
         gdp_sensitivity=1.8,
+        interest_rate_sensitivity=1.5,  # Endettés, sensibles aux taux
+        hpi_sensitivity=1.0,            # Peu de patrimoine immobilier
+        inflation_sensitivity=2.0,      # Revenus faibles, peu d'épargne tampon
         income_range=(18_000, 35_000),
         avg_credit_score=580,
     ),
@@ -68,6 +77,9 @@ SEGMENTS: List[SegmentConfig] = [
         base_default_rate=0.035,
         unemployment_sensitivity=1.0,
         gdp_sensitivity=1.0,
+        interest_rate_sensitivity=1.0,  # Sensibilité moyenne
+        hpi_sensitivity=1.0,            # Propriétaires avec equity
+        inflation_sensitivity=1.0,      # Référence
         income_range=(35_000, 75_000),
         avg_credit_score=680,
     ),
@@ -78,6 +90,9 @@ SEGMENTS: List[SegmentConfig] = [
         base_default_rate=0.025,
         unemployment_sensitivity=0.6,
         gdp_sensitivity=0.5,
+        interest_rate_sensitivity=0.3,  # Peu de dette, patrimoine constitué
+        hpi_sensitivity=0.5,            # Equity accumulée, LTV faible
+        inflation_sensitivity=0.6,      # Pensions partiellement indexées
         income_range=(40_000, 90_000),
         avg_credit_score=720,
     ),
@@ -88,6 +103,9 @@ SEGMENTS: List[SegmentConfig] = [
         base_default_rate=0.06,
         unemployment_sensitivity=2.0,
         gdp_sensitivity=1.5,
+        interest_rate_sensitivity=2.0,  # Très exposés (achat récent, LTV élevée)
+        hpi_sensitivity=1.8,            # Negative equity risk si HPI baisse
+        inflation_sensitivity=1.5,      # Revenus modestes, charges immobilières lourdes
         income_range=(22_000, 40_000),
         avg_credit_score=600,
     ),
@@ -106,41 +124,83 @@ class MacroScenario:
         weight: Pondération dans le calcul ECL.
         gdp_growth: Croissance du PIB annualisée (%).
         unemployment_rate: Taux de chômage (%).
+        interest_rate: Taux directeur BCE (%).
+        hpi_growth: Variation annuelle des prix immobiliers (%).
+        inflation_rate: Inflation annuelle IPC (%).
         gdp_shock: Choc PIB appliqué au défaut.
         unemployment_shock: Choc chômage appliqué au défaut.
+        interest_rate_shock: Choc taux directeur appliqué au défaut.
+        hpi_shock: Choc prix immobiliers appliqué à la LGD.
+        inflation_shock: Choc inflation appliqué au défaut.
     """
     name: str
     weight: float
     gdp_growth: float
     unemployment_rate: float
+    interest_rate: float
+    hpi_growth: float
+    inflation_rate: float
     gdp_shock: float
     unemployment_shock: float
+    interest_rate_shock: float
+    hpi_shock: float
+    inflation_shock: float
 
 
 SCENARIO_BASE = MacroScenario(
     name="Base",
-    weight=0.70,
+    weight=0.50,
     gdp_growth=1.2,
     unemployment_rate=7.5,
+    interest_rate=3.5,
+    hpi_growth=2.0,
+    inflation_rate=2.5,
     gdp_shock=0.0,
     unemployment_shock=0.0,
+    interest_rate_shock=0.0,
+    hpi_shock=0.0,
+    inflation_shock=0.0,
 )
 
 SCENARIO_ADVERSE = MacroScenario(
     name="Adverse",
-    weight=0.30,
+    weight=0.25,
     gdp_growth=-1.5,
     unemployment_rate=10.5,
+    interest_rate=5.0,
+    hpi_growth=-8.0,
+    inflation_rate=5.5,
     gdp_shock=0.03,
     unemployment_shock=0.05,
+    interest_rate_shock=0.02,
+    hpi_shock=0.04,
+    inflation_shock=0.02,
 )
 
-SCENARIOS: List[MacroScenario] = [SCENARIO_BASE, SCENARIO_ADVERSE]
+SCENARIO_FAVORABLE = MacroScenario(
+    name="Favorable",
+    weight=0.25,
+    gdp_growth=2.5,
+    unemployment_rate=5.5,
+    interest_rate=2.0,
+    hpi_growth=5.0,
+    inflation_rate=1.5,
+    gdp_shock=-0.01,
+    unemployment_shock=-0.02,
+    interest_rate_shock=-0.01,
+    hpi_shock=-0.02,
+    inflation_shock=-0.01,
+)
+
+SCENARIOS: List[MacroScenario] = [SCENARIO_BASE, SCENARIO_ADVERSE, SCENARIO_FAVORABLE]
 
 # Historique macro mensuel (baseline) — 12 mois
 MACRO_HISTORY_BASELINE: Dict[str, List[float]] = {
     "gdp_growth": [1.1, 1.0, 1.2, 1.3, 1.1, 0.9, 1.0, 1.2, 1.4, 1.3, 1.2, 1.2],
     "unemployment_rate": [7.8, 7.7, 7.6, 7.5, 7.5, 7.6, 7.7, 7.5, 7.4, 7.3, 7.4, 7.5],
+    "interest_rate": [3.0, 3.0, 3.25, 3.25, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5],
+    "hpi_growth": [3.0, 2.8, 2.5, 2.3, 2.0, 2.0, 1.8, 2.0, 2.2, 2.0, 2.0, 2.0],
+    "inflation_rate": [3.2, 3.0, 2.8, 2.7, 2.6, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5],
 }
 
 # ──────────────────────────────────────────────
@@ -288,6 +348,9 @@ class DashboardConfig:
         theme_text_muted: Couleur texte secondaire hex.
         stress_unemployment_range: Range slider chômage (min, max, step).
         stress_gdp_range: Range slider PIB (min, max, step).
+        stress_interest_rate_range: Range slider taux directeur (min, max, step).
+        stress_hpi_range: Range slider prix immobiliers (min, max, step).
+        stress_inflation_range: Range slider inflation (min, max, step).
     """
     page_title: str = "IFRS 9 Risk Cockpit"
     page_icon: str = "\u0024"
@@ -301,6 +364,9 @@ class DashboardConfig:
     theme_text_muted: str = "#94A3B8"
     stress_unemployment_range: Tuple[float, float, float] = (5.0, 15.0, 0.5)
     stress_gdp_range: Tuple[float, float, float] = (-5.0, 5.0, 0.5)
+    stress_interest_rate_range: Tuple[float, float, float] = (0.0, 7.0, 0.25)
+    stress_hpi_range: Tuple[float, float, float] = (-15.0, 10.0, 0.5)
+    stress_inflation_range: Tuple[float, float, float] = (0.0, 8.0, 0.5)
 
 
 DASHBOARD_CONFIG = DashboardConfig()

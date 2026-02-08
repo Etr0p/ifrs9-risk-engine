@@ -157,6 +157,41 @@ def get_main_css(cfg: DashboardConfig = DASHBOARD_CONFIG) -> str:
         font-style: italic;
         font-size: 0.82rem;
     }}
+    .insight-box-content .cro-summary {{
+        color: {cfg.theme_text};
+        font-size: 0.88rem;
+        line-height: 1.6;
+        padding-bottom: 0.6rem;
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }}
+    .insight-box-content .cro-section-label {{
+        color: {cfg.theme_text_muted};
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        font-weight: 700;
+        margin-top: 0.6rem;
+        margin-bottom: 0.3rem;
+    }}
+    .insight-box-content .cro-finding {{
+        color: {cfg.theme_text_muted};
+        font-size: 0.84rem;
+        line-height: 1.6;
+        padding: 0.5rem 0.6rem;
+        border-left: 2px solid rgba(99, 102, 241, 0.25);
+        margin-bottom: 0.4rem;
+        text-align: justify;
+    }}
+    .insight-box-content .cro-recommendation {{
+        color: {cfg.theme_text};
+        font-size: 0.84rem;
+        line-height: 1.6;
+        padding: 0.5rem 0.6rem;
+        border-left: 2px solid rgba(6, 214, 160, 0.35);
+        margin-bottom: 0.4rem;
+        text-align: justify;
+    }}
 
     /* ─── BADGES ─── */
     .badge {{

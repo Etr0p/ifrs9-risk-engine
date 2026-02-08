@@ -265,6 +265,9 @@ class SyntheticDataGenerator:
         # Conditions macro du dernier mois observé
         current_unemployment = MACRO_HISTORY_BASELINE["unemployment_rate"][-1]
         current_gdp = MACRO_HISTORY_BASELINE["gdp_growth"][-1]
+        current_interest_rate = MACRO_HISTORY_BASELINE["interest_rate"][-1]
+        current_hpi = MACRO_HISTORY_BASELINE["hpi_growth"][-1]
+        current_inflation = MACRO_HISTORY_BASELINE["inflation_rate"][-1]
 
         # Intercept négatif pour calibrer le taux de défaut global (~5-7%)
         z = np.full(n, -4.2)
@@ -302,7 +305,26 @@ class SyntheticDataGenerator:
                 * seg.gdp_sensitivity
                 * 0.10
             )
-            z[mask] += unemployment_effect + gdp_effect
+            interest_rate_effect = (
+                (current_interest_rate - 2.0)
+                * seg.interest_rate_sensitivity
+                * 0.08
+            )
+            inflation_effect = (
+                (current_inflation - 2.0)
+                * seg.inflation_sensitivity
+                * 0.06
+            )
+            # HPI en baisse augmente le risque (negative equity)
+            hpi_effect = (
+                max(0, 2.0 - current_hpi)
+                * seg.hpi_sensitivity
+                * 0.05
+            )
+            z[mask] += (
+                unemployment_effect + gdp_effect
+                + interest_rate_effect + inflation_effect + hpi_effect
+            )
 
             # Ajuster le niveau de base par segment
             z[mask] += np.log(seg.base_default_rate / 0.05) * 0.5
@@ -335,6 +357,9 @@ class SyntheticDataGenerator:
         records: List[Dict] = []
         macro_gdp = MACRO_HISTORY_BASELINE["gdp_growth"]
         macro_unemp = MACRO_HISTORY_BASELINE["unemployment_rate"]
+        macro_interest = MACRO_HISTORY_BASELINE["interest_rate"]
+        macro_hpi = MACRO_HISTORY_BASELINE["hpi_growth"]
+        macro_inflation = MACRO_HISTORY_BASELINE["inflation_rate"]
 
         # Pré-calcul des trajectoires de solde pour tous les clients
         n = len(df_clients)
@@ -364,6 +389,9 @@ class SyntheticDataGenerator:
                     "dpd": int(dpd_values[i]),
                     "gdp_growth": macro_gdp[month],
                     "unemployment_rate": macro_unemp[month],
+                    "interest_rate": macro_interest[month],
+                    "hpi_growth": macro_hpi[month],
+                    "inflation_rate": macro_inflation[month],
                 })
 
         return pd.DataFrame(records)

@@ -85,6 +85,9 @@ class ECLCalculator:
         pd_origination: np.ndarray,
         unemployment_override: Optional[float] = None,
         gdp_override: Optional[float] = None,
+        interest_rate_override: Optional[float] = None,
+        hpi_override: Optional[float] = None,
+        inflation_override: Optional[float] = None,
     ) -> pd.DataFrame:
         """Calcule l'ECL pour chaque exposition avec pondération multi-scénarios.
 
@@ -94,6 +97,9 @@ class ECLCalculator:
             pd_origination: PD à l'origination.
             unemployment_override: Override du taux de chômage (stress test).
             gdp_override: Override de la croissance PIB (stress test).
+            interest_rate_override: Override du taux directeur BCE (stress test).
+            hpi_override: Override de la variation prix immobiliers (stress test).
+            inflation_override: Override de l'inflation IPC (stress test).
 
         Returns:
             DataFrame avec colonnes ajoutées : stage, pd_12m, pd_lifetime,
@@ -103,9 +109,27 @@ class ECLCalculator:
         dpd = self._get_dpd(df)
         default_flag = df["default_flag"].values if "default_flag" in df.columns else np.zeros(n)
 
-        # Staging sur les PD courantes
+        # Calculer la PD stressée de référence (scénario Base avec overrides)
+        # pour le staging et l'affichage des KPI
+        has_override = any(v is not None for v in [
+            unemployment_override, gdp_override, interest_rate_override,
+            hpi_override, inflation_override,
+        ])
+        if has_override:
+            pd_stressed_ref = self._adjust_pd_for_scenario(
+                pd_current, df, self.scenarios[0],
+                unemployment_override=unemployment_override,
+                gdp_override=gdp_override,
+                interest_rate_override=interest_rate_override,
+                hpi_override=hpi_override,
+                inflation_override=inflation_override,
+            )
+        else:
+            pd_stressed_ref = pd_current.copy()
+
+        # Staging sur les PD stressées (réagit aux sliders)
         stages = self.staging_engine.assign_stages(
-            pd_current, pd_origination, dpd, default_flag,
+            pd_stressed_ref, pd_origination, dpd, default_flag,
         )
 
         # Calcul ECL par scénario
@@ -118,6 +142,9 @@ class ECLCalculator:
                 pd_current, df, scenario,
                 unemployment_override=unemployment_override,
                 gdp_override=gdp_override,
+                interest_rate_override=interest_rate_override,
+                hpi_override=hpi_override,
+                inflation_override=inflation_override,
             )
 
             # PD par horizon selon le stage
@@ -129,9 +156,10 @@ class ECLCalculator:
             # Stage 3 : PD = 1.0 (défaut avéré)
             pd_effective = np.where(stages == 3, 1.0, pd_effective)
 
-            # LGD selon le type de scénario
+            # LGD selon le type de scénario (HPI impacte la valeur du collatéral)
             is_adverse = scenario.name == "Adverse"
-            lgd = self.lgd_model.predict(df, downturn=is_adverse)
+            scenario_hpi = hpi_override if hpi_override is not None else scenario.hpi_growth
+            lgd = self.lgd_model.predict(df, downturn=is_adverse, hpi_override=scenario_hpi)
 
             # EAD selon le stress
             ead = self.ead_model.predict(df, stressed=is_adverse)
@@ -158,8 +186,8 @@ class ECLCalculator:
         # Construire le résultat
         result = df.copy()
         result["stage"] = stages
-        result["pd_12m"] = pd_current
-        result["pd_lifetime"] = self._compute_lifetime_pd(pd_current, stages)
+        result["pd_12m"] = pd_stressed_ref
+        result["pd_lifetime"] = self._compute_lifetime_pd(pd_stressed_ref, stages)
 
         # Utiliser les détails du scénario Base pour les colonnes principales
         base_details = scenario_details.get("Base", scenario_details[self.scenarios[0].name])
@@ -290,10 +318,15 @@ class ECLCalculator:
         scenario: MacroScenario,
         unemployment_override: Optional[float] = None,
         gdp_override: Optional[float] = None,
+        interest_rate_override: Optional[float] = None,
+        hpi_override: Optional[float] = None,
+        inflation_override: Optional[float] = None,
     ) -> np.ndarray:
         """Ajuste les PD selon le scénario macroéconomique.
 
         Applique les chocs macro avec sensibilité par segment.
+        5 canaux de transmission : chômage, PIB, taux directeur,
+        prix immobiliers, inflation.
 
         Args:
             pd_base: PD de base (modèle).
@@ -301,6 +334,9 @@ class ECLCalculator:
             scenario: Scénario macroéconomique.
             unemployment_override: Override chômage pour stress test interactif.
             gdp_override: Override PIB pour stress test interactif.
+            interest_rate_override: Override taux directeur BCE.
+            hpi_override: Override variation prix immobiliers.
+            inflation_override: Override inflation IPC.
 
         Returns:
             PD ajustées pour le scénario.
@@ -308,13 +344,23 @@ class ECLCalculator:
         pd_adjusted = pd_base.copy()
 
         # Déterminer les chocs effectifs
-        if unemployment_override is not None or gdp_override is not None:
+        has_override = any(v is not None for v in [
+            unemployment_override, gdp_override, interest_rate_override,
+            hpi_override, inflation_override,
+        ])
+        if has_override:
             # Mode stress test interactif
             unemp_shock = max(0, (unemployment_override or 7.5) - 7.5) / 100
             gdp_shock = max(0, 1.2 - (gdp_override or 1.2)) / 100
+            ir_shock = max(0, (interest_rate_override or 3.5) - 3.5) / 100
+            hpi_shock = max(0, 2.0 - (hpi_override or 2.0)) / 100
+            infl_shock = max(0, (inflation_override or 2.5) - 2.5) / 100
         else:
             unemp_shock = scenario.unemployment_shock
             gdp_shock = scenario.gdp_shock
+            ir_shock = scenario.interest_rate_shock
+            hpi_shock = scenario.hpi_shock
+            infl_shock = scenario.inflation_shock
 
         # Appliquer les chocs par segment (sensibilité variable)
         for seg in SEGMENTS:
@@ -322,6 +368,9 @@ class ECLCalculator:
             segment_shock = (
                 unemp_shock * seg.unemployment_sensitivity
                 + gdp_shock * seg.gdp_sensitivity
+                + ir_shock * seg.interest_rate_sensitivity
+                + hpi_shock * seg.hpi_sensitivity
+                + infl_shock * seg.inflation_sensitivity
             )
             pd_adjusted[mask] = pd_adjusted[mask] * (1 + segment_shock * 10)
 

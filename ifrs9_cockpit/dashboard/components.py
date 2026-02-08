@@ -10,7 +10,7 @@ Fournit les briques de construction du layout :
 from __future__ import annotations
 
 import streamlit as st
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ifrs9_cockpit.analytics.virtual_cro import CROAlert
 from ifrs9_cockpit.utils.helpers import format_euro, format_pct
@@ -177,6 +177,109 @@ def render_stage_badges(stage_counts: Dict[int, int], total: int) -> None:
         )
 
     st.markdown(badges_html, unsafe_allow_html=True)
+
+
+def render_smart_insight_box(briefing: Dict[str, Any]) -> None:
+    """Affiche l'insight box avec analyse CRO en prose professionnelle.
+
+    Remplace les alertes de seuil par un briefing exécutif
+    produit par le LocalCROAnalyst : diagnostic narratif,
+    constats avec indicateurs de sévérité colorés, et
+    préconisations avec priorité.
+
+    Args:
+        briefing: Dictionnaire du LocalCROAnalyst.generate_executive_briefing().
+    """
+    risk_level = briefing["risk_level"]
+    risk_score = briefing["risk_score"]
+    risk_color = briefing["risk_color"]
+    diagnostic = briefing["diagnostic"]
+    findings = briefing["findings"]
+    recommendations = briefing["recommendations"]
+
+    # Header icon & color
+    color_map = {
+        "rouge": ("#EF4444", "\U0001f6a8"),
+        "orange": ("#F59E0B", "\u26a0\ufe0f"),
+        "vert": ("#06D6A0", "\u2705"),
+    }
+    accent_color, header_icon = color_map.get(
+        risk_color, ("#94A3B8", "\u2753")
+    )
+
+    border_color = accent_color
+
+    # Severity color mapping
+    sev_colors = {
+        "CRITICAL": "#EF4444",
+        "ALERT": "#F59E0B",
+        "WARNING": "#F97316",
+        "INFO": "#06D6A0",
+    }
+
+    # Priority color mapping
+    prio_colors = {
+        "HAUTE": "#EF4444",
+        "MOYENNE": "#F59E0B",
+        "STANDARD": "#06D6A0",
+        "INFO": "#06D6A0",
+    }
+
+    # Findings HTML (prose paragraphs with colored severity prefix)
+    findings_html = ""
+    if findings:
+        findings_lines = []
+        for f in findings:
+            sev = f["severity"]
+            color = sev_colors.get(sev, "#94A3B8")
+            findings_lines.append(
+                f'<div class="cro-finding">'
+                f'<span style="color:{color};font-weight:700;">'
+                f'({sev})</span> {f["text"]}</div>'
+            )
+        findings_html = (
+            '<div class="cro-section-label">CONSTATS</div>'
+            + "".join(findings_lines)
+        )
+
+    # Recommendations HTML (prose paragraphs with colored priority prefix)
+    recs_html = ""
+    if recommendations:
+        recs_lines = []
+        for r in recommendations:
+            prio = r["priority"]
+            color = prio_colors.get(prio, "#94A3B8")
+            recs_lines.append(
+                f'<div class="cro-recommendation">'
+                f'<span style="color:{color};font-weight:700;">'
+                f'({prio})</span> {r["text"]}</div>'
+            )
+        recs_html = (
+            '<div class="cro-section-label">PRECONISATIONS</div>'
+            + "".join(recs_lines)
+        )
+
+    # Build HTML without indentation to avoid Markdown code blocks
+    body_parts = [f'<div class="cro-summary">{diagnostic}</div>']
+    if findings_html:
+        body_parts.append(findings_html)
+    if recs_html:
+        body_parts.append(recs_html)
+    body = "".join(body_parts)
+
+    html = (
+        f'<div class="insight-box" style="border-left-color:{border_color};">'
+        f'<div class="insight-box-header">'
+        f'<span style="font-size:1.2rem;">{header_icon}</span>'
+        f'<h3>Analyse CRO &mdash; Niveau de risque '
+        f'<span style="color:{accent_color};">{risk_level}</span> '
+        f'<span style="color:#94A3B8;font-size:0.8rem;font-weight:400;">'
+        f'(score {risk_score}/10)</span></h3>'
+        f'</div>'
+        f'<div class="insight-box-content">{body}</div>'
+        f'</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_section_title(title: str) -> None:

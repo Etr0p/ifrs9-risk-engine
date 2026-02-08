@@ -14,9 +14,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from scipy import stats as sp_stats
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from ifrs9_cockpit.config import LGD_CONFIG, RANDOM_SEED, SEGMENTS
+from ifrs9_cockpit.config import LGD_CONFIG, RANDOM_SEED, SEGMENTS, SegmentConfig
 
 
 class LGDModel:
@@ -151,19 +151,37 @@ class LGDModel:
         self,
         df: pd.DataFrame,
         downturn: bool = False,
+        hpi_override: Optional[float] = None,
     ) -> np.ndarray:
         """Interface unifiée de prédiction LGD.
+
+        Le HPI (Housing Price Index) impacte la LGD via la valeur
+        du collatéral : une baisse des prix immobiliers augmente le
+        LTV (Loan-to-Value) et réduit le recouvrement.
 
         Args:
             df: DataFrame clients.
             downturn: Si True, retourne la LGD Downturn.
+            hpi_override: Variation des prix immobiliers (%).
+                Si négatif, augmente la LGD (perte de valeur du collatéral).
 
         Returns:
             Array de LGD.
         """
         if downturn:
-            return self.predict_downturn(df)
-        return self.predict_ttc(df)
+            lgd = self.predict_downturn(df)
+        else:
+            lgd = self.predict_ttc(df)
+
+        # Ajustement HPI : baisse des prix → hausse de la LGD
+        if hpi_override is not None and hpi_override < 2.0:
+            hpi_impact = (2.0 - hpi_override) / 100  # 1pp de baisse HPI → +1% LGD
+            for seg in SEGMENTS:
+                mask = df["segment"].values == seg.name
+                lgd[mask] += hpi_impact * seg.hpi_sensitivity
+            lgd = np.clip(lgd, LGD_CONFIG.recovery_rate_floor, 0.95)
+
+        return lgd
 
     def get_summary(self, df: pd.DataFrame) -> pd.DataFrame:
         """Résumé des LGD par segment et type de prêt.

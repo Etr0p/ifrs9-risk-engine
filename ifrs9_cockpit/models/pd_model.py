@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
@@ -273,12 +273,13 @@ class PDModelSuite:
         X_train_woe = self.X_train[self._woe_features].values
         X_test_woe = self.X_test[self._woe_features].values
 
-        # Modèle de base
+        # Modèle de base avec gestion du déséquilibre des classes
         base_lr = LogisticRegression(
             C=PD_CONFIG.lr_C,
             max_iter=PD_CONFIG.lr_max_iter,
             random_state=self.seed,
             solver="lbfgs",
+            class_weight="balanced",
         )
 
         # Calibration isotonic via cross-validation interne
@@ -323,6 +324,7 @@ class PDModelSuite:
             min_samples_leaf=PD_CONFIG.rf_min_samples_leaf,
             random_state=self.seed,
             n_jobs=-1,
+            class_weight="balanced",
         )
         rf.fit(X_train_raw, self.y_train)
 
@@ -349,17 +351,38 @@ class PDModelSuite:
         X_train_raw = self.X_train[self._raw_features].values
         X_test_raw = self.X_test[self._raw_features].values
 
-        xgb = XGBClassifier(
-            n_estimators=PD_CONFIG.xgb_n_estimators,
-            max_depth=PD_CONFIG.xgb_max_depth,
-            learning_rate=PD_CONFIG.xgb_learning_rate,
-            subsample=PD_CONFIG.xgb_subsample,
+        # Ratio de déséquilibre pour scale_pos_weight
+        n_neg = (self.y_train == 0).sum()
+        n_pos = max((self.y_train == 1).sum(), 1)
+        spw = n_neg / n_pos
+
+        # RandomizedSearchCV pour optimiser les hyperparamètres
+        base_xgb = XGBClassifier(
             random_state=self.seed,
             eval_metric="logloss",
             use_label_encoder=False,
             verbosity=0,
+            scale_pos_weight=spw,
         )
-        xgb.fit(X_train_raw, self.y_train)
+        param_distributions = {
+            "n_estimators": [100, 200, 300],
+            "max_depth": [3, 4, 5, 6],
+            "learning_rate": [0.01, 0.05, 0.1],
+            "subsample": [0.7, 0.8, 0.9],
+            "colsample_bytree": [0.7, 0.8, 1.0],
+        }
+        search = RandomizedSearchCV(
+            base_xgb,
+            param_distributions,
+            n_iter=12,
+            cv=3,
+            scoring="roc_auc",
+            random_state=self.seed,
+            n_jobs=-1,
+        )
+        search.fit(X_train_raw, self.y_train)
+        xgb = search.best_estimator_
+        self._xgb_best_params = search.best_params_
 
         y_pred_train = xgb.predict_proba(X_train_raw)[:, 1]
         y_pred_test = xgb.predict_proba(X_test_raw)[:, 1]
