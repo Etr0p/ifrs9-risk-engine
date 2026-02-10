@@ -5,47 +5,128 @@ Implémente la logique d'affectation des expositions aux 3 stages :
     - Stage 2 : SICR détecté (PD lifetime, ECL lifetime)
     - Stage 3 : Défaut avéré (PD = 100%, ECL lifetime)
 
-Le SICR (Significant Increase in Credit Risk) est déclenché
-lorsque la PD courante dépasse un multiple de la PD à l'origination.
+Le SICR (Significant Increase in Credit Risk) est déterminé par un
+score multi-facteurs (IFRS 9 §B5.5.17) combinant :
+    - Ratio PD relatif (PD_current / PD_origination - 1)
+    - Delta PD absolu (PD_current - PD_origination)
+    - DPD normalisé (DPD / 30)
+    - Z-score macro (forward-looking)
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
-from ifrs9_cockpit.config import IFRS9_CONFIG
+from ifrs9_cockpit.config import IFRS9_CONFIG, SICR_CONFIG, SCENARIO_BASE
+
+
+def compute_macro_z(macro_params: Dict[str, float]) -> float:
+    """Calcule le Z-score macro composite pour le SICR.
+
+    Le Z-score mesure la deviation des conditions macro courantes
+    par rapport au scenario de base. Positif = conditions adverses.
+
+    Args:
+        macro_params: Dict avec cles unemployment_rate, gdp_growth,
+            interest_rate, hpi_growth, inflation_rate.
+
+    Returns:
+        Z-score macro composite (scalaire).
+    """
+    base = SCENARIO_BASE
+    z = 0.0
+    # Chomage : hausse = adverse
+    z += (macro_params.get("unemployment_rate", base.unemployment_rate)
+          - base.unemployment_rate)
+    # PIB : baisse = adverse
+    z += (base.gdp_growth
+          - macro_params.get("gdp_growth", base.gdp_growth))
+    # Taux : hausse = adverse
+    z += (macro_params.get("interest_rate", base.interest_rate)
+          - base.interest_rate)
+    # HPI : baisse = adverse
+    z += (base.hpi_growth
+          - macro_params.get("hpi_growth", base.hpi_growth))
+    # Inflation : hausse = adverse
+    z += (macro_params.get("inflation_rate", base.inflation_rate)
+          - base.inflation_rate)
+    return z
+
+
+def compute_sicr_score(
+    pd_current: np.ndarray,
+    pd_origination: np.ndarray,
+    dpd: np.ndarray,
+    macro_params: Optional[Dict[str, float]] = None,
+) -> np.ndarray:
+    """Score SICR multi-facteurs (IFRS 9 §B5.5.17).
+
+    Combine 4 facteurs ponderes par SICR_CONFIG :
+        score = w_pd_ratio × (PD_current / PD_origination - 1)
+              + w_pd_delta × max(0, PD_current - PD_origination)
+              + w_dpd × (DPD / 30)
+              + w_macro × macro_z
+
+    Args:
+        pd_current: PD courante (Point-In-Time).
+        pd_origination: PD a l'origination.
+        dpd: Jours de retard courants.
+        macro_params: Parametres macro courants (optionnel).
+
+    Returns:
+        Array de scores SICR.
+    """
+    # Ratio PD relatif
+    pd_ratio = pd_current / np.maximum(pd_origination, 1e-6) - 1
+    # Delta PD absolu
+    pd_delta = np.maximum(0, pd_current - pd_origination)
+    # DPD normalise
+    dpd_norm = dpd / 30.0
+    # Z-score macro (0 si pas de parametres macro)
+    if macro_params is not None:
+        macro_z = compute_macro_z(macro_params)
+    else:
+        macro_z = 0.0
+
+    score = (
+        SICR_CONFIG.w_pd_ratio * pd_ratio
+        + SICR_CONFIG.w_pd_delta * pd_delta
+        + SICR_CONFIG.w_dpd * dpd_norm
+        + SICR_CONFIG.w_macro * macro_z
+    )
+    return score
 
 
 class StagingEngine:
     """Moteur d'affectation aux stages IFRS 9.
 
-    Applique les critères quantitatifs (PD relative + PD absolue)
-    et qualitatifs (DPD) pour classifier chaque exposition.
+    Utilise un score SICR multi-facteurs pour le declenchement Stage 2
+    et les criteres quantitatifs/qualitatifs classiques pour Stage 3.
 
     Attributes:
-        sicr_multiplier: Multiplicateur PD pour déclenchement SICR.
         stage3_dpd: Jours de retard seuil pour Stage 3.
         stage3_pd: PD seuil pour Stage 3.
+        sicr_threshold: Seuil SICR pour declenchement Stage 2.
     """
 
     def __init__(
         self,
-        sicr_multiplier: float = IFRS9_CONFIG.sicr_threshold_multiplier,
         stage3_dpd: int = IFRS9_CONFIG.stage3_dpd_threshold,
         stage3_pd: float = IFRS9_CONFIG.stage3_pd_threshold,
+        sicr_threshold: float = SICR_CONFIG.threshold,
     ) -> None:
         """Initialise le moteur de staging.
 
         Args:
-            sicr_multiplier: Ratio PD courante / PD origination pour SICR.
             stage3_dpd: Jours de retard minimum pour Stage 3.
             stage3_pd: PD minimum pour Stage 3.
+            sicr_threshold: Seuil de score SICR pour Stage 2.
         """
-        self.sicr_multiplier = sicr_multiplier
         self.stage3_dpd = stage3_dpd
         self.stage3_pd = stage3_pd
+        self.sicr_threshold = sicr_threshold
 
     def assign_stages(
         self,
@@ -53,12 +134,13 @@ class StagingEngine:
         pd_origination: np.ndarray,
         dpd: np.ndarray,
         default_flag: np.ndarray,
+        macro_params: Optional[Dict[str, float]] = None,
     ) -> np.ndarray:
         """Assigne un stage IFRS 9 à chaque exposition.
 
         Logique de priorité :
             1. Stage 3 si default_flag = 1 OU DPD >= 90 OU PD >= 30%
-            2. Stage 2 si PD_current >= SICR_multiplier × PD_origination
+            2. Stage 2 si SICR_score > threshold (multi-facteurs)
             3. Stage 1 sinon (performing)
 
         Args:
@@ -66,6 +148,7 @@ class StagingEngine:
             pd_origination: PD à l'origination du prêt.
             dpd: Jours de retard courants.
             default_flag: Flag de défaut observé (0/1).
+            macro_params: Parametres macro courants (optionnel, pour SICR).
 
         Returns:
             Array d'entiers (1, 2 ou 3).
@@ -73,9 +156,11 @@ class StagingEngine:
         n = len(pd_current)
         stages = np.ones(n, dtype=int)  # Default : Stage 1
 
-        # Stage 2 : SICR détecté (critère relatif)
-        sicr_mask = pd_current >= self.sicr_multiplier * pd_origination
-        stages[sicr_mask] = 2
+        # Stage 2 : SICR multi-facteurs
+        sicr_score = compute_sicr_score(
+            pd_current, pd_origination, dpd, macro_params,
+        )
+        stages[sicr_score > self.sicr_threshold] = 2
 
         # Stage 3 : Défaut avéré (priorité sur Stage 2)
         stage3_mask = (

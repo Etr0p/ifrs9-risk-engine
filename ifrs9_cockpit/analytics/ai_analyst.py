@@ -208,11 +208,11 @@ class LocalCROAnalyst:
 
             # Élasticités macro-crédit par canal de transmission
             sensitivity_map = {
-                "unemployment_rate": seg.unemployment_sensitivity,
-                "gdp_growth": seg.gdp_sensitivity,
-                "interest_rate": seg.interest_rate_sensitivity,
-                "hpi_growth": seg.hpi_sensitivity,
-                "inflation_rate": seg.inflation_sensitivity,
+                "unemployment_rate": seg.unemployment_sensitivity_credit,
+                "gdp_growth": seg.gdp_sensitivity_credit,
+                "interest_rate": seg.interest_rate_sensitivity_credit,
+                "hpi_growth": seg.hpi_sensitivity_credit,
+                "inflation_rate": seg.inflation_sensitivity_credit,
             }
 
             macro_impacts: Dict[str, Dict[str, Any]] = {}
@@ -606,11 +606,11 @@ class LocalCROAnalyst:
                 seg_sens = []
                 for seg in SEGMENTS:
                     sens_map = {
-                        "unemployment_rate": seg.unemployment_sensitivity,
-                        "gdp_growth": seg.gdp_sensitivity,
-                        "interest_rate": seg.interest_rate_sensitivity,
-                        "hpi_growth": seg.hpi_sensitivity,
-                        "inflation_rate": seg.inflation_sensitivity,
+                        "unemployment_rate": seg.unemployment_sensitivity_credit,
+                        "gdp_growth": seg.gdp_sensitivity_credit,
+                        "interest_rate": seg.interest_rate_sensitivity_credit,
+                        "hpi_growth": seg.hpi_sensitivity_credit,
+                        "inflation_rate": seg.inflation_sensitivity_credit,
                     }
                     seg_sens.append((seg.name, sens_map[key]))
 

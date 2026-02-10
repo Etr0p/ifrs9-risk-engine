@@ -103,3 +103,43 @@ def format_bps(value: float) -> str:
         Chaîne formatée (ex: '52 bps').
     """
     return f"{value * 10_000:.0f} bps"
+
+
+def logit(p: np.ndarray | float) -> np.ndarray | float:
+    """Calcule le logit (log-odds) d'une probabilite.
+
+    logit(p) = log(p / (1 - p))
+
+    Transformation standard en modelisation credit (Merton-Vasicek).
+    Mappe [0, 1] -> R, permettant des operations additives sur les
+    probabilites sans risque de debordement.
+
+    Args:
+        p: Probabilite(s) dans ]0, 1[.
+
+    Returns:
+        Log-odds dans R.
+    """
+    p_safe = np.clip(p, 1e-10, 1 - 1e-10)
+    return np.log(p_safe / (1 - p_safe))
+
+
+def expit(x: np.ndarray | float) -> np.ndarray | float:
+    """Calcule l'inverse du logit (fonction logistique / sigmoide).
+
+    expit(x) = 1 / (1 + exp(-x))
+
+    Implementation numeriquement stable (evite overflow pour |x| grand).
+
+    Args:
+        x: Valeur(s) en espace logit (log-odds).
+
+    Returns:
+        Probabilite(s) dans ]0, 1[.
+    """
+    x = np.asarray(x, dtype=float)
+    return np.where(
+        x >= 0,
+        1 / (1 + np.exp(-x)),
+        np.exp(x) / (1 + np.exp(x)),
+    )

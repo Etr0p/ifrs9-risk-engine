@@ -317,20 +317,20 @@ class VirtualCRO:
             # Identifier si le segment concentre trop de risque
             if coverage > 0.10 or ecl_contribution > 0.40:
                 # Identifier le driver macro principal
-                if seg.unemployment_sensitivity > 1.5 and unemployment_rate > 8.0:
+                if seg.unemployment_sensitivity_credit > 1.5 and unemployment_rate > 8.0:
                     driver = (
                         f"chômage élevé ({unemployment_rate:.1f}%) combiné à "
-                        f"une sensibilité segment de {seg.unemployment_sensitivity}x"
+                        f"une sensibilité secteur de {seg.unemployment_sensitivity_credit}x"
                     )
-                elif seg.gdp_sensitivity > 1.2 and gdp_growth < 0.5:
+                elif seg.gdp_sensitivity_credit > 1.2 and gdp_growth < 0.5:
                     driver = (
                         f"croissance PIB atone ({gdp_growth:.1f}%) avec "
-                        f"sensibilité segment de {seg.gdp_sensitivity}x"
+                        f"sensibilité secteur de {seg.gdp_sensitivity_credit}x"
                     )
                 else:
                     driver = (
-                        f"profil structurel du segment (score moyen "
-                        f"{seg.avg_credit_score}, DR de base {seg.base_default_rate:.1%})"
+                        f"profil structurel du secteur "
+                        f"(DR de base {seg.base_default_rate:.1%})"
                     )
 
                 severity = "ALERT" if coverage > 0.15 else "WARNING"

@@ -1,12 +1,12 @@
-"""Modèle Exposure At Default (EAD) pour le Cockpit IFRS 9.
+"""Modele Exposure At Default (EAD) pour le Cockpit IFRS 9.
 
-L'EAD représente l'exposition attendue au moment du défaut.
+L'EAD represente l'exposition attendue au moment du defaut.
 Pour les lignes revolving, l'EAD inclut un tirage additionnel
-estimé via le Credit Conversion Factor (CCF) :
+estime via le Credit Conversion Factor (CCF) :
 
-    EAD = Drawn + CCF × Undrawn
+    EAD = Drawn + CCF x Undrawn
 
-Pour les prêts à terme, EAD ≈ encours courant (CCF = 1.0).
+Pour les prets a terme, EAD = encours courant (CCF = 1.0).
 """
 
 from __future__ import annotations
@@ -15,48 +15,43 @@ import numpy as np
 import pandas as pd
 from typing import Dict
 
-from ifrs9_cockpit.config import EAD_CONFIG, RANDOM_SEED, SEGMENTS
+from ifrs9_cockpit.config import EAD_CONFIG, RANDOM_SEED, SECTORS
 
 
 class EADModel:
-    """Modèle EAD avec CCF pour lignes revolving.
+    """Modele EAD avec CCF pour lignes revolving.
 
-    Calcule l'exposition au défaut en distinguant les produits
-    revolving (carte de crédit, découvert) des prêts à terme.
-    Applique un stress sur le tirage en scénario adverse.
+    Calcule l'exposition au defaut en distinguant les produits
+    revolving des prets a terme. Applique un stress sur le tirage
+    en scenario adverse.
 
     Attributes:
-        seed: Graine aléatoire.
-        rng: Générateur numpy.
-        avg_ccf_by_type_: CCF moyens calibrés par type de prêt.
+        seed: Graine aleatoire.
+        rng: Generateur numpy.
+        avg_ccf_by_type_: CCF moyens calibres par type de pret.
     """
 
     def __init__(self, seed: int = RANDOM_SEED) -> None:
-        """Initialise le modèle EAD.
+        """Initialise le modele EAD.
 
         Args:
-            seed: Graine pour reproductibilité.
+            seed: Graine pour reproductibilite.
         """
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.avg_ccf_by_type_: Dict[str, float] = {}
         self._fitted = False
 
-    def fit(self, df: pd.DataFrame) -> "EADModel":
-        """Calibre les CCF par type de prêt.
-
-        Dans un vrai contexte, les CCF seraient calibrés sur les
-        défauts historiques. Ici on utilise les valeurs réglementaires
-        avec un ajustement par segment.
+    def fit(self, df: pd.DataFrame) -> EADModel:
+        """Calibre les CCF par type de pret.
 
         Args:
-            df: DataFrame clients avec loan_type, loan_amount,
+            df: DataFrame credit avec loan_type, loan_amount,
                 utilization_rate.
 
         Returns:
             Self (pattern fluent).
         """
-        # CCF de base par type de produit
         self.avg_ccf_by_type_ = {
             "Revolving": EAD_CONFIG.ccf_revolving,
             "Term": EAD_CONFIG.ccf_term_loan,
@@ -69,15 +64,13 @@ class EADModel:
         df: pd.DataFrame,
         stressed: bool = False,
     ) -> np.ndarray:
-        """Calcule l'EAD pour chaque client.
+        """Calcule l'EAD pour chaque entreprise.
 
         Pour les revolving :
-            - Drawn = loan_amount × utilization_rate
-            - Undrawn = loan_amount × (1 - utilization_rate)
-            - EAD = Drawn + CCF × Undrawn
+            EAD = Drawn + CCF x Undrawn
 
         Pour les term loans :
-            - EAD = loan_amount (encours total)
+            EAD = loan_amount
 
         Args:
             df: DataFrame avec loan_type, loan_amount, utilization_rate.
@@ -89,6 +82,11 @@ class EADModel:
         n = len(df)
         loan_amount = df["loan_amount"].values.astype(float)
         utilization = df["utilization_rate"].values.astype(float)
+        # Imputer les utilization_rate manquantes par la mediane observee
+        nan_mask = np.isnan(utilization)
+        if nan_mask.any():
+            median_util = np.nanmedian(utilization)
+            utilization[nan_mask] = median_util
         is_revolving = df["loan_type"].values == "Revolving"
 
         ead = np.zeros(n)
@@ -97,49 +95,48 @@ class EADModel:
         term_mask = ~is_revolving
         ead[term_mask] = loan_amount[term_mask]
 
-        # Revolving : EAD = drawn + CCF × undrawn
+        # Revolving : EAD = drawn + CCF x undrawn
         drawn = loan_amount[is_revolving] * utilization[is_revolving]
         undrawn = loan_amount[is_revolving] * (1 - utilization[is_revolving])
         ccf = self.avg_ccf_by_type_.get("Revolving", EAD_CONFIG.ccf_revolving)
 
         if stressed:
-            # En stress, les clients tirent plus sur leurs lignes
             ccf = min(ccf + EAD_CONFIG.utilization_draw_stress, 1.0)
 
         ead[is_revolving] = drawn + ccf * undrawn
 
-        # Ajustement segments fragiles en stress
+        # Ajustement secteurs fragiles en stress
         if stressed:
-            for seg in SEGMENTS:
-                if seg.unemployment_sensitivity > 1.5:
-                    seg_mask = df["segment"].values == seg.name
-                    ead[seg_mask] *= 1.05  # +5% de tirage additionnel
+            for sector in SECTORS:
+                if sector.unemployment_sensitivity_credit > 1.5:
+                    sector_mask = df["sector"].values == sector.name
+                    ead[sector_mask] *= 1.05
 
-        # Dispersion réaliste (+/- 5%)
+        # Dispersion realiste (+/- 2%)
         noise = self.rng.normal(1.0, 0.02, n)
         ead *= noise
 
         return np.maximum(ead, 0)
 
     def get_summary(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Résumé des EAD par segment et type de prêt.
+        """Resume des EAD par secteur et type de pret.
 
         Args:
-            df: DataFrame clients.
+            df: DataFrame credit.
 
         Returns:
-            DataFrame récapitulatif avec EAD base et stressée.
+            DataFrame recapitulatif avec EAD base et stressee.
         """
         ead_base = self.predict(df, stressed=False)
         ead_stress = self.predict(df, stressed=True)
 
-        summary_df = df[["segment", "loan_type"]].copy()
+        summary_df = df[["sector", "loan_type"]].copy()
         summary_df["ead_base"] = ead_base
         summary_df["ead_stressed"] = ead_stress
         summary_df["loan_amount"] = df["loan_amount"].values
 
         return (
-            summary_df.groupby(["segment", "loan_type"])
+            summary_df.groupby(["sector", "loan_type"])
             .agg(
                 count=("ead_base", "size"),
                 avg_loan=("loan_amount", "mean"),
@@ -152,15 +149,13 @@ class EADModel:
         )
 
     def get_ccf_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Analyse des CCF implicites par segment.
-
-        Calcule le CCF effectif = (EAD - Drawn) / Undrawn.
+        """Analyse des CCF implicites par secteur.
 
         Args:
-            df: DataFrame clients.
+            df: DataFrame credit.
 
         Returns:
-            DataFrame avec CCF implicites par segment/type.
+            DataFrame avec CCF implicites par secteur.
         """
         revolving = df[df["loan_type"] == "Revolving"].copy()
         if len(revolving) == 0:
@@ -170,12 +165,9 @@ class EADModel:
         drawn = revolving["loan_amount"].values * revolving["utilization_rate"].values
         undrawn = revolving["loan_amount"].values * (1 - revolving["utilization_rate"].values)
 
-        # CCF implicite
-        ccf_implicit = np.where(
-            undrawn > 0,
-            (ead - drawn) / undrawn,
-            1.0,
-        )
+        ccf_implicit = np.ones_like(ead, dtype=float)
+        valid = undrawn > 0
+        np.divide(ead - drawn, undrawn, out=ccf_implicit, where=valid)
 
         revolving = revolving.copy()
         revolving["ccf_implicit"] = ccf_implicit
@@ -184,7 +176,7 @@ class EADModel:
         revolving["ead"] = ead
 
         return (
-            revolving.groupby("segment")
+            revolving.groupby("sector")
             .agg(
                 count=("ccf_implicit", "size"),
                 avg_ccf=("ccf_implicit", "mean"),

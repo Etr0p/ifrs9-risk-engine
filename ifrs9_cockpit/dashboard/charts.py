@@ -727,6 +727,329 @@ def plot_backtesting_auc(monthly_metrics: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def plot_pe_nav_by_sector(result_pe: pd.DataFrame) -> go.Figure:
+    """Barres NAV et Expected Loss PE par secteur.
+
+    Args:
+        result_pe: DataFrame resultat PECalculator.
+
+    Returns:
+        Figure Plotly grouped bar.
+    """
+    cols = ["nav", "expected_loss_pe", "capital_invested"]
+    agg = {c: "sum" for c in cols if c in result_pe.columns}
+    seg = result_pe.groupby("sector").agg(**{c: (c, "sum") for c in agg}).reset_index()
+    seg = seg.sort_values("nav", ascending=True)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=seg["sector"], x=seg["nav"], name="NAV",
+        orientation="h", marker_color=_PRIMARY, opacity=0.9,
+    ))
+    fig.add_trace(go.Bar(
+        y=seg["sector"], x=seg["capital_invested"], name="Capital Investi",
+        orientation="h", marker_color=_SECONDARY, opacity=0.7,
+    ))
+    fig.add_trace(go.Bar(
+        y=seg["sector"], x=seg["expected_loss_pe"], name="Expected Loss PE",
+        orientation="h", marker_color="#EF4444", opacity=0.85,
+    ))
+
+    layout = _base_layout("NAV & Pertes PE par Secteur", height=380)
+    layout["barmode"] = "group"
+    layout["xaxis"]["title"] = "Montant (EUR)"
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_pe_risk_categories(result_pe: pd.DataFrame) -> go.Figure:
+    """Pie chart des categories de risque PE.
+
+    Args:
+        result_pe: DataFrame resultat PECalculator.
+
+    Returns:
+        Figure Plotly pie.
+    """
+    cats = result_pe["risk_category"].value_counts().reindex(
+        ["Performing", "Watchlist", "Distressed"], fill_value=0,
+    )
+    colors = [_ACCENT, "#F59E0B", "#EF4444"]
+
+    fig = go.Figure(go.Pie(
+        labels=cats.index,
+        values=cats.values,
+        marker=dict(colors=colors),
+        textinfo="label+percent+value",
+        textfont=dict(color=_TEXT, size=11),
+        hole=0.45,
+    ))
+    layout = _base_layout("Classification PE (IPEV)", height=380)
+    layout["showlegend"] = True
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_pe_moic_drawdown(result_pe: pd.DataFrame) -> go.Figure:
+    """MOIC moyen et drawdown moyen par secteur (double axe).
+
+    Args:
+        result_pe: DataFrame resultat PECalculator.
+
+    Returns:
+        Figure Plotly.
+    """
+    seg = result_pe.groupby("sector").agg(
+        moic_mean=("moic", "mean"),
+        drawdown_mean=("nav_drawdown", "mean"),
+    ).reset_index().sort_values("moic_mean", ascending=True)
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(go.Bar(
+        y=seg["sector"], x=seg["moic_mean"], name="MOIC moyen",
+        orientation="h", marker_color=_PRIMARY, opacity=0.9,
+    ), secondary_y=False)
+
+    fig.add_trace(go.Scatter(
+        y=seg["sector"], x=seg["drawdown_mean"], name="Drawdown moyen",
+        mode="markers+lines", marker=dict(size=10, color="#EF4444"),
+        line=dict(color="#EF4444", width=2),
+    ), secondary_y=True)
+
+    layout = _base_layout("MOIC & Drawdown par Secteur", height=380)
+    fig.update_layout(**layout)
+    fig.update_xaxes(title_text="MOIC", secondary_y=False)
+    fig.update_xaxes(title_text="Drawdown (%)", secondary_y=True)
+    return fig
+
+
+def plot_asymmetry_heatmap(asym_df: pd.DataFrame) -> go.Figure:
+    """Heatmap de la matrice d'asymetrie Credit vs PE.
+
+    Args:
+        asym_df: DataFrame du PortfolioComparator.build_asymmetry_matrix().
+
+    Returns:
+        Figure Plotly heatmap.
+    """
+    metrics = ["loss_ratio", "rwa_ratio", "raroc_delta"]
+    labels = ["Ratio Perte PE/Credit", "Ratio RWA PE/Credit", "Delta RAROC (PE-Credit)"]
+
+    z = []
+    for m in metrics:
+        if m in asym_df.columns:
+            z.append(asym_df[m].values.tolist())
+        else:
+            z.append([0.0] * len(asym_df))
+
+    text = [[f"{v:.2f}" for v in row] for row in z]
+
+    fig = go.Figure(go.Heatmap(
+        z=z,
+        x=asym_df["sector"].tolist(),
+        y=labels,
+        text=text,
+        texttemplate="%{text}",
+        textfont=dict(size=13, color=_TEXT),
+        colorscale=[
+            [0, _ACCENT],
+            [0.5, _CARD],
+            [1, "#EF4444"],
+        ],
+        showscale=True,
+        colorbar=dict(tickfont=dict(color=_MUTED)),
+    ))
+
+    layout = _base_layout("Matrice d'Asymetrie Credit vs PE", height=320)
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_raroc_comparison(raroc_df: pd.DataFrame) -> go.Figure:
+    """Barres groupees RAROC Credit vs PE par secteur.
+
+    Args:
+        raroc_df: DataFrame du PortfolioComparator.compute_raroc_eva().
+
+    Returns:
+        Figure Plotly grouped bar.
+    """
+    # Filtrer les totaux
+    df = raroc_df[~raroc_df["sector"].str.startswith("TOTAL")].copy()
+
+    credit = df[df["canal"] == "Credit"].sort_values("sector")
+    pe = df[df["canal"] == "PE"].sort_values("sector")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=credit["sector"], y=credit["raroc"], name="RAROC Credit",
+        marker_color=_PRIMARY, opacity=0.9,
+    ))
+    if len(pe) > 0:
+        fig.add_trace(go.Bar(
+            x=pe["sector"], y=pe["raroc"], name="RAROC PE",
+            marker_color=_ACCENT, opacity=0.9,
+        ))
+
+    layout = _base_layout("RAROC Credit vs PE par Secteur", height=400)
+    layout["barmode"] = "group"
+    layout["yaxis"]["title"] = "RAROC"
+    layout["yaxis"]["tickformat"] = ".1%"
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_crr3_sensitivity(crr3_df: pd.DataFrame) -> go.Figure:
+    """Barres CET1 ratio par scenario RW PE (CRR3).
+
+    Args:
+        crr3_df: DataFrame du PortfolioComparator.compute_crr3_sensitivity().
+
+    Returns:
+        Figure Plotly.
+    """
+    fig = go.Figure()
+
+    colors = []
+    for _, row in crr3_df.iterrows():
+        colors.append(_ACCENT if row.get("feasible", True) else "#EF4444")
+
+    fig.add_trace(go.Bar(
+        x=crr3_df["rw_pe"].astype(str) + "%",
+        y=crr3_df["cet1_ratio"],
+        marker_color=colors,
+        text=crr3_df["cet1_ratio"].apply(lambda v: f"{v:.2%}"),
+        textposition="outside",
+        textfont=dict(color=_TEXT, size=12),
+    ))
+
+    # Seuil CET1 minimum (10.5% Pillar 1+2)
+    fig.add_hline(
+        y=0.105, line_dash="dash", line_color="#EF4444",
+        annotation_text="CET1 min (10.5%)",
+        annotation_font_color="#EF4444",
+    )
+
+    layout = _base_layout("Sensibilite CRR3 — CET1 par Risk Weight PE", height=380)
+    layout["xaxis"]["title"] = "Risk Weight PE"
+    layout["yaxis"]["title"] = "CET1 Ratio"
+    layout["yaxis"]["tickformat"] = ".1%"
+    layout["showlegend"] = False
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_risk_appetite_matrix(ra_df: pd.DataFrame) -> go.Figure:
+    """Matrice risk appetite (traffic lights) par secteur et canal.
+
+    Args:
+        ra_df: DataFrame analytics_state.risk_appetite_matrix.
+
+    Returns:
+        Figure Plotly heatmap.
+    """
+    if ra_df is None or len(ra_df) == 0:
+        fig = go.Figure()
+        fig.update_layout(**_base_layout("Risk Appetite — Aucune donnee", height=200))
+        return fig
+
+    signal_map = {"vert": 0, "ambre": 1, "rouge": 2}
+    signal_labels = {"vert": "Vert", "ambre": "Ambre", "rouge": "Rouge"}
+
+    # Pivoter pour avoir secteurs en lignes, canaux en colonnes
+    if "canal" in ra_df.columns and "sector" in ra_df.columns:
+        pivot = ra_df.pivot_table(
+            index="sector", columns="canal", values="signal",
+            aggfunc="first",
+        ).fillna("vert")
+        z = pivot.map(lambda v: signal_map.get(v, 0)).values
+        text = pivot.map(lambda v: signal_labels.get(v, v)).values
+
+        fig = go.Figure(go.Heatmap(
+            z=z,
+            x=pivot.columns.tolist(),
+            y=pivot.index.tolist(),
+            text=text,
+            texttemplate="%{text}",
+            textfont=dict(size=14, color=_TEXT),
+            colorscale=[
+                [0, "#06D6A0"],
+                [0.5, "#F59E0B"],
+                [1, "#EF4444"],
+            ],
+            showscale=False,
+            zmin=0, zmax=2,
+        ))
+    else:
+        # Fallback — simple list
+        z = [[signal_map.get(str(row.get("signal", "vert")), 0) for _, row in ra_df.iterrows()]]
+        text = [[signal_labels.get(str(row.get("signal", "vert")), "?") for _, row in ra_df.iterrows()]]
+        fig = go.Figure(go.Heatmap(
+            z=z, text=text, texttemplate="%{text}",
+            textfont=dict(size=14, color=_TEXT),
+            colorscale=[[0, "#06D6A0"], [0.5, "#F59E0B"], [1, "#EF4444"]],
+            showscale=False, zmin=0, zmax=2,
+        ))
+
+    layout = _base_layout("Matrice Risk Appetite (Feux Tricolores)", height=350)
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_shap_force_individual(
+    shap_values: np.ndarray,
+    feature_values: np.ndarray,
+    feature_names: list,
+    base_value: float = 0.0,
+    top_n: int = 10,
+) -> go.Figure:
+    """Force plot individuel SHAP pour une entreprise (FR49).
+
+    Barres horizontales montrant la contribution de chaque feature
+    a la prediction individuelle, triees par impact absolu.
+
+    Args:
+        shap_values: SHAP values pour un individu (1D array).
+        feature_values: Valeurs des features pour cet individu.
+        feature_names: Noms des features.
+        base_value: Valeur de base (expected value du modele).
+        top_n: Nombre de features a afficher.
+
+    Returns:
+        Figure Plotly waterfall-like.
+    """
+    # Trier par impact absolu
+    indices = np.argsort(np.abs(shap_values))[::-1][:top_n]
+    indices = indices[::-1]  # Inverser pour afficher le plus important en haut
+
+    names = [f"{feature_names[i]} = {feature_values[i]:.2f}" for i in indices]
+    values = [shap_values[i] for i in indices]
+    colors = [_ACCENT if v < 0 else "#EF4444" for v in values]
+
+    fig = go.Figure(go.Bar(
+        y=names,
+        x=values,
+        orientation="h",
+        marker_color=colors,
+        text=[f"{v:+.4f}" for v in values],
+        textposition="outside",
+        textfont=dict(color=_TEXT, size=10),
+    ))
+
+    # Ligne de reference a 0
+    fig.add_vline(x=0, line_color=_MUTED, line_width=1)
+
+    pred_value = base_value + sum(shap_values)
+    layout = _base_layout(
+        f"SHAP Force Plot — Prediction : {pred_value:.4f} (base : {base_value:.4f})",
+        height=max(300, top_n * 32),
+    )
+    layout["xaxis"]["title"] = "SHAP value (contribution)"
+    fig.update_layout(**layout)
+    return fig
+
+
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     """Convertit une couleur hex en tuple RGBA string.
 

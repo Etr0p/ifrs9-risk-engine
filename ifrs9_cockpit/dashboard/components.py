@@ -291,6 +291,135 @@ def render_section_title(title: str) -> None:
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
 
 
+def render_kpi_row(cards: List[Dict[str, str]]) -> None:
+    """Affiche une rangee de KPI cards generique (FR45).
+
+    Args:
+        cards: Liste de dicts {label, value, sub_text, sub_class}.
+            sub_class: 'positive', 'negative', 'neutral'.
+    """
+    card_html = []
+    for c in cards:
+        card_html.append(
+            f'<div class="kpi-card">'
+            f'<div class="kpi-label">{c["label"]}</div>'
+            f'<div class="kpi-value">{c["value"]}</div>'
+            f'<div class="kpi-sub {c.get("sub_class", "neutral")}">{c.get("sub_text", "")}</div>'
+            f'</div>'
+        )
+    html = f'<div class="kpi-container">{"".join(card_html)}</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_classification_row(
+    stage_counts: Dict[int, int],
+    pe_categories: Dict[str, int],
+    n_total: int,
+) -> None:
+    """Affiche badges Stage IFRS 9 + Classification PE cote a cote (FR47).
+
+    Args:
+        stage_counts: {1: count, 2: count, 3: count}.
+        pe_categories: {'Performing': count, 'Watchlist': count, 'Distressed': count}.
+        n_total: Nombre total de positions.
+    """
+    html_parts = ['<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin:0.5rem 0;">']
+
+    # Stage badges
+    badge_cls = {1: "badge-stage1", 2: "badge-stage2", 3: "badge-stage3"}
+    for stage in [1, 2, 3]:
+        count = stage_counts.get(stage, 0)
+        pct = count / n_total if n_total > 0 else 0
+        html_parts.append(
+            f'<span class="badge {badge_cls[stage]}">'
+            f'Stage {stage}: {count:,} ({pct:.1%})</span>'
+        )
+
+    # Separateur visuel
+    html_parts.append('<span style="color:#475569;margin:0 0.3rem;">|</span>')
+
+    # PE badges
+    pe_cls = {"Performing": "badge-stage1", "Watchlist": "badge-stage2", "Distressed": "badge-stage3"}
+    for cat in ["Performing", "Watchlist", "Distressed"]:
+        count = pe_categories.get(cat, 0)
+        pct = count / n_total if n_total > 0 else 0
+        html_parts.append(
+            f'<span class="badge {pe_cls[cat]}">'
+            f'{cat}: {count:,} ({pct:.1%})</span>'
+        )
+
+    html_parts.append('</div>')
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
+
+
+def render_ai_narrative_box(narrative: str, recommendations: list) -> None:
+    """Affiche l'insight box avec narrative AI Analyst et recommandations (FR46).
+
+    Args:
+        narrative: Synthese narrative (CROAnalyst._generate_narrative).
+        recommendations: Liste de Recommendation objects.
+    """
+    # Determiner le niveau de risque depuis les recommandations
+    if recommendations:
+        rec = recommendations[0]
+        if rec.confidence == "low":
+            accent = "#EF4444"
+            icon = "\U0001f6a8"
+            level = "ELEVE"
+        elif rec.confidence == "medium":
+            accent = "#F59E0B"
+            icon = "\u26a0\ufe0f"
+            level = "MODERE"
+        else:
+            accent = "#10B981"
+            icon = "\u2705"
+            level = "MAITRISE"
+    else:
+        accent = "#94A3B8"
+        icon = "\u2139\ufe0f"
+        level = "N/A"
+
+    # Narrative
+    narrative_html = narrative.replace("\n", "<br/>") if narrative else "Analyse en cours..."
+
+    # Recommandations
+    recs_html = ""
+    if recommendations:
+        recs_lines = []
+        for r in recommendations:
+            recs_lines.append(
+                f'<div class="cro-recommendation">'
+                f'<span style="color:{accent};font-weight:700;">'
+                f'ACTION</span> {r.action}'
+                f'</div>'
+            )
+            if r.alternatives:
+                for alt in r.alternatives:
+                    recs_lines.append(
+                        f'<div class="cro-finding">'
+                        f'<span style="color:#94A3B8;font-weight:600;">'
+                        f'ALT</span> {alt}</div>'
+                    )
+        recs_html = (
+            '<div class="cro-section-label">RECOMMANDATIONS AI ANALYST</div>'
+            + "".join(recs_lines)
+        )
+
+    html = (
+        f'<div class="insight-box" style="border-left-color:{accent};">'
+        f'<div class="insight-box-header">'
+        f'<span style="font-size:1.2rem;">{icon}</span>'
+        f'<h3>AI Analyst (2 passes) &mdash; Niveau '
+        f'<span style="color:{accent};">{level}</span></h3>'
+        f'</div>'
+        f'<div class="insight-box-content">'
+        f'<div class="cro-summary">{narrative_html}</div>'
+        f'{recs_html}'
+        f'</div></div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def _severity_icon_html(severity: str) -> str:
     """Retourne l'icône HTML pour un niveau de sévérité.
 

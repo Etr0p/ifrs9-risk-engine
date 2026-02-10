@@ -1,60 +1,52 @@
-"""Modèle Loss Given Default (LGD) pour le Cockpit IFRS 9.
+"""Modele Loss Given Default (LGD) pour le Cockpit IFRS 9.
 
-Implémente une estimation de LGD basée sur la distribution Beta,
+Implemente une estimation de LGD basee sur la distribution Beta,
 avec distinction entre :
     - LGD TTC (Through-The-Cycle) : estimation moyenne long terme
-    - LGD Downturn : estimation stressée pour scénarios adverses
+    - LGD Downturn : estimation stressee pour scenarios adverses
 
-La distribution Beta est naturellement bornée [0, 1], ce qui en fait
-le choix standard pour modéliser les taux de perte.
+La LGD est sensible au HPI via le canal collateral (FR8) :
+baisse des prix immobiliers -> hausse LTV -> hausse LGD.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sp_stats
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
-from ifrs9_cockpit.config import LGD_CONFIG, RANDOM_SEED, SEGMENTS, SegmentConfig
+from ifrs9_cockpit.config import LGD_CONFIG, RANDOM_SEED, SECTORS, SectorConfig
 
 
 class LGDModel:
-    """Modèle LGD avec distribution Beta et ajustement Downturn.
+    """Modele LGD avec distribution Beta et ajustement Downturn.
 
-    Le modèle estime la LGD à partir des caractéristiques du prêt
-    (collatéral implicite via loan_type, seniority via credit_score)
-    et applique un add-on pour le scénario downturn.
-
-    La distribution Beta est paramétrée via la méthode des moments :
-        alpha = mu × ((mu × (1 - mu) / sigma² ) - 1)
-        beta  = (1 - mu) × ((mu × (1 - mu) / sigma²) - 1)
+    Le modele estime la LGD a partir des caracteristiques du pret
+    (collateral implicite via loan_type, seniority via credit_score)
+    et applique un add-on pour le scenario downturn.
 
     Attributes:
-        seed: Graine aléatoire.
-        rng: Générateur numpy.
-        segment_lgd_: LGD moyennes calibrées par segment après fit.
+        seed: Graine aleatoire.
+        rng: Generateur numpy.
+        sector_lgd_: LGD moyennes calibrees par secteur apres fit.
     """
 
     def __init__(self, seed: int = RANDOM_SEED) -> None:
-        """Initialise le modèle LGD.
+        """Initialise le modele LGD.
 
         Args:
-            seed: Graine pour reproductibilité.
+            seed: Graine pour reproductibilite.
         """
         self.seed = seed
         self.rng = np.random.default_rng(seed)
-        self.segment_lgd_: Dict[str, float] = {}
+        self.sector_lgd_: Dict[str, float] = {}
         self._fitted = False
 
-    def fit(self, df: pd.DataFrame) -> "LGDModel":
-        """Calibre les paramètres LGD sur les défauts observés.
-
-        Simule des LGD réalisées à partir du modèle latent puis
-        calibre les moyennes par segment et type de prêt.
+    def fit(self, df: pd.DataFrame) -> LGDModel:
+        """Calibre les parametres LGD sur les defauts observes.
 
         Args:
-            df: DataFrame clients avec colonnes segment, loan_type,
+            df: DataFrame credit avec colonnes sector, loan_type,
                 credit_score, utilization_rate, default_flag.
 
         Returns:
@@ -63,89 +55,139 @@ class LGDModel:
         defaults = df[df["default_flag"] == 1].copy()
 
         if len(defaults) == 0:
-            # Fallback sur les moyennes config si pas de défauts
-            for seg in SEGMENTS:
-                self.segment_lgd_[seg.name] = LGD_CONFIG.lgd_ttc_mean
+            for sector in SECTORS:
+                self.sector_lgd_[sector.name] = LGD_CONFIG.lgd_ttc_mean
             self._fitted = True
             return self
 
-        # Simuler les LGD réalisées pour les défauts observés
-        defaults = defaults.copy()
+        # Simuler les LGD realisees pour les defauts observes
         defaults["lgd_realized"] = self._simulate_realized_lgd(defaults)
 
-        # Calibrer les moyennes par segment
-        for seg in SEGMENTS:
-            mask = defaults["segment"] == seg.name
+        # Calibrer les moyennes par secteur
+        for sector in SECTORS:
+            mask = defaults["sector"] == sector.name
             if mask.sum() > 0:
-                self.segment_lgd_[seg.name] = float(defaults.loc[mask, "lgd_realized"].mean())
+                self.sector_lgd_[sector.name] = float(
+                    defaults.loc[mask, "lgd_realized"].mean()
+                )
             else:
-                self.segment_lgd_[seg.name] = LGD_CONFIG.lgd_ttc_mean
+                self.sector_lgd_[sector.name] = LGD_CONFIG.lgd_ttc_mean
 
         self._fitted = True
         return self
 
-    def predict_ttc(self, df: pd.DataFrame) -> np.ndarray:
-        """Prédit la LGD Through-The-Cycle pour chaque client.
+    # Constantes de calibration credit score (M1)
+    _MEDIAN_SCORE: float = 650.0
+    _SCORE_STD: float = 100.0
+    _LGD_CREDIT_SCORE_SCALE: float = 0.20
 
-        La LGD TTC est la perte moyenne attendue sur un cycle
-        économique complet. Elle dépend de :
-            - Le segment (proxy pour le profil de risque)
-            - Le type de prêt (revolving = LGD plus élevée)
-            - Le score de crédit (proxy pour la capacité de recouvrement)
+    def _compute_base_lgd(self, df: pd.DataFrame) -> np.ndarray:
+        """Calcule la LGD de base (avant dispersion Beta).
+
+        Ajustement credit score calibre (M1) :
+            credit_adj = clip((median - score) / (2 * std), -0.10, 0.10)
+                         * LGD_CREDIT_SCORE_SCALE
 
         Args:
-            df: DataFrame avec colonnes segment, loan_type, credit_score.
+            df: DataFrame avec colonnes sector, loan_type, credit_score.
 
         Returns:
-            Array de LGD TTC entre 0 et 1.
+            Array de LGD moyennes deterministes.
         """
         n = len(df)
         lgd = np.full(n, LGD_CONFIG.lgd_ttc_mean)
 
-        # Ajustement par segment
-        for seg_name, seg_lgd in self.segment_lgd_.items():
-            mask = df["segment"].values == seg_name
-            lgd[mask] = seg_lgd
+        # Ajustement par secteur
+        for sector_name, sector_lgd in self.sector_lgd_.items():
+            mask = df["sector"].values == sector_name
+            lgd[mask] = sector_lgd
 
-        # Ajustement par type de prêt
-        # Revolving : LGD plus élevée (pas de collatéral)
-        # Term : LGD plus basse (souvent adossé à un actif)
+        # Ajustement par type de pret
         revolving_mask = df["loan_type"].values == "Revolving"
         lgd[revolving_mask] *= 1.15
         lgd[~revolving_mask] *= 0.90
 
-        # Ajustement par score de crédit (capacité de recouvrement)
+        # Ajustement par score de credit — calibre (M1)
         credit_scores = df["credit_score"].values.astype(float)
-        credit_adj = np.clip((650 - credit_scores) / 1000, -0.10, 0.10)
+        credit_adj = (
+            np.clip(
+                (self._MEDIAN_SCORE - credit_scores) / (2 * self._SCORE_STD),
+                -0.10,
+                0.10,
+            )
+            * self._LGD_CREDIT_SCORE_SCALE
+        )
         lgd += credit_adj
 
-        # Dispersion Beta autour de la moyenne
-        lgd = self._apply_beta_dispersion(lgd)
+        return lgd
 
-        return np.clip(lgd, LGD_CONFIG.recovery_rate_floor, 0.95)
+    def predict_ttc_and_downturn(
+        self,
+        df: pd.DataFrame,
+        z_stress: float = 2.0,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Calcule LGD TTC et Downturn a partir du meme tirage Beta.
 
-    def predict_downturn(self, df: pd.DataFrame) -> np.ndarray:
-        """Prédit la LGD Downturn (scénario stressé).
+        LGD Downturn via correlation cycle (H3, EBA GL/2019/03) :
+            LGD_DT = LGD_TTC * (1 + rho_lgd_cycle * |Z_stress|)
 
-        LGD Downturn = LGD TTC + add-on réglementaire.
-        Reflète les conditions de recouvrement dégradées en récession.
+        Ou rho_lgd_cycle est specifique au secteur (SectorConfig).
+        Z_stress represente le nombre de sigma du stress :
+            - 0 pour le scenario de base
+            - 2.0 pour adverse (defaut)
+            - -1.0 pour favorable
+
+        Garantit l'invariant LGD Downturn >= LGD TTC pour z_stress >= 0.
 
         Args:
-            df: DataFrame avec colonnes segment, loan_type, credit_score.
+            df: DataFrame avec colonnes sector, loan_type, credit_score.
+            z_stress: Nombre de sigma du stress (0=base, 2=adverse, -1=favorable).
+
+        Returns:
+            Tuple (lgd_ttc, lgd_downturn).
+        """
+        base_lgd = self._compute_base_lgd(df)
+
+        # Dispersion Beta (un seul tirage)
+        lgd_ttc = self._apply_beta_dispersion(base_lgd)
+        lgd_ttc = np.clip(lgd_ttc, LGD_CONFIG.recovery_rate_floor, 0.95)
+
+        # Downturn via correlation cycle (H3)
+        # LGD_DT = LGD_TTC * (1 + rho_lgd_cycle * |Z_stress|)
+        # Lookup rho_lgd_cycle par secteur depuis SectorConfig
+        sector_map = {s.name: s.rho_lgd_cycle for s in SECTORS}
+        rho = np.array([
+            sector_map.get(s, 0.20) for s in df["sector"].values
+        ])
+        lgd_downturn = lgd_ttc * (1 + rho * abs(z_stress))
+
+        lgd_downturn = np.clip(lgd_downturn, LGD_CONFIG.recovery_rate_floor, 0.95)
+
+        return lgd_ttc, lgd_downturn
+
+    def predict_ttc(self, df: pd.DataFrame) -> np.ndarray:
+        """Predit la LGD Through-The-Cycle pour chaque entreprise.
+
+        Args:
+            df: DataFrame avec colonnes sector, loan_type, credit_score.
+
+        Returns:
+            Array de LGD TTC entre 0 et 1.
+        """
+        lgd_ttc, _ = self.predict_ttc_and_downturn(df)
+        return lgd_ttc
+
+    def predict_downturn(self, df: pd.DataFrame) -> np.ndarray:
+        """Predit la LGD Downturn (scenario stresse).
+
+        Args:
+            df: DataFrame avec colonnes sector, loan_type, credit_score.
 
         Returns:
             Array de LGD Downturn entre 0 et 1.
         """
-        lgd_ttc = self.predict_ttc(df)
-        lgd_downturn = lgd_ttc + LGD_CONFIG.downturn_add_on
-
-        # Les segments fragiles subissent un stress additionnel
-        for seg in SEGMENTS:
-            if seg.unemployment_sensitivity > 1.5:
-                mask = df["segment"].values == seg.name
-                lgd_downturn[mask] += 0.05  # +5pp additionnel
-
-        return np.clip(lgd_downturn, LGD_CONFIG.recovery_rate_floor, 0.95)
+        _, lgd_dt = self.predict_ttc_and_downturn(df)
+        return lgd_dt
 
     def predict(
         self,
@@ -153,54 +195,50 @@ class LGDModel:
         downturn: bool = False,
         hpi_override: Optional[float] = None,
     ) -> np.ndarray:
-        """Interface unifiée de prédiction LGD.
+        """Interface unifiee de prediction LGD.
 
-        Le HPI (Housing Price Index) impacte la LGD via la valeur
-        du collatéral : une baisse des prix immobiliers augmente le
-        LTV (Loan-to-Value) et réduit le recouvrement.
+        Le HPI impacte la LGD via la valeur du collateral (FR8) :
+        baisse des prix immobiliers -> hausse LTV -> hausse LGD.
 
         Args:
-            df: DataFrame clients.
+            df: DataFrame credit.
             downturn: Si True, retourne la LGD Downturn.
             hpi_override: Variation des prix immobiliers (%).
-                Si négatif, augmente la LGD (perte de valeur du collatéral).
 
         Returns:
             Array de LGD.
         """
-        if downturn:
-            lgd = self.predict_downturn(df)
-        else:
-            lgd = self.predict_ttc(df)
+        lgd_ttc, lgd_dt = self.predict_ttc_and_downturn(df)
+        lgd = lgd_dt if downturn else lgd_ttc
 
-        # Ajustement HPI : baisse des prix → hausse de la LGD
-        if hpi_override is not None and hpi_override < 2.0:
-            hpi_impact = (2.0 - hpi_override) / 100  # 1pp de baisse HPI → +1% LGD
-            for seg in SEGMENTS:
-                mask = df["segment"].values == seg.name
-                lgd[mask] += hpi_impact * seg.hpi_sensitivity
+        # Ajustement HPI : baisse des prix -> hausse LGD, hausse -> baisse LGD
+        # Bidirectionnel : les scenarios favorables (HPI > 2.0) reduisent la LGD
+        if hpi_override is not None:
+            hpi_impact = (2.0 - hpi_override) / 100
+            for sector in SECTORS:
+                mask = df["sector"].values == sector.name
+                lgd[mask] += hpi_impact * sector.hpi_sensitivity_credit
             lgd = np.clip(lgd, LGD_CONFIG.recovery_rate_floor, 0.95)
 
         return lgd
 
     def get_summary(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Résumé des LGD par segment et type de prêt.
+        """Resume des LGD par secteur et type de pret.
 
         Args:
-            df: DataFrame clients.
+            df: DataFrame credit.
 
         Returns:
-            DataFrame récapitulatif avec LGD TTC et Downturn moyennes.
+            DataFrame recapitulatif avec LGD TTC et Downturn moyennes.
         """
-        lgd_ttc = self.predict_ttc(df)
-        lgd_dt = self.predict_downturn(df)
+        lgd_ttc, lgd_dt = self.predict_ttc_and_downturn(df)
 
-        summary_df = df[["segment", "loan_type"]].copy()
+        summary_df = df[["sector", "loan_type"]].copy()
         summary_df["lgd_ttc"] = lgd_ttc
         summary_df["lgd_downturn"] = lgd_dt
 
         return (
-            summary_df.groupby(["segment", "loan_type"])
+            summary_df.groupby(["sector", "loan_type"])
             .agg(
                 count=("lgd_ttc", "size"),
                 lgd_ttc_mean=("lgd_ttc", "mean"),
@@ -212,29 +250,26 @@ class LGDModel:
         )
 
     def _simulate_realized_lgd(self, df: pd.DataFrame) -> np.ndarray:
-        """Simule des LGD réalisées pour calibrer le modèle.
-
-        Utilise une distribution Beta paramétrée par les
-        caractéristiques du prêt.
+        """Simule des LGD realisees pour calibrer le modele.
 
         Args:
-            df: DataFrame des clients en défaut.
+            df: DataFrame des entreprises en defaut.
 
         Returns:
-            Array de LGD réalisées simulées.
+            Array de LGD realisees simulees.
         """
         n = len(df)
         mu = np.full(n, LGD_CONFIG.lgd_ttc_mean)
 
-        # Revolving → LGD plus haute
+        # Revolving -> LGD plus haute
         revolving = df["loan_type"].values == "Revolving"
         mu[revolving] += 0.08
 
-        # Score bas → recouvrement plus difficile
+        # Score bas -> recouvrement plus difficile
         scores = df["credit_score"].values.astype(float)
         mu += np.clip((600 - scores) / 2000, -0.05, 0.10)
 
-        # Utilization haute → perte plus importante
+        # Utilization haute -> perte plus importante
         if "utilization_rate" in df.columns:
             util = df["utilization_rate"].values.astype(float)
             mu += (util - 0.5) * 0.08
@@ -242,7 +277,7 @@ class LGDModel:
         mu = np.clip(mu, 0.05, 0.90)
         sigma = LGD_CONFIG.lgd_ttc_std
 
-        return self._sample_beta(mu, sigma, n)
+        return self._sample_beta(mu, sigma)
 
     def _apply_beta_dispersion(self, mu: np.ndarray) -> np.ndarray:
         """Applique une dispersion Beta autour des moyennes.
@@ -251,46 +286,73 @@ class LGDModel:
             mu: Moyennes de LGD.
 
         Returns:
-            LGD avec dispersion aléatoire.
+            LGD avec dispersion aleatoire.
         """
-        sigma = LGD_CONFIG.lgd_ttc_std * 0.5  # Dispersion réduite pour prédiction
-        return self._sample_beta(mu, sigma, len(mu))
+        sigma = LGD_CONFIG.lgd_ttc_std * 0.5
+        return self._sample_beta(mu, sigma)
 
-    def _sample_beta(
-        self,
-        mu: np.ndarray,
-        sigma: float,
-        n: int,
-    ) -> np.ndarray:
-        """Échantillonne depuis une distribution Beta paramétrée.
+    def _sample_beta(self, mu: np.ndarray, sigma: float) -> np.ndarray:
+        """Echantillonne depuis une distribution Beta parametree (vectorise).
 
-        Utilise la méthode des moments pour convertir (mu, sigma)
-        en paramètres (alpha, beta) de la distribution Beta.
+        Utilise la methode des moments pour convertir (mu, sigma)
+        en parametres (alpha, beta) de la distribution Beta.
 
         Args:
             mu: Moyennes (entre 0 et 1).
-            sigma: Écart-type cible.
-            n: Nombre d'échantillons.
+            sigma: Ecart-type cible.
 
         Returns:
-            Échantillons Beta.
+            Echantillons Beta.
         """
         mu = np.clip(mu, 0.01, 0.99)
         variance = sigma ** 2
 
-        # Méthode des moments : s'assurer que variance < mu*(1-mu)
+        # Methode des moments : s'assurer que variance < mu*(1-mu)
         max_var = mu * (1 - mu) * 0.95
         variance = np.minimum(variance, max_var)
 
         kappa = (mu * (1 - mu) / variance) - 1
-        kappa = np.maximum(kappa, 2.0)  # Stabilité numérique
+        kappa = np.maximum(kappa, 1.05)  # Statistically motivated: var < mu(1-mu) requires kappa > 1
 
-        alpha = mu * kappa
-        beta = (1 - mu) * kappa
+        alpha = np.maximum(mu * kappa, 0.1)
+        beta = np.maximum((1 - mu) * kappa, 0.1)
 
-        samples = np.array([
-            self.rng.beta(max(a, 0.1), max(b, 0.1))
-            for a, b in zip(alpha, beta)
-        ])
+        # Generation vectorisee (Beta accepte des arrays)
+        samples = self.rng.beta(alpha, beta)
 
         return np.clip(samples, 0.01, 0.99)
+
+
+if __name__ == "__main__":
+    from ifrs9_cockpit.data.generator import generate_dataset
+
+    print("=" * 60)
+    print("IFRS 9 COCKPIT — LGD Model Validation")
+    print("=" * 60)
+
+    # 1. Data
+    print("\n[1/3] Generation des donnees...")
+    df_credit, _, _ = generate_dataset()
+    print(f"       {len(df_credit):,} entreprises | DR = {df_credit['default_flag'].mean():.2%}")
+
+    # 2. Fit
+    print("\n[2/3] Calibration du modele LGD...")
+    model = LGDModel()
+    model.fit(df_credit)
+    print(f"       LGD moyennes par secteur : {model.sector_lgd_}")
+
+    # 3. Predict
+    print("\n[3/3] Prediction LGD TTC et Downturn...")
+    for z_label, z_val in [("Base (z=0)", 0.0), ("Adverse (z=2)", 2.0), ("Favorable (z=-1)", -1.0)]:
+        lgd_ttc, lgd_dt = model.predict_ttc_and_downturn(df_credit, z_stress=z_val)
+        print(f"\n  Scenario {z_label}:")
+        print(f"    LGD TTC    : mean={lgd_ttc.mean():.4f}, std={lgd_ttc.std():.4f}")
+        print(f"    LGD DT     : mean={lgd_dt.mean():.4f}, std={lgd_dt.std():.4f}")
+        print(f"    DT >= TTC  : {(lgd_dt >= lgd_ttc - 1e-10).all()}")
+
+    # Summary
+    print("\n--- Resume par secteur/type ---")
+    summary = model.get_summary(df_credit)
+    print(summary.to_string(index=False))
+
+    print("\nValidation LGD terminee.")
