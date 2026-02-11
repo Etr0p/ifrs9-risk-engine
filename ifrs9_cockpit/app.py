@@ -572,7 +572,7 @@ def main() -> None:
             ecl_t1=result_stressed["ecl_weighted"].values,
             stages_t0=result_base["stage"].values,
             stages_t1=result_stressed["stage"].values,
-            segments=df_clients["segment"].values,
+            segments=df_clients["sector"].values,
         )
         st.plotly_chart(
             charts.plot_waterfall_ecl(waterfall_df),
@@ -1141,7 +1141,7 @@ def main() -> None:
                     ecl_t1=result_stressed["ecl_weighted"].values,
                     stages_t0=result_base["stage"].values,
                     stages_t1=result_stressed["stage"].values,
-                    segments=df_clients["segment"].values,
+                    segments=df_clients["sector"].values,
                 ),
                 transition_matrix=StagingEngine().compute_transition_matrix(
                     result_base["stage"].values,
