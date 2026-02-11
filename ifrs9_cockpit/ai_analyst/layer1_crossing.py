@@ -49,13 +49,21 @@ def analyze_crossings(
         # Asymetrie = difference de taux de perte
         asymmetry = loss_rate_pe - loss_rate_credit
 
-        # Stress delta par rapport au baseline
+        # Stress delta par rapport au baseline, pondere par les sensibilites
+        # du secteur (credit) pour refleter l'exposition sectorielle reelle.
         stress_delta = 0.0
-        for var in ["unemployment_rate", "gdp_growth", "interest_rate",
-                     "hpi_growth", "inflation_rate"]:
+        _sens_map = {
+            "unemployment_rate": "unemployment_sensitivity_credit",
+            "gdp_growth": "gdp_sensitivity_credit",
+            "interest_rate": "interest_rate_sensitivity_credit",
+            "hpi_growth": "hpi_sensitivity_credit",
+            "inflation_rate": "inflation_sensitivity_credit",
+        }
+        for var in _sens_map:
             base_val = getattr(SCENARIO_BASE, var)
             current_val = macro_params.get(var, base_val)
-            stress_delta += abs(current_val - base_val)
+            sens = getattr(sector, _sens_map[var])
+            stress_delta += abs(current_val - base_val) * sens
 
         asym_records.append({
             "sector": name,

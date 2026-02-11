@@ -103,6 +103,57 @@ def find_tipping_points(
     return pd.DataFrame(records)
 
 
+def _build_stress_params(factor: float) -> Dict[str, float]:
+    """Construit les parametres macro stresses pour un facteur donne.
+
+    Args:
+        factor: Facteur d'echelle (1.0 = baseline, 2.0 = double stress).
+
+    Returns:
+        Dict des 5 variables macro stressees.
+    """
+    stress_params = {}
+    for var, sweep in _MACRO_SWEEP.items():
+        base_val = sweep["base"]
+        delta = (sweep["max"] - base_val) * sweep["adverse"] * (factor - 1) / 5
+        stress_params[var] = base_val + delta
+    return stress_params
+
+
+def _compute_mahalanobis(
+    stress_params: Dict[str, float],
+    base: object,
+) -> float:
+    """Calcule la distance de Mahalanobis entre le scenario stress et le baseline.
+
+    Utilise np.linalg.solve au lieu de np.linalg.inv pour une meilleure
+    stabilite numerique (evite l'inversion explicite de la matrice).
+
+    Args:
+        stress_params: Parametres macro du scenario stress.
+        base: Scenario de reference (SCENARIO_BASE).
+
+    Returns:
+        Distance de Mahalanobis (float).
+    """
+    x = np.array([
+        stress_params.get(var, getattr(base, var)) - getattr(base, var)
+        for var in MACRO_VARIABLES_ORDER
+    ])
+
+    Sigma = np.array(MACRO_COVARIANCE)
+
+    try:
+        # Utilise solve(Sigma, x) au lieu de inv(Sigma) @ x pour la stabilite.
+        # solve(A, b) resout Ax = b, soit Sigma_inv @ x sans inversion explicite.
+        Sigma_inv_x = np.linalg.solve(Sigma, x)
+        return float(np.sqrt(x @ Sigma_inv_x))
+    except np.linalg.LinAlgError:
+        # Fallback : diagonale (= euclidienne normalisee)
+        diag = np.diag(Sigma)
+        return float(np.sqrt(np.sum(x**2 / np.maximum(diag, 1e-10))))
+
+
 def reverse_stress_test(
     ecl_total_fn,
     macro_params: Dict[str, float],
@@ -133,19 +184,14 @@ def reverse_stress_test(
     # ECL seuil de rupture (FR54 : personnalisable)
     ecl_breach = target_ecl if target_ecl is not None else capital * 0.10
 
-    # Balayage du facteur de stress (1.0 = baseline, 2.0 = double stress, etc.)
+    # Balayage du facteur de stress avec pas fin (0.1) pour une detection
+    # plus precise du point de breach.
     best_factor = None
     best_ecl = 0
     best_stress_params = {}
 
-    for factor in np.arange(1.0, 10.1, 0.5):
-        stress_params = {}
-        for var, sweep in _MACRO_SWEEP.items():
-            base_val = sweep["base"]
-            # Appliquer le stress dans la direction adverse
-            delta = (sweep["max"] - base_val) * sweep["adverse"] * (factor - 1) / 5
-            stress_params[var] = base_val + delta
-
+    for factor in np.arange(1.0, 10.05, 0.1):
+        stress_params = _build_stress_params(factor)
         ecl = ecl_total_fn(stress_params)
         if ecl > ecl_breach:
             best_factor = factor
@@ -154,34 +200,13 @@ def reverse_stress_test(
             break
 
     # H6. Distance de Mahalanobis (remplace l'approximation 1 factor ~ 1 sigma)
-    if best_factor is not None:
-        # Vecteur de stress = scenario RST - baseline
-        x = np.array([
-            best_stress_params.get(var, getattr(base, var)) - getattr(base, var)
-            for var in MACRO_VARIABLES_ORDER
-        ])
+    rst_distance = _compute_mahalanobis(best_stress_params, base) if best_factor is not None else float("inf")
 
-        # Matrice de covariance historique
-        Sigma = np.array(MACRO_COVARIANCE)
-
-        # Distance de Mahalanobis : sqrt(x^T Sigma^{-1} x)
-        try:
-            Sigma_inv = np.linalg.inv(Sigma)
-            rst_distance = float(np.sqrt(x @ Sigma_inv @ x))
-        except np.linalg.LinAlgError:
-            # Fallback : diagonale (= euclidienne normalisee)
-            diag = np.diag(Sigma)
-            rst_distance = float(np.sqrt(np.sum(x**2 / np.maximum(diag, 1e-10))))
-    else:
-        rst_distance = float("inf")
-
-    # Scenario de rupture
+    # Scenario de rupture (reutilise _build_stress_params pour eviter la duplication)
     rst_scenario = {}
     if best_factor is not None:
-        for var, sweep in _MACRO_SWEEP.items():
-            base_val = sweep["base"]
-            delta = (sweep["max"] - base_val) * sweep["adverse"] * (best_factor - 1) / 5
-            rst_scenario[var] = round(base_val + delta, 2)
+        for var, val in _build_stress_params(best_factor).items():
+            rst_scenario[var] = round(val, 2)
 
     return {
         "rst_scenario": rst_scenario,

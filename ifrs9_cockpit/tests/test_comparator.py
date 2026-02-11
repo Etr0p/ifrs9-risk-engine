@@ -143,6 +143,17 @@ class TestAdvancedCreditMetrics:
         total = advanced_metrics.loc[advanced_metrics["sector"] == "Total"]
         assert total["cost_of_risk_bps"].values[0] > 0
 
+    def test_cost_of_risk_annualized(self, advanced_metrics, result_credit):
+        """CoR annualise = ECL / (EAD x T_moyen) x 10000 (M8)."""
+        from ifrs9_cockpit.config import IFRS9_CONFIG
+        total = advanced_metrics.loc[advanced_metrics["sector"] == "Total"].iloc[0]
+        ecl = result_credit["ecl_weighted"].sum()
+        ead = result_credit["ead"].sum()
+        t = IFRS9_CONFIG.lifetime_horizon_years
+        expected_bps = ecl / (ead * t) * 10_000
+        assert abs(total["cost_of_risk_bps"] - round(expected_bps, 1)) < 1.0, \
+            f"CoR annualise: attendu={expected_bps:.1f}, obtenu={total['cost_of_risk_bps']}"
+
     def test_coverage_ratio_in_0_1(self, advanced_metrics):
         """Coverage ratio = ECL_S3 / EAD_S3, dans [0, 1]."""
         for val in advanced_metrics["coverage_ratio"]:
@@ -272,6 +283,16 @@ class TestRAROCEVA:
 # Story 4-2 : Asymetrie credit/PE, resilience, RAROC
 # ============================================================
 
+class TestRAROCEVACache:
+    """Tests cache RAROC/EVA — appels multiples ne recalculent pas."""
+
+    def test_cache_returns_same_object(self, comparator):
+        """Deux appels successifs retournent le meme objet (cache)."""
+        r1 = comparator.compute_raroc_eva()
+        r2 = comparator.compute_raroc_eva()
+        assert r1 is r2, "Le cache RAROC/EVA ne fonctionne pas"
+
+
 class TestResilienceScores:
     """Tests FR19 — Scores de resilience credit et PE."""
 
@@ -345,6 +366,16 @@ class TestAsymmetryMatrix:
             "resilience_credit", "resilience_pe",
         }
         assert expected.issubset(set(asymmetry_matrix.columns))
+
+    def test_rwa_columns_present(self, asymmetry_matrix):
+        """Les colonnes RWA credit et PE doivent etre presentes."""
+        assert "rwa_credit" in asymmetry_matrix.columns
+        assert "rwa_pe" in asymmetry_matrix.columns
+
+    def test_ead_and_nav_present(self, asymmetry_matrix):
+        """Les colonnes ead_credit et nav_pe doivent etre presentes."""
+        assert "ead_credit" in asymmetry_matrix.columns
+        assert "nav_pe" in asymmetry_matrix.columns
 
 
 # ============================================================
@@ -471,6 +502,18 @@ class TestSoftmaxWeights:
         w = comparator._optimize_sector_weights(cells)
         # Sante (index 2, RAROC=0.30) devrait etre le plus haut
         assert w["Sante"] == max(w.values())
+
+    def test_very_negative_raroc_no_nan(self, comparator):
+        """RAROC tres negatifs ne doivent pas causer de NaN (underflow softmax)."""
+        cells = pd.DataFrame({
+            "sector": list(SECTOR_NAMES),
+            "raroc": [-5.0, -3.0, -10.0, -8.0, -6.0],
+        })
+        w = comparator._optimize_sector_weights(cells)
+        vals = list(w.values())
+        assert all(np.isfinite(v) for v in vals), f"Poids non finis: {vals}"
+        assert all(v > 0 for v in vals), f"Poids non positifs: {vals}"
+        assert abs(sum(vals) - 1.0) < 0.01
 
 
 class TestCRR3Sensitivity:

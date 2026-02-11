@@ -389,11 +389,11 @@ MACRO_HISTORY_BASELINE: Dict[str, List[float]] = {
 # theta = equilibre long-terme (= SCENARIO_BASE).
 # x(t+1) = x(t) + kappa×(theta-x(t))×dt + sigma×sqrt(dt)×epsilon
 MACRO_MEAN_REVERSION: Dict[str, Dict[str, float]] = {
-    "unemployment_rate": {"kappa": 0.5, "sigma": 0.8, "theta": 7.5},
-    "gdp_growth": {"kappa": 1.0, "sigma": 1.2, "theta": 1.2},
-    "interest_rate": {"kappa": 0.3, "sigma": 0.5, "theta": 3.5},
-    "hpi_growth": {"kappa": 0.7, "sigma": 2.0, "theta": 2.0},
-    "inflation_rate": {"kappa": 0.8, "sigma": 0.6, "theta": 2.5},
+    "unemployment_rate": {"kappa": 0.5, "sigma": 0.8, "theta": SCENARIO_BASE.unemployment_rate},
+    "gdp_growth": {"kappa": 1.0, "sigma": 1.2, "theta": SCENARIO_BASE.gdp_growth},
+    "interest_rate": {"kappa": 0.3, "sigma": 0.5, "theta": SCENARIO_BASE.interest_rate},
+    "hpi_growth": {"kappa": 0.7, "sigma": 2.0, "theta": SCENARIO_BASE.hpi_growth},
+    "inflation_rate": {"kappa": 0.8, "sigma": 0.6, "theta": SCENARIO_BASE.inflation_rate},
 }
 
 # Matrice de covariance macro historique 5×5 (H6, RST Mahalanobis).
@@ -965,6 +965,16 @@ def validate_config() -> None:
                 f"Fourchette de marge EBITDA incoherente pour {sector.name} : "
                 f"{sector.ebitda_margin_range}"
             )
+
+    # Poids SICR somment a 1
+    sicr_total = (
+        SICR_CONFIG.w_pd_ratio + SICR_CONFIG.w_pd_delta
+        + SICR_CONFIG.w_dpd + SICR_CONFIG.w_macro
+    )
+    if abs(sicr_total - 1.0) > 1e-6:
+        raise ValueError(
+            f"Les poids SICR ne somment pas a 1 : {sicr_total:.6f}"
+        )
 
     # 5 noms de secteurs attendus
     expected_names = {"Technologie", "Industrie", "Sante", "Immobilier", "Services"}

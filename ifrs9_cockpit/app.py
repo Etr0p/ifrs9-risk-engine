@@ -193,7 +193,7 @@ def main() -> None:
         _gd = DASHBOARD_CONFIG.stress_gdp_range
         gdp_pct = st.slider(
             "Croissance PIB (%)",
-            min_value=_gd[0], max_value=_gd[1], value=1.0, step=_gd[2],
+            min_value=_gd[0], max_value=_gd[1], value=SCENARIO_BASE.gdp_growth, step=_gd[2],
             key="sl_gdp_pct",
             help=f"Base : {SCENARIO_BASE.gdp_growth:.1f}%",
         )
@@ -201,15 +201,15 @@ def main() -> None:
         _hp = DASHBOARD_CONFIG.stress_hpi_range
         hpi_pct = st.slider(
             "Prix immobiliers (%)",
-            min_value=_hp[0], max_value=_hp[1], value=2.0, step=_hp[2],
+            min_value=_hp[0], max_value=_hp[1], value=SCENARIO_BASE.hpi_growth, step=_hp[2],
             key="sl_hpi_pct",
             help=f"Base : {SCENARIO_BASE.hpi_growth:+.1f}%",
         )
 
-        _in = DASHBOARD_CONFIG.stress_inflation_range
+        _inf = DASHBOARD_CONFIG.stress_inflation_range
         inflation_pct = st.slider(
             "Inflation IPC (%)",
-            min_value=_in[0], max_value=_in[1], value=2.5, step=_in[2],
+            min_value=_inf[0], max_value=_inf[1], value=SCENARIO_BASE.inflation_rate, step=_inf[2],
             key="sl_inflation_pct",
             help=f"Base : {SCENARIO_BASE.inflation_rate:.1f}%",
         )
@@ -926,7 +926,7 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
 
-        # ── Export Excel 7 feuilles (FR50) ──
+        # ── Export Excel 8 feuilles (FR50) ──
         render_section_title("Export Multi-Sheet (FR50)")
 
         col_exp1, col_exp2, col_exp3 = st.columns(3)
@@ -1095,8 +1095,8 @@ def main() -> None:
                 rst_scen_df = pd.DataFrame([{
                     "Variable": var,
                     "Valeur RST": f"{val:.2f}",
-                    "Baseline": f"{getattr(SCENARIO_BASE, var):.2f}",
-                    "Delta": f"{val - getattr(SCENARIO_BASE, var):+.2f}",
+                    "Baseline": f"{getattr(SCENARIO_BASE, var, 0.0):.2f}",
+                    "Delta": f"{val - getattr(SCENARIO_BASE, var, 0.0):+.2f}",
                 } for var, val in _rst_scen.items()])
                 st.dataframe(rst_scen_df, use_container_width=True, hide_index=True)
 

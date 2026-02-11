@@ -232,7 +232,7 @@ class PDModelSuite:
         )
 
         # Colonnes a exclure du feature set
-        drop_cols = [TARGET, "pd_latent", "enterprise_id"]
+        drop_cols = [TARGET, "pd_latent", "pd_origination", "enterprise_id"]
         self.X_train = train_df.drop(
             columns=[c for c in drop_cols if c in train_df.columns]
         ).reset_index(drop=True)

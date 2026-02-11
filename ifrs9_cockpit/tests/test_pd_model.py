@@ -192,6 +192,18 @@ class TestPredictions:
         assert isinstance(table, pd.DataFrame)
         assert len(table) > 0
 
+    def test_reproducibility_with_seed(self, dataset):
+        """Deux entrainements avec le meme seed donnent les memes PD (AC#1)."""
+        suite1 = PDModelSuite(seed=RANDOM_SEED)
+        suite1.fit(dataset)
+        preds1 = suite1.predict_active(dataset)
+
+        suite2 = PDModelSuite(seed=RANDOM_SEED)
+        suite2.fit(dataset)
+        preds2 = suite2.predict_active(dataset)
+
+        np.testing.assert_allclose(preds1, preds2, atol=1e-6)
+
 
 # ============================================================
 # Standalone

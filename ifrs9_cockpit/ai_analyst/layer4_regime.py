@@ -13,50 +13,54 @@ from ifrs9_cockpit.config import SCENARIO_BASE
 from ifrs9_cockpit.ai_analyst.types import RegimeClassification
 
 
-# Signatures des 5 regimes canoniques (deltas normalises par rapport au baseline)
-# Convention : positif = adverse pour unemployment/interest/inflation, negatif pour GDP/HPI
+# Signatures des 5 regimes canoniques.
+# CONVENTION : les signatures sont dans le meme espace que le stress_vector
+# defini dans classify_regime(). Le stress_vector inverse GDP et HPI :
+#   stress[gdp] = base.gdp - current.gdp  (baisse GDP -> positif)
+#   stress[hpi] = base.hpi - current.hpi  (baisse HPI -> positif)
+# Donc une signature avec gdp_growth = +3.0 signifie "baisse du GDP de 3pp".
 #
 # Signatures calibrees sur les regimes historiques observes :
-# - Crise financiere : GFC 2008-09 (unemp +3, gdp -3, rate -1, hpi -5)
-# - Stagflation : annees 1970 (unemp +2, gdp -2, rate +2, inflation +3)
-# - Resserrement : 2022-23 (rate +3, hpi -3, inflation +1.5)
-# - Reprise : 2021 (unemp -2, gdp +2, hpi +2)
-# - Rupture techno : hypothetique (unemp +1, gdp -1.5)
+# - Crise financiere : GFC 2008-09 (unemp +3, gdp baisse 3, rate -1, hpi baisse 5)
+# - Stagflation : annees 1970 (unemp +2, gdp baisse 2, rate +2, inflation +3)
+# - Resserrement : 2022-23 (rate +3, hpi baisse 3, inflation +1.5)
+# - Reprise : 2021 (unemp -2, gdp hausse 2, hpi hausse 2)
+# - Rupture techno : hypothetique (unemp +1, gdp baisse 1.5)
 # Source : BCE Statistical Data Warehouse, calibration pedagogique.
 _REGIME_SIGNATURES: Dict[str, Dict[str, float]] = {
     "Crise financiere": {
         "unemployment_rate": 3.0,
-        "gdp_growth": -3.0,
+        "gdp_growth": 3.0,        # baisse GDP = positif dans l'espace stress
         "interest_rate": -1.0,
-        "hpi_growth": -5.0,
+        "hpi_growth": 5.0,        # baisse HPI = positif dans l'espace stress
         "inflation_rate": 0.0,
     },
     "Stagflation": {
         "unemployment_rate": 2.0,
-        "gdp_growth": -2.0,
+        "gdp_growth": 2.0,        # baisse GDP = positif
         "interest_rate": 2.0,
-        "hpi_growth": -1.0,
+        "hpi_growth": 1.0,        # baisse HPI legere = positif
         "inflation_rate": 3.0,
     },
     "Rupture techno": {
         "unemployment_rate": 1.0,
-        "gdp_growth": -1.5,
+        "gdp_growth": 1.5,        # baisse GDP = positif
         "interest_rate": 0.5,
         "hpi_growth": 0.0,
         "inflation_rate": 0.5,
     },
     "Resserrement": {
         "unemployment_rate": 0.5,
-        "gdp_growth": -0.5,
+        "gdp_growth": 0.5,        # baisse GDP legere = positif
         "interest_rate": 3.0,
-        "hpi_growth": -3.0,
+        "hpi_growth": 3.0,        # baisse HPI = positif
         "inflation_rate": 1.5,
     },
     "Reprise": {
         "unemployment_rate": -2.0,
-        "gdp_growth": 2.0,
+        "gdp_growth": -2.0,       # hausse GDP = negatif dans l'espace stress
         "interest_rate": 0.0,
-        "hpi_growth": 2.0,
+        "hpi_growth": -2.0,       # hausse HPI = negatif
         "inflation_rate": -0.5,
     },
 }

@@ -436,6 +436,75 @@ class TestValidation:
         assert VALIDATION_RATIO == 0.15
         assert TEST_RATIO == 0.15
 
+    def test_invalid_proportions_raises(self):
+        """Proportions != 1 lève ValueError."""
+        import ifrs9_cockpit.config as cfg
+        original = cfg.SECTORS[:]
+        try:
+            # Remplacer dernier secteur par un avec proportion cassée
+            bad = SectorConfig(
+                name="Services", proportion=0.99,
+                base_default_rate=0.04,
+                unemployment_sensitivity_credit=1.2, gdp_sensitivity_credit=1.0,
+                interest_rate_sensitivity_credit=0.8, hpi_sensitivity_credit=0.5,
+                inflation_sensitivity_credit=1.8,
+                unemployment_sensitivity_pe=1.0, gdp_sensitivity_pe=1.2,
+                interest_rate_sensitivity_pe=1.0, hpi_sensitivity_pe=0.3,
+                inflation_sensitivity_pe=2.0,
+                valuation_method="EV/EBITDA",
+                entry_multiple_range=(6.0, 10.0), exit_multiple_base=8.0,
+                rho_lgd_cycle=0.20,
+                revenue_range_m=(3.0, 150.0), ebitda_margin_range=(0.08, 0.18),
+            )
+            cfg.SECTORS[-1] = bad
+            with pytest.raises(ValueError, match="proportions"):
+                validate_config()
+        finally:
+            cfg.SECTORS[:] = original
+
+    def test_invalid_ecl_weights_raises(self):
+        """Poids ECL != 1 lève ValueError."""
+        import ifrs9_cockpit.config as cfg
+        original = cfg.ECL_SCENARIOS[:]
+        try:
+            bad = MacroScenario(
+                name="Base", weight=0.99,
+                gdp_growth=1.2, unemployment_rate=7.5, interest_rate=3.5,
+                hpi_growth=2.0, inflation_rate=2.5,
+                gdp_shock=0.0, unemployment_shock=0.0,
+                interest_rate_shock=0.0, hpi_shock=0.0, inflation_shock=0.0,
+            )
+            cfg.ECL_SCENARIOS[0] = bad
+            with pytest.raises(ValueError, match="ponderations"):
+                validate_config()
+        finally:
+            cfg.ECL_SCENARIOS[:] = original
+
+    def test_invalid_default_rate_raises(self):
+        """Taux de défaut hors bornes lève ValueError."""
+        import ifrs9_cockpit.config as cfg
+        original = cfg.SECTORS[:]
+        try:
+            bad = SectorConfig(
+                name="Services", proportion=0.15,
+                base_default_rate=1.5,  # > 1 invalide
+                unemployment_sensitivity_credit=1.2, gdp_sensitivity_credit=1.0,
+                interest_rate_sensitivity_credit=0.8, hpi_sensitivity_credit=0.5,
+                inflation_sensitivity_credit=1.8,
+                unemployment_sensitivity_pe=1.0, gdp_sensitivity_pe=1.2,
+                interest_rate_sensitivity_pe=1.0, hpi_sensitivity_pe=0.3,
+                inflation_sensitivity_pe=2.0,
+                valuation_method="EV/EBITDA",
+                entry_multiple_range=(6.0, 10.0), exit_multiple_base=8.0,
+                rho_lgd_cycle=0.20,
+                revenue_range_m=(3.0, 150.0), ebitda_margin_range=(0.08, 0.18),
+            )
+            cfg.SECTORS[-1] = bad
+            with pytest.raises(ValueError, match="defaut"):
+                validate_config()
+        finally:
+            cfg.SECTORS[:] = original
+
 
 # ============================================================
 # T10 — Validation standalone

@@ -183,6 +183,17 @@ class TestEADModel:
         if len(ccf_table) > 0:
             assert "avg_ccf" in ccf_table.columns
 
+    def test_ead_handles_nan_utilization(self, ead_model, df_credit):
+        """EAD gere les NaN dans utilization_rate (bug fix 2-3)."""
+        df_with_nan = df_credit.copy()
+        # Injecter des NaN supplementaires
+        rng = np.random.default_rng(RANDOM_SEED)
+        nan_mask = rng.random(len(df_with_nan)) < 0.05
+        df_with_nan.loc[nan_mask, "utilization_rate"] = np.nan
+        ead = ead_model.predict(df_with_nan)
+        assert not np.isnan(ead).any(), "EAD contient des NaN"
+        assert (ead >= 0).all(), "EAD negatives"
+
 
 # ============================================================
 # Standalone

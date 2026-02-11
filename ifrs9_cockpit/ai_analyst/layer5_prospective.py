@@ -62,12 +62,14 @@ def project_trajectories(
         macro_params: Variables macro actuelles.
         regime: Classification de regime (ajuste les projections via drift additionnel).
         n_months: Horizon maximal de projection (defaut 12).
-        seed: Graine aleatoire (defaut 42, non utilise car epsilon deterministe).
+        seed: Graine aleatoire (reservee pour future extension stochastique).
 
     Returns:
         DataFrame avec colonnes : trajectory, horizon_months, + 5 variables macro.
     """
-    rng = np.random.default_rng(seed)
+    # Note : seed est accepte pour compatibilite ascendante mais non utilise car
+    # les 3 trajectoires utilisent des epsilon deterministes {-1.5, 0, +1.5}.
+    _ = seed  # Suppress unused warning
     dt = 1.0 / 12  # Pas mensuel (fraction d'annee)
     records = []
 

@@ -132,6 +132,7 @@ class PortfolioComparator:
 
         self.result_credit = result_credit
         self.result_pe = result_pe
+        self._raroc_eva_cache: Optional[pd.DataFrame] = None
 
     # ──────────────────────────────────────────────
     # METRIQUES CREDIT AVANCEES (FR42)
@@ -307,6 +308,9 @@ class PortfolioComparator:
     def compute_raroc_eva(self) -> pd.DataFrame:
         """Calcule RAROC et EVA par cellule secteur x canal (FR44).
 
+        Resultat mis en cache apres le premier appel (les donnees ne changent
+        pas au sein d'une instance).
+
         H5 : Formule RAROC complete avec CIR et impots.
 
         Credit :
@@ -326,6 +330,8 @@ class PortfolioComparator:
         Returns:
             DataFrame avec RAROC et EVA par cellule (10 lignes + 2 totaux).
         """
+        if self._raroc_eva_cache is not None:
+            return self._raroc_eva_cache
         df_c = self.result_credit
         df_p = self.result_pe
         coc = BASEL_CONFIG.cet1_target
@@ -429,6 +435,7 @@ class PortfolioComparator:
                 "eva": round(eva, 0),
             }])], ignore_index=True)
 
+        self._raroc_eva_cache = result
         return result
 
     # ──────────────────────────────────────────────
@@ -679,7 +686,9 @@ class PortfolioComparator:
         # M7 : Softmax avec temperature adaptative
         # scale = 1/var(raroc), clip dans [2, 50] pour stabilite numerique
         scale = np.clip(1.0 / max(np.var(rarocs), 1e-6), 2.0, 50.0)
-        exp_vals = np.exp(rarocs * scale)
+        # Stabilite numerique : soustraire le max pour eviter overflow/underflow
+        shifted = rarocs * scale - np.max(rarocs * scale)
+        exp_vals = np.exp(shifted)
         raw_weights = exp_vals / exp_vals.sum()
 
         # Clip dans [0.05, 0.40]

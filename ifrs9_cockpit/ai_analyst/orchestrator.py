@@ -203,8 +203,9 @@ class CROAnalyst:
 
         # Risk appetite predominant
         ra = state.risk_appetite_matrix
+        rouge_count = 0
         if ra is not None and len(ra) > 0:
-            rouge_count = (ra["signal"] == "rouge").sum()
+            rouge_count = int((ra["signal"] == "rouge").sum())
             ra_status = "rouge" if rouge_count > 3 else "ambre" if rouge_count > 0 else "vert"
         else:
             ra_status = "N/A"

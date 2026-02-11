@@ -168,6 +168,16 @@ class TestClassificationTable:
         required_cols = {"count", "n_defaults", "avg_score", "default_rate"}
         assert required_cols.issubset(set(table.columns))
 
+    def test_classification_table_near_monotone(self, binary_data):
+        """Le taux de defaut est near-monotone croissant par decile (AC 3.2)."""
+        y_true, y_score = binary_data
+        table = ModelMetrics.classification_table(y_true, y_score, n_bins=10)
+        default_rates = table["default_rate"].values
+        # Compter les inversions (tolerance : max 2 inversions pour near-monotone)
+        inversions = sum(1 for i in range(len(default_rates) - 1)
+                        if default_rates[i] > default_rates[i + 1] + 0.01)
+        assert inversions <= 2, f"{inversions} inversions dans la calibration table"
+
 
 # ============================================================
 # T5 — Backtesting
@@ -194,6 +204,13 @@ class TestBacktesting:
         bt = ModelMetrics.compute_backtesting_metrics(y_true, y_score)
         assert (bt["auc"] >= 0).all()
         assert (bt["auc"] <= 1).all()
+
+    def test_backtesting_auc_stable(self, binary_data):
+        """AUC stable entre folds (std < 0.10) — AC 3.3."""
+        y_true, y_score = binary_data
+        bt = ModelMetrics.compute_backtesting_metrics(y_true, y_score, n_folds=5)
+        auc_std = bt["auc"].std()
+        assert auc_std < 0.10, f"AUC std = {auc_std:.4f} >= 0.10 (instable)"
 
 
 # ============================================================

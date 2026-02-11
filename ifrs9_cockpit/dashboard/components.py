@@ -338,11 +338,12 @@ def render_classification_row(
     # Separateur visuel
     html_parts.append('<span style="color:#475569;margin:0 0.3rem;">|</span>')
 
-    # PE badges
+    # PE badges — denominateur = total positions PE (pas n_total credit)
     pe_cls = {"Performing": "badge-stage1", "Watchlist": "badge-stage2", "Distressed": "badge-stage3"}
+    pe_total = sum(pe_categories.values()) if pe_categories else 0
     for cat in ["Performing", "Watchlist", "Distressed"]:
         count = pe_categories.get(cat, 0)
-        pct = count / n_total if n_total > 0 else 0
+        pct = count / pe_total if pe_total > 0 else 0
         html_parts.append(
             f'<span class="badge {pe_cls[cat]}">'
             f'{cat}: {count:,} ({pct:.1%})</span>'
@@ -359,14 +360,15 @@ def render_ai_narrative_box(narrative: str, recommendations: list) -> None:
         narrative: Synthese narrative (CROAnalyst._generate_narrative).
         recommendations: Liste de Recommendation objects.
     """
-    # Determiner le niveau de risque depuis les recommandations
+    # Determiner le niveau de risque depuis risk_appetite_status (pas confidence)
     if recommendations:
         rec = recommendations[0]
-        if rec.confidence == "low":
+        _status = getattr(rec, "risk_appetite_status", "vert")
+        if _status == "rouge":
             accent = "#EF4444"
             icon = "\U0001f6a8"
             level = "ELEVE"
-        elif rec.confidence == "medium":
+        elif _status == "ambre":
             accent = "#F59E0B"
             icon = "\u26a0\ufe0f"
             level = "MODERE"

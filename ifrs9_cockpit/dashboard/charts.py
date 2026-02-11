@@ -819,8 +819,8 @@ def plot_pe_moic_drawdown(result_pe: pd.DataFrame) -> go.Figure:
 
     layout = _base_layout("MOIC & Drawdown par Secteur", height=380)
     fig.update_layout(**layout)
-    fig.update_xaxes(title_text="MOIC", secondary_y=False)
-    fig.update_xaxes(title_text="Drawdown (%)", secondary_y=True)
+    fig.update_xaxes(title_text="MOIC / Drawdown")
+    fig.update_yaxes(title_text="Secteur")
     return fig
 
 
@@ -1019,6 +1019,14 @@ def plot_shap_force_individual(
     Returns:
         Figure Plotly waterfall-like.
     """
+    # Validation des dimensions
+    n_features = len(shap_values)
+    if len(feature_names) != n_features or len(feature_values) != n_features:
+        raise ValueError(
+            f"Dimensions incoherentes : shap_values({n_features}), "
+            f"feature_names({len(feature_names)}), feature_values({len(feature_values)})"
+        )
+
     # Trier par impact absolu
     indices = np.argsort(np.abs(shap_values))[::-1][:top_n]
     indices = indices[::-1]  # Inverser pour afficher le plus important en haut

@@ -197,12 +197,18 @@ class PEModel:
             Dict des deltas normalises.
         """
         base = SCENARIO_BASE
+        # Utiliser `is not None` au lieu de `or` pour gerer correctement override=0.0
+        unemp = unemployment if unemployment is not None else base.unemployment_rate
+        gdp_val = gdp if gdp is not None else base.gdp_growth
+        ir_val = interest_rate if interest_rate is not None else base.interest_rate
+        hpi_val = hpi if hpi is not None else base.hpi_growth
+        infl_val = inflation if inflation is not None else base.inflation_rate
         return {
-            "unemployment": ((unemployment or base.unemployment_rate) - base.unemployment_rate) / 100,
-            "gdp": (base.gdp_growth - (gdp or base.gdp_growth)) / 100,
-            "interest_rate": ((interest_rate or base.interest_rate) - base.interest_rate) / 100,
-            "hpi": (base.hpi_growth - (hpi or base.hpi_growth)) / 100,
-            "inflation": ((inflation or base.inflation_rate) - base.inflation_rate) / 100,
+            "unemployment": (unemp - base.unemployment_rate) / 100,
+            "gdp": (base.gdp_growth - gdp_val) / 100,
+            "interest_rate": (ir_val - base.interest_rate) / 100,
+            "hpi": (base.hpi_growth - hpi_val) / 100,
+            "inflation": (infl_val - base.inflation_rate) / 100,
         }
 
     def _get_valuation_metric(
@@ -251,8 +257,8 @@ class PEModel:
             + deltas["unemployment"] * sector.unemployment_sensitivity_pe
             + deltas["inflation"] * sector.inflation_sensitivity_pe
         )
-        # exp(-stress × 3.0) : toujours > 0, floor de securite a 20% (compression max 80%)
-        factor = np.maximum(np.exp(-stress * 3.0), 0.20)
+        # exp(-stress × 3.0) : toujours > 0 par construction (pas de floor artificiel)
+        factor = np.exp(-stress * 3.0)
         return metric * factor
 
     def _compress_exit_multiple(
@@ -279,8 +285,8 @@ class PEModel:
             + deltas["gdp"] * sector.gdp_sensitivity_pe
             + deltas["hpi"] * sector.hpi_sensitivity_pe
         )
-        # exp(-compression × 5.0) : toujours > 0, floor de securite a 20%
-        factor = max(np.exp(-compression * 5.0), 0.20)
+        # exp(-compression × 5.0) : toujours > 0 par construction (pas de floor artificiel)
+        factor = float(np.exp(-compression * 5.0))
         compressed = base_multiple * factor
 
         # Borner dans la fourchette IPEV du secteur

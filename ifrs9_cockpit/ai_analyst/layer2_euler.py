@@ -116,14 +116,6 @@ def decompose_euler(
         # Delta adaptatif pour la normalisation (M6)
         adaptive_delta = _FACTOR_DELTAS.get(var, 0.10)
 
-        # Sens adverse
-        if var in ("gdp_growth", "hpi_growth"):
-            # Baisse = adverse
-            adverse_sign = -1.0 if var_delta < 0 else 1.0
-        else:
-            # Hausse = adverse
-            adverse_sign = 1.0 if var_delta > 0 else -1.0
-
         # Contribution au risque credit (via sensibilites sectorielles)
         credit_contrib = 0.0
         pe_contrib = 0.0
@@ -142,7 +134,8 @@ def decompose_euler(
             sens_pe = getattr(sector, f"{_sens_key(var)}_pe")
             mask_p = result_pe["sector"].values == name
             el_sec = result_pe.loc[mask_p, "expected_loss_pe"].sum()
-            pe_contrib += (abs(var_delta) / adaptive_delta) * sens_pe * el_sec / max(total_el_pe, 1)
+            if total_el_pe > 0:
+                pe_contrib += (abs(var_delta) / adaptive_delta) * sens_pe * el_sec / total_el_pe
 
         # Ajustement regime (passe 2) : amplifier les facteurs du regime detecte
         regime_mult = 1.0
@@ -205,6 +198,8 @@ def _regime_multiplier(var: str, regime: str) -> float:
             "interest_rate": 1.5,
             "hpi_growth": 1.3,
         },
+        # En regime de Reprise, les multiplicateurs < 1.0 attenuent
+        # l'attribution factorielle (risque en decroissance).
         "Reprise": {
             "gdp_growth": 0.8,
             "unemployment_rate": 0.8,

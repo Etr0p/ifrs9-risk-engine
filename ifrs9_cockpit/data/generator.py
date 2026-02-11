@@ -31,6 +31,17 @@ from ifrs9_cockpit.config import (
 )
 
 
+# Moyennes et ecarts-types credit score par secteur (calibration generateur)
+_CREDIT_SCORE_MEANS: Dict[str, int] = {
+    "Technologie": 620, "Industrie": 660, "Sante": 700,
+    "Immobilier": 650, "Services": 670,
+}
+_CREDIT_SCORE_STDS: Dict[str, int] = {
+    "Technologie": 80, "Industrie": 60, "Sante": 50,
+    "Immobilier": 65, "Services": 55,
+}
+
+
 class SyntheticDataGenerator:
     """Genere un portefeuille dual (credit + PE) d'entreprises synthetiques.
 
@@ -89,8 +100,8 @@ class SyntheticDataGenerator:
         # 5. Generer l'historique panel 12 mois
         df_history = self._generate_monthly_history(df_credit)
 
-        # 6. Ajouter du bruit realiste
-        df_credit = self._add_realistic_noise(df_credit)
+        # 6. Ajouter du bruit realiste (propager outliers revenue vers df_pe)
+        df_credit, df_pe = self._add_realistic_noise(df_credit, df_pe)
 
         # 7. Valider les contrats AR4
         self._validate_contracts(df_credit, df_pe, df_history)
@@ -214,22 +225,13 @@ class SyntheticDataGenerator:
 
         # Credit score — normale tronquee, differenciee par secteur
         credit_score = np.empty(n)
-        credit_score_means = {
-            "Technologie": 620, "Industrie": 660, "Sante": 700,
-            "Immobilier": 650, "Services": 670,
-        }
-        credit_score_stds = {
-            "Technologie": 80, "Industrie": 60, "Sante": 50,
-            "Immobilier": 65, "Services": 55,
-        }
-
         for sector_name in SECTOR_NAMES:
             mask = sectors == sector_name
             count = mask.sum()
             if count == 0:
                 continue
-            raw = self.rng.normal(credit_score_means[sector_name],
-                                 credit_score_stds[sector_name], count)
+            raw = self.rng.normal(_CREDIT_SCORE_MEANS[sector_name],
+                                 _CREDIT_SCORE_STDS[sector_name], count)
             credit_score[mask] = np.clip(raw, 300, 850).astype(int)
 
         df["credit_score"] = credit_score.astype(int)
@@ -434,12 +436,6 @@ class SyntheticDataGenerator:
         sectors = df["sector"].values
         z = np.empty(n)
 
-        # Moyennes credit score par secteur pour centrage
-        cs_means = {
-            "Technologie": 620, "Industrie": 660, "Sante": 700,
-            "Immobilier": 650, "Services": 670,
-        }
-
         for sector in SECTORS:
             mask = sectors == sector.name
             # Intercept = logit(base_default_rate)
@@ -453,7 +449,7 @@ class SyntheticDataGenerator:
         # maintient les taux de defaut proches des cibles sectorielles.
         credit_score_vals = df["credit_score"].values
         cs_centered = np.empty(n)
-        for sector_name, cs_mean in cs_means.items():
+        for sector_name, cs_mean in _CREDIT_SCORE_MEANS.items():
             mask = sectors == sector_name
             cs_centered[mask] = (cs_mean - credit_score_vals[mask]) / 100
         z += cs_centered * 1.2
@@ -599,37 +595,47 @@ class SyntheticDataGenerator:
     # BRUIT REALISTE
     # ──────────────────────────────────────────────
 
-    def _add_realistic_noise(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _add_realistic_noise(
+        self,
+        df_credit: pd.DataFrame,
+        df_pe: pd.DataFrame,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Ajoute du bruit realiste pour simuler la qualite de donnees.
 
         Introduit ~2% de valeurs manquantes dans les features non-critiques
         et quelques outliers sur revenue pour tester la robustesse.
+        Les outliers revenue sont propages a df_pe pour coherence.
 
         Args:
-            df: DataFrame credit complet.
+            df_credit: DataFrame credit complet.
+            df_pe: DataFrame PE complet.
 
         Returns:
-            DataFrame avec bruit ajoute.
+            Tuple (df_credit, df_pe) avec bruit ajoute.
         """
-        n = len(df)
+        n = len(df_credit)
 
         # Valeurs manquantes sur collateral (~2%)
         missing_mask = self.rng.random(n) < 0.02
-        df.loc[missing_mask, "collateral"] = np.nan
+        df_credit.loc[missing_mask, "collateral"] = np.nan
 
         # Valeurs manquantes sur utilization_rate (~1.5%)
         missing_mask2 = self.rng.random(n) < 0.015
-        df.loc[missing_mask2, "utilization_rate"] = np.nan
+        df_credit.loc[missing_mask2, "utilization_rate"] = np.nan
 
-        # Quelques outliers sur revenue (top 0.5%)
+        # Quelques outliers sur revenue (top 0.5%) — propages aux deux DataFrames
         outlier_mask = self.rng.random(n) < 0.005
         n_outliers = outlier_mask.sum()
         if n_outliers > 0:
-            df.loc[outlier_mask, "revenue"] = (
-                df.loc[outlier_mask, "revenue"] * self.rng.uniform(3, 5, n_outliers)
+            multiplier = self.rng.uniform(3, 5, n_outliers)
+            df_credit.loc[outlier_mask, "revenue"] = (
+                df_credit.loc[outlier_mask, "revenue"] * multiplier
+            )
+            df_pe.loc[outlier_mask, "revenue"] = (
+                df_pe.loc[outlier_mask, "revenue"] * multiplier
             )
 
-        return df
+        return df_credit, df_pe
 
     # ──────────────────────────────────────────────
     # VALIDATION CONTRATS AR4

@@ -81,6 +81,13 @@ class LGDModel:
     _SCORE_STD: float = 100.0
     _LGD_CREDIT_SCORE_SCALE: float = 0.20
 
+    # Cap LGD a 95% (plafond logique : 5% de recouvrement minimal)
+    _LGD_CAP: float = 0.95
+
+    # Ajustement loan_type sur la LGD de base
+    _REVOLVING_MULTIPLIER: float = 1.15
+    _TERM_MULTIPLIER: float = 0.90
+
     def _compute_base_lgd(self, df: pd.DataFrame) -> np.ndarray:
         """Calcule la LGD de base (avant dispersion Beta).
 
@@ -104,8 +111,8 @@ class LGDModel:
 
         # Ajustement par type de pret
         revolving_mask = df["loan_type"].values == "Revolving"
-        lgd[revolving_mask] *= 1.15
-        lgd[~revolving_mask] *= 0.90
+        lgd[revolving_mask] *= self._REVOLVING_MULTIPLIER
+        lgd[~revolving_mask] *= self._TERM_MULTIPLIER
 
         # Ajustement par score de credit — calibre (M1)
         credit_scores = df["credit_score"].values.astype(float)
@@ -150,7 +157,7 @@ class LGDModel:
 
         # Dispersion Beta (un seul tirage)
         lgd_ttc = self._apply_beta_dispersion(base_lgd)
-        lgd_ttc = np.clip(lgd_ttc, LGD_CONFIG.recovery_rate_floor, 0.95)
+        lgd_ttc = np.clip(lgd_ttc, LGD_CONFIG.recovery_rate_floor, self._LGD_CAP)
 
         # Downturn via correlation cycle (H3)
         # LGD_DT = LGD_TTC * (1 + rho_lgd_cycle * |Z_stress|)
@@ -161,7 +168,7 @@ class LGDModel:
         ])
         lgd_downturn = lgd_ttc * (1 + rho * abs(z_stress))
 
-        lgd_downturn = np.clip(lgd_downturn, LGD_CONFIG.recovery_rate_floor, 0.95)
+        lgd_downturn = np.clip(lgd_downturn, LGD_CONFIG.recovery_rate_floor, self._LGD_CAP)
 
         return lgd_ttc, lgd_downturn
 
@@ -218,7 +225,7 @@ class LGDModel:
             for sector in SECTORS:
                 mask = df["sector"].values == sector.name
                 lgd[mask] += hpi_impact * sector.hpi_sensitivity_credit
-            lgd = np.clip(lgd, LGD_CONFIG.recovery_rate_floor, 0.95)
+            lgd = np.clip(lgd, LGD_CONFIG.recovery_rate_floor, self._LGD_CAP)
 
         return lgd
 
@@ -267,7 +274,7 @@ class LGDModel:
 
         # Score bas -> recouvrement plus difficile
         scores = df["credit_score"].values.astype(float)
-        mu += np.clip((600 - scores) / 2000, -0.05, 0.10)
+        mu += np.clip((self._MEDIAN_SCORE - scores) / (2 * self._SCORE_STD * 10), -0.05, 0.10)
 
         # Utilization haute -> perte plus importante
         if "utilization_rate" in df.columns:

@@ -134,6 +134,26 @@ class TestLayer1Crossing:
         assert (asym["loss_rate_credit"] >= 0).all()
         assert (asym["loss_rate_pe"] >= 0).all()
 
+    def test_stress_intensity_varies_under_stress(self, pipeline_data):
+        """Sous stress, les stress_intensity different entre secteurs (ponderees par sensibilites)."""
+        from ifrs9_cockpit.ai_analyst.layer1_crossing import analyze_crossings
+        result_credit, result_pe, macro_params = pipeline_data
+        stressed = macro_params.copy()
+        stressed["unemployment_rate"] = 12.0
+        asym, _ = analyze_crossings(result_credit, result_pe, stressed)
+        # Les secteurs ont des sensibilites differentes au chomage, donc les intensites doivent differer
+        intensities = asym["stress_intensity"].values
+        assert len(set(intensities)) > 1, "Les stress_intensity devraient varier entre secteurs"
+
+    def test_marginal_credit_dominates_pe(self, pipeline_data):
+        """Les contributions marginales Credit dominent PE (portefeuille credit >> PE)."""
+        from ifrs9_cockpit.ai_analyst.layer1_crossing import analyze_crossings
+        result_credit, result_pe, macro_params = pipeline_data
+        _, marginal = analyze_crossings(result_credit, result_pe, macro_params)
+        credit_total = marginal.loc[marginal["canal"] == "Credit", "marginal_contribution"].sum()
+        pe_total = marginal.loc[marginal["canal"] == "PE", "marginal_contribution"].sum()
+        assert credit_total > pe_total
+
 
 # ============================================================
 # Story 5-1 : Couche 2 — Allocation proportionnelle / Euler (FR27)
@@ -338,14 +358,17 @@ class TestLayer3RST:
         assert abs(rst["capital_base"] - expected_capital) < 1
 
     def test_reverse_stress_test_custom_threshold(self, pipeline_data):
-        """Le RST accepte un seuil ECL personnalise (FR54)."""
+        """Le RST accepte un seuil ECL personnalise (FR54) et l'utilise correctement."""
         from ifrs9_cockpit.ai_analyst.layer3_rst import reverse_stress_test
         result_credit, result_pe, macro_params = pipeline_data
         ecl_proxy = self._make_ecl_proxy(pipeline_data)
-        custom = 500_000_000_000.0  # Tres grand seuil
+        # Seuil astronomique (100T EUR) pour garantir l'absence de breach
+        custom = 100_000_000_000_000.0
         rst = reverse_stress_test(ecl_proxy, macro_params, target_ecl=custom)
-        # Avec un seuil enorme, le breach peut ne pas se produire
-        assert isinstance(rst["breach"], bool)
+        # Le seuil personnalise doit etre reflecte dans le resultat
+        assert rst["ecl_breach_threshold"] == round(custom, 0)
+        # Avec un seuil astronomique, le breach ne devrait pas se produire
+        assert rst["breach"] is False
 
     def test_mahalanobis_distance_uses_covariance(self):
         """La matrice MACRO_COVARIANCE est 5x5 et symetrique."""
@@ -404,19 +427,17 @@ class TestLayer4Regime:
         assert regime.probabilities["Stagflation"] > 0.3
 
     def test_crise_financiere_detected(self):
-        """Sous stress Crise, le regime Crise financiere est detecte.
+        """Sous stress Crise (unemp haute, GDP bas, HPI bas), le regime Crise financiere est detecte.
 
-        Note : le stress_vector dans classify_regime inverse GDP et HPI
-        (baisse = positif dans le vecteur). Pour aligner avec la signature
-        Crise financiere (gdp=-3, hpi=-5), les valeurs brutes GDP et HPI
-        doivent etre superieures au baseline.
+        Les valeurs macro simulent une crise reelle : chomage eleve, GDP en
+        recession, HPI en forte baisse, taux en baisse (flight-to-quality).
         """
         from ifrs9_cockpit.ai_analyst.layer4_regime import classify_regime
         macro = {
-            "unemployment_rate": 10.0,
-            "gdp_growth": 4.0,
-            "interest_rate": 2.5,
-            "hpi_growth": 7.0,
+            "unemployment_rate": 12.0,
+            "gdp_growth": -3.0,
+            "interest_rate": 1.0,
+            "hpi_growth": -5.0,
             "inflation_rate": SCENARIO_BASE.inflation_rate,
         }
         regime = classify_regime(macro)
@@ -761,15 +782,27 @@ class TestOrchestrator:
         assert len(state.factor_attribution) == 10
 
     def test_custom_target_ecl(self, pipeline_data):
-        """L'orchestrateur accepte un target_ecl personnalise (FR54)."""
+        """L'orchestrateur accepte un target_ecl personnalise (FR54) et le transmet au RST."""
         from ifrs9_cockpit.ai_analyst.orchestrator import CROAnalyst
         result_credit, result_pe, macro_params = pipeline_data
+        custom_ecl = 500_000_000_000.0
         analyst = CROAnalyst(
             result_credit, result_pe, macro_params,
-            target_ecl=500_000_000_000.0,
+            target_ecl=custom_ecl,
         )
         state = analyst.analyze()
         assert state.pass_number == 2
+        # Verifier que le seuil personnalise est reflecte dans le RST
+        assert state.rst_result is not None
+        assert state.rst_result["ecl_breach_threshold"] == round(custom_ecl, 0)
+
+    def test_narrative_contains_allocation(self, pipeline_data):
+        """La narrative mentionne l'allocation proportionnelle."""
+        from ifrs9_cockpit.ai_analyst.orchestrator import CROAnalyst
+        result_credit, result_pe, macro_params = pipeline_data
+        analyst = CROAnalyst(result_credit, result_pe, macro_params)
+        state = analyst.analyze()
+        assert "Allocation proportionnelle" in state.narrative
 
 
 # ============================================================

@@ -177,6 +177,30 @@ class TestPEModelMultipleCompression:
             f"mult(IR=2%)={mult_low.mean():.2f} should > mult(IR=6%)={mult_high.mean():.2f}"
 
 
+class TestPEModelOverrideZero:
+    """Tests gestion correcte de override=0.0."""
+
+    def test_override_zero_not_ignored(self, df_pe):
+        """Un override a 0.0 ne doit pas etre traite comme None (bug `or`)."""
+        m1 = PEModel(seed=RANDOM_SEED)
+        nav_zero, _ = m1.calculate_nav(df_pe, gdp_override=0.0)
+        m2 = PEModel(seed=RANDOM_SEED)
+        nav_none, _ = m2.calculate_nav(df_pe, gdp_override=None)
+        # gdp_override=0.0 est different de gdp baseline (1.2%), donc les NAV diffèrent
+        assert not np.allclose(nav_zero, nav_none, atol=0.01), \
+            "override=0.0 est traite comme None (bug falsy)"
+
+    def test_override_zero_interest_rate(self, df_pe):
+        """Override interest_rate=0.0 doit produire un resultat different de baseline."""
+        m1 = PEModel(seed=RANDOM_SEED)
+        nav_zero, _ = m1.calculate_nav(df_pe, interest_rate_override=0.0)
+        m2 = PEModel(seed=RANDOM_SEED)
+        nav_base, _ = m2.calculate_nav(df_pe)
+        # interest_rate baseline = 3.5, donc override=0.0 change le resultat
+        assert not np.allclose(nav_zero, nav_base, atol=0.01), \
+            "override interest_rate=0.0 ignore"
+
+
 class TestPEModelScenarios:
     """Tests NAV sous 3 scenarios."""
 
@@ -481,6 +505,26 @@ class TestPECalculatorResultColumns:
                     "capital_invested", "distress_prob", "exit_cost"}
         missing = expected - set(pe_result.columns)
         assert len(missing) == 0, f"Colonnes manquantes: {missing}"
+
+
+class TestPECalculatorCircularImport:
+    """Tests import circulaire pe_calculator -> comparator."""
+
+    def test_compute_crr3_rw_importable(self):
+        """compute_crr3_rw doit etre importable depuis comparator sans erreur."""
+        from ifrs9_cockpit.engine.comparator import compute_crr3_rw
+        assert callable(compute_crr3_rw)
+
+    def test_pe_calculator_crr3_rw_used(self, pe_result):
+        """Le RWA PE utilise bien compute_crr3_rw (RW in {190, 250, 400})."""
+        ratio = pe_result["rwa_pe"] / pe_result["nav"]
+        # Chaque ratio doit etre proche de l'un des 3 RW / 100
+        # (tolerance pour l'arrondi des colonnes nav et rwa_pe)
+        valid_ratios = np.array([1.90, 2.50, 4.00])
+        for r in ratio:
+            distances = np.abs(valid_ratios - r)
+            assert distances.min() < 0.05, \
+                f"Ratio RWA/NAV={r:.4f} n'est pas proche de {valid_ratios}"
 
 
 class TestPECalculatorStandalone:

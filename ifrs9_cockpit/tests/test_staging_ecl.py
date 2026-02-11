@@ -135,10 +135,11 @@ class TestStaging:
 
     def test_compute_sicr_score_shape(self):
         """compute_sicr_score retourne un array de bonne taille."""
+        rng = np.random.default_rng(RANDOM_SEED)
         n = 50
-        pd_c = np.random.uniform(0.01, 0.20, n)
-        pd_o = np.random.uniform(0.01, 0.10, n)
-        dpd = np.random.randint(0, 60, n)
+        pd_c = rng.uniform(0.01, 0.20, n)
+        pd_o = rng.uniform(0.01, 0.10, n)
+        dpd = rng.integers(0, 60, n)
         scores = compute_sicr_score(pd_c, pd_o, dpd)
         assert scores.shape == (n,)
 

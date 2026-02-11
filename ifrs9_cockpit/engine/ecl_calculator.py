@@ -37,6 +37,10 @@ from ifrs9_cockpit.models.lgd_model import LGDModel
 from ifrs9_cockpit.models.ead_model import EADModel
 
 
+# Borne superieure PD pour eviter log(0) dans les calculs hazard rate et Merton
+_PD_CLIP_MAX: float = 0.9999
+
+
 class ECLCalculator:
     """Calculateur ECL multi-scénarios IFRS 9.
 
@@ -438,7 +442,7 @@ class ECLCalculator:
         )
 
         # Hazard rate (C1)
-        h = -np.log(1 - np.clip(pd_12m, 0, 0.9999))
+        h = -np.log(1 - np.clip(pd_12m, 0, _PD_CLIP_MAX))
         pd_lifetime = 1 - np.exp(-h * t_residuel)
         return np.clip(pd_lifetime, 0, 1)
 
@@ -490,7 +494,7 @@ class ECLCalculator:
             return df_weighted
 
         # Hazard rate vectorise
-        h = -np.log(1 - np.clip(pd_12m[lifetime_mask], 0, 0.9999))
+        h = -np.log(1 - np.clip(pd_12m[lifetime_mask], 0, _PD_CLIP_MAX))
 
         # Survival, PD marginale, DF par annee
         # S(t) = exp(-h * t) pour t = 0, 1, ..., horizon
@@ -535,7 +539,7 @@ class ECLCalculator:
         """
         liquidity_premium = BASEL_CONFIG.liquidity_premium_bps / 10_000
         # Borner le produit PD * LGD pour eviter log(0)
-        expected_loss = np.clip(pd_12m * lgd, 0, 0.9999)
+        expected_loss = np.clip(pd_12m * lgd, 0, _PD_CLIP_MAX)
         spread = -np.log(1 - expected_loss) / t + liquidity_premium
         return np.clip(spread, 0.0050, 0.2000)
 

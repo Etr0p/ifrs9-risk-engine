@@ -125,6 +125,53 @@ class TestStory61SidebarSlidersScenarios:
         assert hasattr(SCENARIO_BASE, "hpi_growth")
         assert hasattr(SCENARIO_BASE, "inflation_rate")
 
+    def test_slider_conversion_unemployment_bipolar(self) -> None:
+        """Conversion chomage bipolaire : 0 = base, negatif = hausse chomage."""
+        # Logique : unemployment_rate = SCENARIO_BASE.unemployment_rate - bipolar
+        # bipolar = -3 => unemployment = 7.5 - (-3) = 10.5 (hausse)
+        # bipolar = +2 => unemployment = 7.5 - 2 = 5.5 (baisse)
+        base = SCENARIO_BASE.unemployment_rate
+        bipolar_neg = -3.0
+        result = base - bipolar_neg
+        assert result > base, "Bipolar negatif doit augmenter le chomage"
+        bipolar_pos = 2.0
+        result_pos = base - bipolar_pos
+        assert result_pos < base, "Bipolar positif doit baisser le chomage"
+
+    def test_slider_conversion_interest_rate_bp(self) -> None:
+        """Conversion taux BCE : bp/100 ajoute a la base."""
+        base = SCENARIO_BASE.interest_rate
+        bp = 100.0
+        result = base + bp / 100.0
+        assert result == base + 1.0, "100bp = +1% en taux"
+
+    def test_predefined_scenario_values_within_slider_ranges(self) -> None:
+        """Les valeurs des scenarios predefinis sont dans les ranges des sliders."""
+        for name, scenario in PREDEFINED_SCENARIOS.items():
+            ir = scenario["interest_rate_bp"]
+            rng = DASHBOARD_CONFIG.stress_interest_rate_range
+            assert rng[0] <= ir <= rng[1], (
+                f"Scenario '{name}' interest_rate_bp={ir} hors range [{rng[0]}, {rng[1]}]"
+            )
+            gdp = scenario["gdp_pct"]
+            rng_g = DASHBOARD_CONFIG.stress_gdp_range
+            assert rng_g[0] <= gdp <= rng_g[1], (
+                f"Scenario '{name}' gdp_pct={gdp} hors range [{rng_g[0]}, {rng_g[1]}]"
+            )
+
+    def test_slider_default_values_use_scenario_base(self) -> None:
+        """Les valeurs par defaut des sliders sont coherentes avec SCENARIO_BASE."""
+        from pathlib import Path
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        # Verifier que GDP utilise SCENARIO_BASE.gdp_growth
+        assert "value=SCENARIO_BASE.gdp_growth" in source, \
+            "Slider GDP doit utiliser SCENARIO_BASE.gdp_growth"
+        assert "value=SCENARIO_BASE.hpi_growth" in source, \
+            "Slider HPI doit utiliser SCENARIO_BASE.hpi_growth"
+        assert "value=SCENARIO_BASE.inflation_rate" in source, \
+            "Slider inflation doit utiliser SCENARIO_BASE.inflation_rate"
+
 
 # ──────────────────────────────────────────────
 # STORY 6-4 : Design system Steel Blue & palette
@@ -362,6 +409,134 @@ class TestChartsModule:
         fig = plot_transition_matrix(matrix_df)
         assert isinstance(fig, go.Figure)
 
+    def test_plot_pe_nav_by_sector_returns_figure(self) -> None:
+        """plot_pe_nav_by_sector() retourne un go.Figure (Story 6-4)."""
+        from ifrs9_cockpit.dashboard.charts import plot_pe_nav_by_sector
+
+        result_pe = pd.DataFrame({
+            "sector": ["Technologie", "Industrie", "Sante"],
+            "nav": [1e7, 2e7, 1.5e7],
+            "capital_invested": [8e6, 1.5e7, 1.2e7],
+            "expected_loss_pe": [5e5, 1e6, 3e5],
+        })
+        fig = plot_pe_nav_by_sector(result_pe)
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 3  # NAV, Capital, EL
+
+    def test_plot_pe_risk_categories_returns_figure(self) -> None:
+        """plot_pe_risk_categories() retourne un go.Figure (Story 6-4)."""
+        from ifrs9_cockpit.dashboard.charts import plot_pe_risk_categories
+
+        result_pe = pd.DataFrame({
+            "risk_category": ["Performing", "Performing", "Watchlist", "Distressed"],
+        })
+        fig = plot_pe_risk_categories(result_pe)
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_pe_moic_drawdown_returns_figure(self) -> None:
+        """plot_pe_moic_drawdown() retourne un go.Figure (Story 6-4)."""
+        from ifrs9_cockpit.dashboard.charts import plot_pe_moic_drawdown
+
+        result_pe = pd.DataFrame({
+            "sector": ["Technologie", "Industrie", "Sante"],
+            "moic": [1.5, 1.2, 1.8],
+            "nav_drawdown": [0.05, 0.12, 0.03],
+        })
+        fig = plot_pe_moic_drawdown(result_pe)
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) >= 2  # Bars + Scatter
+
+    def test_plot_asymmetry_heatmap_returns_figure(self) -> None:
+        """plot_asymmetry_heatmap() retourne un go.Figure (Story 6-6)."""
+        from ifrs9_cockpit.dashboard.charts import plot_asymmetry_heatmap
+
+        asym_df = pd.DataFrame({
+            "sector": ["Technologie", "Industrie"],
+            "loss_ratio": [1.5, 0.8],
+            "rwa_ratio": [2.0, 1.1],
+            "raroc_delta": [-0.03, 0.01],
+        })
+        fig = plot_asymmetry_heatmap(asym_df)
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_raroc_comparison_returns_figure(self) -> None:
+        """plot_raroc_comparison() retourne un go.Figure (Story 6-6)."""
+        from ifrs9_cockpit.dashboard.charts import plot_raroc_comparison
+
+        raroc_df = pd.DataFrame({
+            "sector": ["Technologie", "Industrie", "Technologie", "Industrie"],
+            "canal": ["Credit", "Credit", "PE", "PE"],
+            "raroc": [0.12, 0.15, 0.08, 0.10],
+        })
+        fig = plot_raroc_comparison(raroc_df)
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_crr3_sensitivity_returns_figure(self) -> None:
+        """plot_crr3_sensitivity() retourne un go.Figure (Story 6-6)."""
+        from ifrs9_cockpit.dashboard.charts import plot_crr3_sensitivity
+
+        crr3_df = pd.DataFrame({
+            "rw_pe": [190, 250, 400],
+            "cet1_ratio": [0.14, 0.12, 0.09],
+            "feasible": [True, True, False],
+        })
+        fig = plot_crr3_sensitivity(crr3_df)
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_risk_appetite_matrix_returns_figure(self) -> None:
+        """plot_risk_appetite_matrix() retourne un go.Figure avec donnees."""
+        from ifrs9_cockpit.dashboard.charts import plot_risk_appetite_matrix
+
+        ra_df = pd.DataFrame({
+            "sector": ["Technologie", "Technologie", "Industrie", "Industrie"],
+            "canal": ["Credit", "PE", "Credit", "PE"],
+            "signal": ["vert", "ambre", "rouge", "vert"],
+        })
+        fig = plot_risk_appetite_matrix(ra_df)
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_risk_appetite_matrix_empty_returns_figure(self) -> None:
+        """plot_risk_appetite_matrix() gere un DataFrame vide."""
+        from ifrs9_cockpit.dashboard.charts import plot_risk_appetite_matrix
+
+        fig = plot_risk_appetite_matrix(pd.DataFrame())
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_shap_force_individual_returns_figure(self) -> None:
+        """plot_shap_force_individual() retourne un go.Figure (Story 6-5)."""
+        from ifrs9_cockpit.dashboard.charts import plot_shap_force_individual
+
+        shap_vals = np.array([0.2, -0.1, 0.05, -0.3, 0.15])
+        feat_vals = np.array([750.0, 3.0, 50000.0, 0.35, 120000.0])
+        feat_names = ["credit_score", "dpd", "income", "debt_ratio", "loan_amount"]
+        fig = plot_shap_force_individual(shap_vals, feat_vals, feat_names)
+        assert isinstance(fig, go.Figure)
+
+    def test_plot_shap_force_individual_dimension_mismatch(self) -> None:
+        """plot_shap_force_individual() leve ValueError si dimensions incoherentes."""
+        from ifrs9_cockpit.dashboard.charts import plot_shap_force_individual
+
+        shap_vals = np.array([0.2, -0.1, 0.05])
+        feat_vals = np.array([750.0, 3.0])  # Trop court
+        feat_names = ["credit_score", "dpd", "income"]
+        with pytest.raises(ValueError, match="Dimensions incoherentes"):
+            plot_shap_force_individual(shap_vals, feat_vals, feat_names)
+
+    def test_hex_to_rgba_conversion(self) -> None:
+        """_hex_to_rgba() convertit correctement les couleurs hex."""
+        from ifrs9_cockpit.dashboard.charts import _hex_to_rgba
+
+        result = _hex_to_rgba("#3B82F6", 0.5)
+        assert result == "(59, 130, 246, 0.5)"
+
+    def test_prettify_feature_with_woe_suffix(self) -> None:
+        """_prettify_feature() supprime le suffixe _woe avant le lookup."""
+        from ifrs9_cockpit.dashboard.charts import _prettify_feature
+
+        assert _prettify_feature("credit_score_woe") == "Score Credit"
+        assert _prettify_feature("credit_score") == "Score Credit"
+        assert _prettify_feature("unknown_feature") == "unknown_feature"
+
 
 # ──────────────────────────────────────────────
 # Components module : fonctions publiques
@@ -417,6 +592,85 @@ class TestComponentsModule:
             p for p in params if p.default is inspect.Parameter.empty
         ]
         assert len(required) >= 4, "render_kpi_cards doit avoir au moins 4 args requis"
+
+    @patch("ifrs9_cockpit.dashboard.components.st")
+    def test_render_kpi_row_outputs_html(self, mock_st: MagicMock) -> None:
+        """render_kpi_row() genere du HTML avec kpi-container (FR45)."""
+        from ifrs9_cockpit.dashboard.components import render_kpi_row
+
+        cards = [
+            {"label": "ECL", "value": "1.2M EUR", "sub_text": "+5%", "sub_class": "negative"},
+            {"label": "NAV", "value": "10%", "sub_text": "OK", "sub_class": "positive"},
+        ]
+        render_kpi_row(cards)
+        mock_st.markdown.assert_called_once()
+        html = mock_st.markdown.call_args[0][0]
+        assert "kpi-container" in html
+        assert "ECL" in html
+        assert "1.2M EUR" in html
+        assert "negative" in html
+
+    @patch("ifrs9_cockpit.dashboard.components.st")
+    def test_render_classification_row_pe_denominator(self, mock_st: MagicMock) -> None:
+        """render_classification_row() utilise le total PE pour les pctages PE (FR47)."""
+        from ifrs9_cockpit.dashboard.components import render_classification_row
+
+        stage_counts = {1: 7000, 2: 2000, 3: 1000}
+        pe_categories = {"Performing": 8, "Watchlist": 5, "Distressed": 2}
+        render_classification_row(stage_counts, pe_categories, 10000)
+        html = mock_st.markdown.call_args[0][0]
+        # Performing = 8/15 = 53.3%, PAS 8/10000 = 0.1%
+        assert "53.3%" in html, "PE pctage doit utiliser le total PE, pas n_total credit"
+
+    @patch("ifrs9_cockpit.dashboard.components.st")
+    def test_render_classification_row_empty_pe(self, mock_st: MagicMock) -> None:
+        """render_classification_row() gere le cas PE vide sans division par zero."""
+        from ifrs9_cockpit.dashboard.components import render_classification_row
+
+        stage_counts = {1: 900, 2: 80, 3: 20}
+        pe_categories = {}
+        render_classification_row(stage_counts, pe_categories, 1000)
+        html = mock_st.markdown.call_args[0][0]
+        # Pas de crash — les PE badges affichent 0 (0.0%)
+        assert "Performing: 0" in html
+
+    @patch("ifrs9_cockpit.dashboard.components.st")
+    def test_render_ai_narrative_box_risk_level_from_status(self, mock_st: MagicMock) -> None:
+        """render_ai_narrative_box() determine le niveau depuis risk_appetite_status."""
+        from ifrs9_cockpit.dashboard.components import render_ai_narrative_box
+        from ifrs9_cockpit.ai_analyst.types import Recommendation
+
+        rec = Recommendation(
+            action="Reduire exposition",
+            regime="crise",
+            trigger="ECL > seuil",
+            euler_driver="Credit_Technologie",
+            macro_factor="unemployment_rate",
+            risk_appetite_status="rouge",
+            rst_distance=0.5,
+            confidence="high",  # high confidence mais rouge = ELEVE
+        )
+        render_ai_narrative_box(narrative="Test narrative", recommendations=[rec])
+        html = mock_st.markdown.call_args[0][0]
+        assert "ELEVE" in html, "risk_appetite_status=rouge doit donner niveau ELEVE"
+
+    @patch("ifrs9_cockpit.dashboard.components.st")
+    def test_render_header_contains_cockpit_header(self, mock_st: MagicMock) -> None:
+        """render_header() genere le header cockpit."""
+        from ifrs9_cockpit.dashboard.components import render_header
+        render_header()
+        html = mock_st.markdown.call_args[0][0]
+        assert "cockpit-header" in html
+        assert "IFRS 9 Risk Cockpit" in html
+
+    @patch("ifrs9_cockpit.dashboard.components.st")
+    def test_render_section_title_output(self, mock_st: MagicMock) -> None:
+        """render_section_title() genere un div section-title."""
+        from ifrs9_cockpit.dashboard.components import render_section_title
+        render_section_title("Mon Titre")
+        html = mock_st.markdown.call_args[0][0]
+        assert "section-title" in html
+        assert "Mon Titre" in html
 
 
 # ──────────────────────────────────────────────
@@ -564,6 +818,37 @@ class TestStory62PipelineOrchestration:
         assert "st.cache_data" in source
         assert "st.cache_resource" in source
 
+    def test_app_pipeline_5_stages(self) -> None:
+        """app.py contient les 5 etapes du pipeline avec progression (FR52)."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "[1/5]" in source, "Etape 1/5 manquante"
+        assert "[2/5]" in source, "Etape 2/5 manquante"
+        assert "[3/5]" in source, "Etape 3/5 manquante"
+        assert "[4/5]" in source, "Etape 4/5 manquante"
+        assert "[5/5]" in source, "Etape 5/5 manquante"
+
+    def test_app_progress_cleanup(self) -> None:
+        """app.py nettoie la barre de progression apres pipeline (empty)."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "_progress.empty()" in source, "Nettoyage barre de progression manquant"
+
+    def test_app_imports_all_pipeline_modules(self) -> None:
+        """app.py importe les modules critiques du pipeline."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "PECalculator" in source, "Import PECalculator manquant"
+        assert "PortfolioComparator" in source, "Import PortfolioComparator manquant"
+        assert "CROAnalyst" in source, "Import CROAnalyst manquant"
+        assert "ECLCalculator" in source, "Import ECLCalculator manquant"
+
 
 # ──────────────────────────────────────────────
 # STORY 6-3 : KPI cards & classifications
@@ -624,6 +909,28 @@ class TestStory65ShapAndExport:
         source = app_path.read_text(encoding="utf-8")
         assert "st.fragment" in source, "@st.fragment introuvable (FR49)"
 
+    def test_app_has_8_sheet_excel_export(self) -> None:
+        """app.py contient l'export Excel avec 8 feuilles (FR50)."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        # Verifier la presence des 8 noms de feuilles
+        expected_sheets = [
+            "1_Macro", "2_Transitions", "3_Alertes", "4_SHAP_Top10",
+            "5_Credit", "6_PE", "7_Optimisation", "8_Asymetrie",
+        ]
+        for sheet in expected_sheets:
+            assert sheet in source, f"Feuille Excel '{sheet}' introuvable (FR50)"
+
+    def test_app_excel_export_comment_says_8(self) -> None:
+        """Le commentaire de l'export dit '8 feuilles' (pas 7)."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "8 feuilles" in source, "Le commentaire doit dire '8 feuilles'"
+
 
 # ──────────────────────────────────────────────
 # STORY 6-6 : RST personnalise
@@ -669,3 +976,39 @@ class TestStory66RstDrillDown:
         """charts.plot_risk_appetite_matrix est callable."""
         from ifrs9_cockpit.dashboard.charts import plot_risk_appetite_matrix
         assert callable(plot_risk_appetite_matrix)
+
+    def test_app_rst_target_ecl_passthrough(self) -> None:
+        """app.py passe rst_target_ecl au CROAnalyst."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "target_ecl=rst_target_ecl" in source, \
+            "Le parametre target_ecl doit etre passe au CROAnalyst"
+
+    def test_app_drill_down_selectbox_in_tab5(self) -> None:
+        """app.py contient un selectbox sectoriel dans le tab Asymetries."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "drill_sector" in source, "Key selectbox drill_sector manquant"
+
+    def test_app_rst_scenario_getattr_safe(self) -> None:
+        """app.py utilise getattr avec default pour SCENARIO_BASE (robustesse)."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        assert "getattr(SCENARIO_BASE, var, 0.0)" in source, \
+            "getattr doit avoir un default pour eviter AttributeError"
+
+    def test_app_no_builtin_shadowing(self) -> None:
+        """app.py ne masque pas le built-in 'in' avec une variable _in."""
+        from pathlib import Path
+
+        app_path = Path(__file__).resolve().parent.parent / "app.py"
+        source = app_path.read_text(encoding="utf-8")
+        # _in masque le builtin — doit etre renomme _inf ou similaire
+        assert "_in = DASHBOARD_CONFIG" not in source, \
+            "Variable '_in' masque le builtin Python 'in' — utiliser '_inf'"
