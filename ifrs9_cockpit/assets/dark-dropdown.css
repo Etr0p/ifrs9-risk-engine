@@ -1,0 +1,43 @@
+/* ═══════════════════════════════════════════════════════════
+   Dash 4.0 Dark Theme Override — design tokens + slider
+   Loaded via Dash auto-discovery of assets/*.css files.
+
+   Dash 4.0 defaults (from dash_core_components.js):
+     --Dash-Fill-Inverse-Strong: #fff         (WHITE background)
+     --Dash-Text-Strong: rgba(0, 9, 38, 0.9)  (DARK text)
+
+   We override the variables for all dcc components (slider,
+   input, checklist, etc.). Dropdowns use dbc.Select instead.
+   ═══════════════════════════════════════════════════════════ */
+
+/* Override Dash design tokens globally */
+:root {
+    --Dash-Fill-Inverse-Strong: #1E293B;
+    --Dash-Fill-Interactive-Strong: #3B82F6;
+    --Dash-Fill-Interactive-Weak: rgba(59, 130, 246, 0.15);
+    --Dash-Fill-Disabled: rgba(99, 102, 241, 0.12);
+    --Dash-Fill-Primary-Active: rgba(59, 130, 246, 0.15);
+    --Dash-Fill-Primary-Hover: rgba(59, 130, 246, 0.08);
+    --Dash-Text-Strong: #F8FAFC;
+    --Dash-Text-Primary: #F8FAFC;
+    --Dash-Text-Weak: #A1B2C8;
+    --Dash-Text-Disabled: #A1B2C8;
+    --Dash-Stroke-Strong: rgba(99, 102, 241, 0.25);
+    --Dash-Stroke-Weak: rgba(99, 102, 241, 0.12);
+    --Dash-Shading-Strong: rgba(0, 0, 0, 0.5);
+    --Dash-Shading-Weak: rgba(0, 0, 0, 0.3);
+}
+
+/* Dash slider design tokens (affects sidebar sliders) */
+.dash-slider-track {
+    background: rgba(99, 102, 241, 0.15) !important;
+}
+
+.dash-slider-range {
+    background: #3B82F6 !important;
+}
+
+.dash-slider-thumb {
+    background-color: #3B82F6 !important;
+    border-color: #1E293B !important;
+}

@@ -95,9 +95,9 @@ def validate_realism(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
             f"[{multiples.min():.1f}, {multiples.max():.1f}] vs config [{lo:.0f}, {hi:.0f}]",
         )
 
-    # Correlations plausibles
+    # Correlations plausibles (v4: credit_score genere independamment, correlation faible)
     corr_cs_dr = df_credit[["credit_score", "debt_ratio"]].corr().iloc[0, 1]
-    ok &= _check("Corr credit_score/debt_ratio < 0", corr_cs_dr < 0, f"{corr_cs_dr:.3f}")
+    ok &= _check("Corr credit_score/debt_ratio faible", abs(corr_cs_dr) < 0.3, f"{corr_cs_dr:.3f}")
 
     corr_rev_ebitda = df_credit[["revenue", "ebitda"]].corr().iloc[0, 1]
     ok &= _check("Corr revenue/ebitda > 0.5", corr_rev_ebitda > 0.5, f"{corr_rev_ebitda:.3f}")
@@ -121,10 +121,11 @@ def validate_invariants(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
     """
     ok = True
 
-    # pd_latent dans [0, 1]
-    pd_vals = df_credit["pd_latent"]
-    ok &= _check("pd_latent >= 0", (pd_vals >= 0).all(), f"min={pd_vals.min():.6f}")
-    ok &= _check("pd_latent <= 1", (pd_vals <= 1).all(), f"max={pd_vals.max():.6f}")
+    # pd_origination (ex pd_latent) dans [0, 1]
+    col_pd = "pd_origination" if "pd_origination" in df_credit.columns else "pd_latent"
+    pd_vals = df_credit[col_pd]
+    ok &= _check(f"{col_pd} >= 0", (pd_vals >= 0).all(), f"min={pd_vals.min():.6f}")
+    ok &= _check(f"{col_pd} <= 1", (pd_vals <= 1).all(), f"max={pd_vals.max():.6f}")
 
     # pd_origination dans [0, 1]
     if "pd_origination" in df_credit.columns:
@@ -142,9 +143,9 @@ def validate_invariants(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
     # revenue > 0
     ok &= _check("revenue > 0", (df_credit["revenue"] > 0).all(), f"min={df_credit['revenue'].min():.4f}")
 
-    # debt_ratio dans [0, 1] (avant bruit)
+    # debt_ratio >= 0 (v4: gamma distribution, peut depasser 1 pour leveraged)
     dr = df_credit["debt_ratio"]
-    ok &= _check("debt_ratio [0,1]", (dr >= 0).all() and (dr <= 1).all(), f"[{dr.min():.4f}, {dr.max():.4f}]")
+    ok &= _check("debt_ratio [0,5]", (dr >= 0).all() and (dr <= 5).all(), f"[{dr.min():.4f}, {dr.max():.4f}]")
 
     # credit_score dans [300, 850]
     cs = df_credit["credit_score"]
@@ -349,11 +350,11 @@ class TestRealism:
                 f"Multiple PE {sector.name} hors [{lo}, {hi}]"
             )
 
-    def test_corr_credit_score_debt_ratio_negative(self, generated_data):
-        """Correlation credit_score / debt_ratio negative."""
+    def test_corr_credit_score_debt_ratio_weak(self, generated_data):
+        """Correlation credit_score / debt_ratio faible (bridge genere independamment)."""
         df_credit, _, _ = generated_data
         corr = df_credit[["credit_score", "debt_ratio"]].corr().iloc[0, 1]
-        assert corr < 0, f"Corr credit_score/debt_ratio = {corr:.3f} >= 0"
+        assert abs(corr) < 0.3, f"Corr credit_score/debt_ratio = {corr:.3f} trop forte"
 
     def test_corr_revenue_ebitda_positive(self, generated_data):
         """Correlation revenue / ebitda > 0.5."""
@@ -365,11 +366,11 @@ class TestRealism:
 class TestFinancialInvariants:
     """Tests des invariants financiers (FR56)."""
 
-    def test_pd_latent_bounded(self, generated_data):
-        """pd_latent dans [0, 1]."""
+    def test_pd_origination_is_pd_latent(self, generated_data):
+        """pd_origination (ex pd_latent) dans [0, 1]."""
         df_credit, _, _ = generated_data
-        assert (df_credit["pd_latent"] >= 0).all()
-        assert (df_credit["pd_latent"] <= 1).all()
+        assert (df_credit["pd_origination"] >= 0).all()
+        assert (df_credit["pd_origination"] <= 1).all()
 
     def test_pd_origination_bounded(self, generated_data):
         """pd_origination dans [0, 1]."""
@@ -388,10 +389,10 @@ class TestFinancialInvariants:
         assert (df_credit["revenue"] > 0).all()
 
     def test_debt_ratio_bounded(self, generated_data):
-        """debt_ratio dans [0, 1]."""
+        """debt_ratio >= 0 (v4: gamma distribution, peut depasser 1 pour leveraged)."""
         df_credit, _, _ = generated_data
         assert (df_credit["debt_ratio"] >= 0).all()
-        assert (df_credit["debt_ratio"] <= 1).all()
+        assert (df_credit["debt_ratio"] <= 5).all()
 
     def test_credit_score_bounded(self, generated_data):
         """credit_score dans [300, 850]."""

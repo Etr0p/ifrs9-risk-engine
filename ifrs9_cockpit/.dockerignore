@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+dist
+build
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Tests (pas necessaires en production)
+ifrs9_cockpit/tests/
+
+# Documentation source (pas necessaire en runtime)
+ifrs9_cockpit/docs/
+
+# Claude
+.claude/
+ifrs9_cockpit/.claude/
+
+# Temporary
+*.tmp
+*.log
+diag_*.py
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb

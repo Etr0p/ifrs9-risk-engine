@@ -1,8 +1,13 @@
 """Couche 2 — Allocation proportionnelle du risque & attribution factorielle (FR27).
 
 Decompose les causes des ecarts par allocation proportionnelle du risque
-(simplification d'Euler, full allocation garantie) et attribution
-factorielle macro one-at-a-time (OAT) avec deltas adaptatifs.
+(full allocation garantie) et attribution factorielle macro
+one-at-a-time (OAT) avec deltas adaptatifs.
+
+RJ audit MAJOR : renomme ``euler_share`` → ``proportional_share`` et
+``decompose_euler`` → ``decompose_proportional``. L'ancien nom Euler
+etait un abus de langage : l'allocation proportionnelle n'utilise PAS
+de derivees partielles (Euler-Tasche). Alias backward-compat conserves.
 """
 
 from __future__ import annotations
@@ -35,15 +40,14 @@ _FACTOR_DELTAS: Dict[str, float] = {
 }
 
 
-def decompose_euler(
+def decompose_proportional(
     result_credit: pd.DataFrame,
     result_pe: pd.DataFrame,
     macro_params: Dict[str, float],
     regime: Optional[RegimeClassification] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Allocation proportionnelle du risque (simplification d'Euler) et facteurs macro (FR27).
+    """Allocation proportionnelle du risque et facteurs macro (FR27).
 
-    Note : le nom ``decompose_euler`` est conserve pour compatibilite ascendante.
     La methode appliquee est une allocation proportionnelle :
         contribution_i = ECL_i / ECL_total  (credit)
         contribution_i = EL_PE_i / EL_PE_total  (PE)
@@ -80,7 +84,7 @@ def decompose_euler(
             "sector": name,
             "canal": "Credit",
             "risk_amount": round(ecl_sec, 0),
-            "euler_share": round(ecl_sec / max(total_risk, 1), 6),
+            "proportional_share": round(ecl_sec / max(total_risk, 1), 6),
             "rwa": round(rwa_sec, 0),
         })
 
@@ -93,7 +97,7 @@ def decompose_euler(
             "sector": name,
             "canal": "PE",
             "risk_amount": round(el_sec, 0),
-            "euler_share": round(el_sec / max(total_risk, 1), 6),
+            "proportional_share": round(el_sec / max(total_risk, 1), 6),
             "rwa": round(rwa_pe_sec, 0),
         })
 
@@ -208,6 +212,10 @@ def _regime_multiplier(var: str, regime: str) -> float:
     return multipliers.get(regime, {}).get(var, 1.0)
 
 
+# Backward-compat alias (RJ audit : renommage Euler → Proportional)
+decompose_euler = decompose_proportional
+
+
 if __name__ == "__main__":
     from ifrs9_cockpit.data.generator import generate_dataset
     from ifrs9_cockpit.models.pd_model import PDModelSuite
@@ -256,7 +264,7 @@ if __name__ == "__main__":
 
     # Couche 2
     print("\n[3/4] Couche 2 — Allocation proportionnelle du risque (FR27)...")
-    euler, factors = decompose_euler(result_credit, result_pe, macro_params)
+    euler, factors = decompose_proportional(result_credit, result_pe, macro_params)
     print("\n--- Allocation proportionnelle (contributions) ---")
     print(euler.to_string(index=False))
     print("\n--- Attribution factorielle (deltas adaptatifs) ---")
@@ -273,7 +281,7 @@ if __name__ == "__main__":
     all_ok &= ok
 
     # V2: Allocation proportionnelle full allocation (somme ~= 1)
-    euler_sum = euler["euler_share"].sum()
+    euler_sum = euler["proportional_share"].sum()
     ok = abs(euler_sum - 1.0) < 0.01
     status = "PASS" if ok else "FAIL"
     print(f"  [{status}] Allocation proportionnelle full allocation : sum = {euler_sum:.6f}")

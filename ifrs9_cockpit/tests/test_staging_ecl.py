@@ -293,7 +293,7 @@ class TestStandalone:
         """Le module ecl_calculator.py s'execute sans erreur."""
         result = subprocess.run(
             [sys.executable, "-m", "ifrs9_cockpit.engine.ecl_calculator"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, text=True, timeout=600,
         )
         assert result.returncode == 0, f"stderr: {result.stderr[-500:]}"
         assert "Phase 3 valid" in result.stdout

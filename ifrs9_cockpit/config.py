@@ -10,7 +10,7 @@ Aucun seuil ou hyperparametre ne doit etre hardcode ailleurs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 # ──────────────────────────────────────────────
@@ -21,7 +21,7 @@ RANDOM_SEED: int = 42
 # ──────────────────────────────────────────────
 # DATASET
 # ──────────────────────────────────────────────
-N_CLIENTS: int = 10_000
+N_CLIENTS: int = 30_000
 N_MONTHS: int = 12
 TRAIN_RATIO: float = 0.7
 VALIDATION_RATIO: float = 0.15
@@ -95,6 +95,11 @@ class SectorConfig:
     # Correlation LGD-cycle (EBA GL/2019/03) — pour LGD Downturn
     rho_lgd_cycle: float
 
+    # ESG — Green Asset Ratio declaratif (placeholder GAR, BCE 2024)
+    # Part estimee des actifs alignes taxonomie EU par secteur.
+    # Source : consensus sectoriel simplifie (declaratif, non audite).
+    green_share: float
+
     # Fourchettes de generation pour le portefeuille synthetique
     revenue_range_m: Tuple[float, float]
     ebitda_margin_range: Tuple[float, float]
@@ -124,7 +129,10 @@ SECTORS: List[SectorConfig] = [
         inflation_sensitivity_pe=0.8,
         valuation_method="EV/Revenue",
         entry_multiple_range=(4.0, 8.0),
-        exit_multiple_base=6.0,
+        # Exit > entry : creation de valeur PE (croissance CA + expansion multiples)
+        # MOIC cible ~1.6x sur 4-5 ans = IRR ~12% (median Preqin 2023 tech buyout)
+        exit_multiple_base=9.0,
+        green_share=0.40,
         rho_lgd_cycle=0.25,
         revenue_range_m=(5.0, 200.0),
         ebitda_margin_range=(0.05, 0.30),
@@ -150,7 +158,9 @@ SECTORS: List[SectorConfig] = [
         inflation_sensitivity_pe=1.0,
         valuation_method="EV/EBITDA",
         entry_multiple_range=(4.0, 8.0),
-        exit_multiple_base=6.0,
+        # MOIC cible ~1.5x (median Preqin 2023 industrial buyout)
+        exit_multiple_base=8.5,
+        green_share=0.20,
         rho_lgd_cycle=0.30,
         revenue_range_m=(10.0, 500.0),
         ebitda_margin_range=(0.08, 0.20),
@@ -176,7 +186,9 @@ SECTORS: List[SectorConfig] = [
         inflation_sensitivity_pe=0.5,
         valuation_method="EV/EBITDA",
         entry_multiple_range=(10.0, 15.0),
-        exit_multiple_base=12.0,
+        # MOIC cible ~1.4x (healthcare = premium defensif, expansion moderee)
+        exit_multiple_base=17.0,
+        green_share=0.30,
         rho_lgd_cycle=0.10,
         revenue_range_m=(5.0, 300.0),
         ebitda_margin_range=(0.10, 0.25),
@@ -203,7 +215,9 @@ SECTORS: List[SectorConfig] = [
         inflation_sensitivity_pe=0.5,
         valuation_method="Cap_rate/NOI",
         entry_multiple_range=(4.0, 7.0),
-        exit_multiple_base=5.5,
+        # MOIC cible ~1.5x (value-add real estate, Preqin 2023)
+        exit_multiple_base=8.0,
+        green_share=0.15,
         rho_lgd_cycle=0.35,
         revenue_range_m=(2.0, 100.0),
         ebitda_margin_range=(0.40, 0.70),
@@ -229,7 +243,9 @@ SECTORS: List[SectorConfig] = [
         inflation_sensitivity_pe=2.0,
         valuation_method="EV/EBITDA",
         entry_multiple_range=(6.0, 10.0),
-        exit_multiple_base=8.0,
+        # MOIC cible ~1.4x (services = expansion moderee)
+        exit_multiple_base=11.0,
+        green_share=0.25,
         rho_lgd_cycle=0.20,
         revenue_range_m=(3.0, 150.0),
         ebitda_margin_range=(0.08, 0.18),
@@ -337,78 +353,216 @@ SCENARIOS: List[MacroScenario] = ECL_SCENARIOS
 # Valeurs des 5 sliders : interest_rate_bp, unemployment_bipolar, gdp_pct, hpi_pct, inflation_pct
 # Le dropdown pre-remplit les sliders ; l'analyste peut ensuite ajuster a la main.
 
+# Convention bipolaire chomage :
+#   signe = nature (+  rupture techno, - = crise eco)
+#   |valeur| = amplitude de hausse du chomage en pp vs base
+#   Les deux extremes augmentent le taux de chomage : base + |slider|.
+#
+# Calibration : chaque scenario est ancre sur un evenement historique reel
+# de la zone euro, avec donnees Eurostat / BCE / BRI.
 PREDEFINED_SCENARIOS: Dict[str, Dict[str, float]] = {
     "Central": {
+        # Baseline BCE 2024 : croissance tendancielle, inflation cible, taux neutre.
         "interest_rate_bp": 50.0,
         "unemployment_bipolar": 0.0,
         "gdp_pct": 1.2,
         "hpi_pct": 2.0,
         "inflation_pct": 2.5,
     },
-    "Crise financiere": {
-        "interest_rate_bp": 200.0,
-        "unemployment_bipolar": -4.0,
-        "gdp_pct": -3.0,
-        "hpi_pct": -15.0,
-        "inflation_pct": -1.0,
+    "Crise financiere (GFC)": {
+        # Lehman / subprimes 2008-09 : PIB zone euro -4.5%, chomage 7.6→9.6%,
+        # BCE baisse taux de 4.25% a 1.0% (-325bp mais baseline=3.5% → -250bp),
+        # HPI zone euro -3%, deflation (HICP 0.3%).
+        # Sources : Eurostat, BCE SDW, World Bank.
+        "interest_rate_bp": -250.0,
+        "unemployment_bipolar": -2.0,   # crise eco : +2pp chomage
+        "gdp_pct": -4.5,
+        "hpi_pct": -3.0,
+        "inflation_pct": 0.3,
+    },
+    "Crise souveraine (2012)": {
+        # Crise dette souveraine PIIGS 2011-12 : double-dip, PIB -0.9%,
+        # chomage pic 12% (vs 7.5% base → +4pp), BCE baisse a 0.75%,
+        # HPI -2.5%, inflation ancree 2.5%. Recession longue et diffuse.
+        # Sources : Eurostat, BCE, Wikipedia European debt crisis.
+        "interest_rate_bp": -275.0,
+        "unemployment_bipolar": -4.0,   # crise eco : +4pp chomage (pic historique)
+        "gdp_pct": -0.9,
+        "hpi_pct": -2.5,
+        "inflation_pct": 2.5,
     },
     "Stagflation": {
-        "interest_rate_bp": 300.0,
-        "unemployment_bipolar": -2.0,
+        # Choc petrolier 1974-75 (transpose en zone euro moderne) :
+        # PIB -1%, chomage +3pp, banque centrale forcee de monter les taux
+        # malgre la recession (lutte anti-inflation), HPI -5% reel,
+        # inflation 8% (plafond credible en regime de ciblage moderne,
+        # vs 13.2% historique 1974). Borne sup realisee : HICP 8.4% en 2022.
+        # Sources : BCE Monthly Bulletin, OCDE, Eurostat.
+        "interest_rate_bp": 250.0,
+        "unemployment_bipolar": -3.0,   # crise eco : +3pp chomage
         "gdp_pct": -1.0,
         "hpi_pct": -5.0,
-        "inflation_pct": 6.0,
+        "inflation_pct": 8.0,
+    },
+    "Choc pandemique (COVID)": {
+        # COVID-19 T2 2020 annualise : PIB zone euro -6.1% (pire que GFC),
+        # chomage officiel +0.5pp seulement (masque par SURE/kurzarbeit),
+        # BCE a 0% (PEPP 1 850 Md EUR), HPI paradoxalement +5% (teletravail,
+        # taux zero, stimulus fiscal), quasi-deflation HICP 0.3%.
+        # Sources : Eurostat, BCE, World Bank.
+        "interest_rate_bp": -350.0,
+        "unemployment_bipolar": -0.5,   # crise eco : +0.5pp (masque par dispositifs)
+        "gdp_pct": -6.0,
+        "hpi_pct": 5.0,
+        "inflation_pct": 0.3,
     },
     "Rupture techno": {
-        "interest_rate_bp": 0.0,
-        "unemployment_bipolar": 3.0,
-        "gdp_pct": 2.0,
-        "hpi_pct": 5.0,
-        "inflation_pct": 1.0,
+        # Dot-com bust 2001-03 + analogie IA : PIB zone euro +0.9% (ralentissement
+        # sans recession), chomage +1.5pp concentre sur secteur tech,
+        # BCE baisse taux a 2% (-100bp), immobilier non affecte (+3%),
+        # inflation stable 2.2%. PE tech beneficie (destruction creatrice).
+        # Sources : Eurostat, BCE, OCDE.
+        "interest_rate_bp": -100.0,
+        "unemployment_bipolar": 1.5,    # rupture techno : +1.5pp, PE tech beneficie
+        "gdp_pct": 0.9,
+        "hpi_pct": 3.0,
+        "inflation_pct": 2.2,
     },
     "Reprise": {
-        "interest_rate_bp": -100.0,
-        "unemployment_bipolar": -2.0,
-        "gdp_pct": 3.0,
-        "hpi_pct": 8.0,
-        "inflation_pct": 2.0,
+        # Expansion zone euro 2017-18 : PIB +2.5%, chomage en baisse (pas de hausse),
+        # BCE ultra-accommodante a 0% (QE toujours actif), HPI +4.5%,
+        # inflation 1.6% sous-cible — le « Goldilocks » europeen.
+        # Sources : Eurostat, FMI REO Europe 2017, BCE.
+        "interest_rate_bp": -200.0,
+        "unemployment_bipolar": 0.0,    # reprise : pas de hausse de chomage
+        "gdp_pct": 2.5,
+        "hpi_pct": 4.5,
+        "inflation_pct": 1.6,
+    },
+    "Hypercroissance": {
+        # Trente Glorieuses 1950-73 (transpose en zone euro moderne) :
+        # PIB +5% (France +5.8%, Allemagne +6.0%, moyenne CEE ~5%),
+        # plein emploi (chomage 1-3%, pas de hausse vs baseline),
+        # taux d'interet eleves 8% (rendements obligataires 7-9%, taux directeurs
+        # Bundesbank ~5-7%, marche exige prime sur la croissance),
+        # immobilier +10% (urbanisation massive, baby-boom, investissement logement),
+        # inflation moderee 4% (« repression financiere » typique de l'epoque).
+        # Scenario ideal pour comparer rentabilite PE vs credit en regime de forte
+        # croissance : PE beneficie du levier de croissance, credit du volume.
+        # Sources : INSEE, Bundesbank, Maddison Project Database, OCDE.
+        "interest_rate_bp": 450.0,
+        "unemployment_bipolar": 0.0,    # plein emploi, pas de hausse du chomage
+        "gdp_pct": 5.0,
+        "hpi_pct": 10.0,
+        "inflation_pct": 4.0,
     },
 }
 
-# Historique macro mensuel (baseline) — 12 mois
-MACRO_HISTORY_BASELINE: Dict[str, List[float]] = {
-    "gdp_growth": [1.1, 1.0, 1.2, 1.3, 1.1, 0.9, 1.0, 1.2, 1.4, 1.3, 1.2, 1.2],
-    "unemployment_rate": [7.8, 7.7, 7.6, 7.5, 7.5, 7.6, 7.7, 7.5, 7.4, 7.3, 7.4, 7.5],
-    "interest_rate": [3.0, 3.0, 3.25, 3.25, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5],
-    "hpi_growth": [3.0, 2.8, 2.5, 2.3, 2.0, 2.0, 1.8, 2.0, 2.2, 2.0, 2.0, 2.0],
-    "inflation_rate": [3.2, 3.0, 2.8, 2.7, 2.6, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5],
+# Volatilites annualisees historiques par variable macro (en points de pourcentage).
+# Sources : BCE Statistical Data Warehouse, Eurostat, consensus Bloomberg (2010-2024).
+_MACRO_VOLATILITIES: Dict[str, float] = {
+    "unemployment_rate": 1.5,   # ecart-type annuel zone euro (~1-2 pp)
+    "gdp_growth":       1.8,   # ecart-type annuel croissance PIB UE
+    "interest_rate":    1.0,   # ecart-type taux directeur BCE
+    "hpi_growth":       3.0,   # ecart-type prix immobilier (plus volatile)
+    "inflation_rate":   1.2,   # ecart-type HICP zone euro
+}
+
+# Historique macro mensuel (baseline) — 60 mois (5 ans).
+# Utilise UNIQUEMENT par le generateur de donnees (generator.py) pour
+# fournir des niveaux macro courants. N'est PAS utilise pour estimer
+# la matrice de covariance (celle-ci est construite via Expert Judgment).
+def _generate_macro_history(n_months: int = 60, seed: int = 42) -> Dict[str, List[float]]:
+    """Genere un historique macro synthetique pour le generateur de donnees."""
+    import numpy as _np
+    rng = _np.random.RandomState(seed)
+    _params = {
+        "gdp_growth": (1.2, 0.4, 0.7),
+        "unemployment_rate": (7.5, 0.3, 0.9),
+        "interest_rate": (3.25, 0.25, 0.95),
+        "hpi_growth": (2.2, 0.5, 0.8),
+        "inflation_rate": (2.6, 0.3, 0.85),
+    }
+    history: Dict[str, List[float]] = {}
+    for var, (mu, sigma, phi) in _params.items():
+        series = [mu]
+        for _ in range(n_months - 1):
+            x_next = mu + phi * (series[-1] - mu) + sigma * rng.randn()
+            series.append(round(x_next, 4))
+        history[var] = series
+    return history
+
+
+MACRO_HISTORY_BASELINE: Dict[str, List[float]] = _generate_macro_history(60)
+
+# Equilibre structurel long-terme (theta O-U).
+# RJ audit MEDIUM : theta etait = SCENARIO_BASE, creant une circularite
+# (le scenario de base etant une conjoncture, pas un equilibre structurel).
+# Les valeurs ci-dessous representent l'equilibre de long terme (10+ ans)
+# independant de la conjoncture actuelle (SCENARIO_BASE).
+# Sources : consensus OCDE/FMI long-terme, potentiel de croissance UE.
+MACRO_STRUCTURAL_EQUILIBRIUM: Dict[str, float] = {
+    "unemployment_rate": 6.5,    # NAIRU zone euro (estimation structurelle)
+    "gdp_growth": 1.5,          # Croissance potentielle UE long-terme
+    "interest_rate": 2.5,       # Taux neutre r* (Laubach-Williams)
+    "hpi_growth": 2.0,          # Inflation + productivite immobiliere
+    "inflation_rate": 2.0,      # Cible BCE
 }
 
 # Mean-reversion Ornstein-Uhlenbeck par variable (H10).
 # kappa = vitesse de retour vers theta, sigma = volatilite annualisee.
-# theta = equilibre long-terme (= SCENARIO_BASE).
+# theta = equilibre structurel long-terme (NAIRU, r*, cible BCE).
 # x(t+1) = x(t) + kappa×(theta-x(t))×dt + sigma×sqrt(dt)×epsilon
 MACRO_MEAN_REVERSION: Dict[str, Dict[str, float]] = {
-    "unemployment_rate": {"kappa": 0.5, "sigma": 0.8, "theta": SCENARIO_BASE.unemployment_rate},
-    "gdp_growth": {"kappa": 1.0, "sigma": 1.2, "theta": SCENARIO_BASE.gdp_growth},
-    "interest_rate": {"kappa": 0.3, "sigma": 0.5, "theta": SCENARIO_BASE.interest_rate},
-    "hpi_growth": {"kappa": 0.7, "sigma": 2.0, "theta": SCENARIO_BASE.hpi_growth},
-    "inflation_rate": {"kappa": 0.8, "sigma": 0.6, "theta": SCENARIO_BASE.inflation_rate},
+    "unemployment_rate": {"kappa": 0.5, "sigma": 0.8, "theta": MACRO_STRUCTURAL_EQUILIBRIUM["unemployment_rate"]},
+    "gdp_growth": {"kappa": 1.0, "sigma": 1.2, "theta": MACRO_STRUCTURAL_EQUILIBRIUM["gdp_growth"]},
+    "interest_rate": {"kappa": 0.3, "sigma": 0.5, "theta": MACRO_STRUCTURAL_EQUILIBRIUM["interest_rate"]},
+    "hpi_growth": {"kappa": 0.7, "sigma": 2.0, "theta": MACRO_STRUCTURAL_EQUILIBRIUM["hpi_growth"]},
+    "inflation_rate": {"kappa": 0.8, "sigma": 0.6, "theta": MACRO_STRUCTURAL_EQUILIBRIUM["inflation_rate"]},
 }
 
-# Matrice de covariance macro historique 5×5 (H6, RST Mahalanobis).
-# Estimee depuis MACRO_HISTORY_BASELINE (12 mois).
+# Matrice de covariance macro 5×5 (H6, RST Mahalanobis).
+# RJ audit v2 : construite a partir d'une matrice de correlation de consensus
+# (Expert Judgment / litterature macro-finance) et des volatilites historiques.
+# Pas d'estimation sur donnees synthetiques (circularite : les AR(1) independants
+# produisent une covariance diagonale, rendant la re-estimation inutile).
+# Formule : Σ_ij = ρ_ij × σ_i × σ_j
+# Regularisation Ledoit-Wolf (2004) appliquee pour garantir la definie-positivite.
 # Ordre : unemployment_rate, gdp_growth, interest_rate, hpi_growth, inflation_rate
-# Utilisee pour la distance de Mahalanobis dans le reverse stress test.
-def _compute_macro_covariance() -> "list[list[float]]":
-    """Calcule la matrice de covariance 5×5 depuis l'historique baseline."""
+
+# Matrice de correlation de consensus (Expert Judgment).
+# Sources : FMI WEO correlations (2000-2024), BCE research papers, Okun's law,
+# Phillips curve, Taylor rule relationships.
+#                unemp   gdp     ir      hpi     infl
+_EXPERT_CORR = [
+    [ 1.00, -0.70,  0.15, -0.40,  0.20],  # unemployment
+    [-0.70,  1.00, -0.10,  0.50, -0.15],  # gdp_growth
+    [ 0.15, -0.10,  1.00, -0.25,  0.60],  # interest_rate
+    [-0.40,  0.50, -0.25,  1.00, -0.10],  # hpi_growth
+    [ 0.20, -0.15,  0.60, -0.10,  1.00],  # inflation_rate
+]
+
+def _build_macro_covariance() -> "list[list[float]]":
+    """Construit Σ = diag(σ) × R_expert × diag(σ), regularisee Ledoit-Wolf."""
     import numpy as _np
+    from sklearn.covariance import LedoitWolf
     _vars = ["unemployment_rate", "gdp_growth", "interest_rate", "hpi_growth", "inflation_rate"]
-    _data = _np.array([MACRO_HISTORY_BASELINE[v] for v in _vars])  # (5, 12)
-    return _np.cov(_data).tolist()
+    sigma = _np.array([_MACRO_VOLATILITIES[v] for v in _vars])
+    R = _np.array(_EXPERT_CORR)
+    # Σ_ij = σ_i × ρ_ij × σ_j
+    S = _np.outer(sigma, sigma) * R
+    # Regularisation Ledoit-Wolf pour garantir definie-positivite numerique
+    lw = LedoitWolf(assume_centered=True)
+    lw.location_ = _np.zeros(len(_vars))
+    lw.covariance_ = S
+    # Shrinkage vers cible diagonale
+    target = _np.diag(_np.diag(S))
+    alpha = 0.1  # retractation legere (matrice source deja bien conditionnee)
+    S_shrunk = (1 - alpha) * S + alpha * target
+    return S_shrunk.tolist()
 
 
-MACRO_COVARIANCE: list[list[float]] = _compute_macro_covariance()
+MACRO_COVARIANCE: list[list[float]] = _build_macro_covariance()
 MACRO_VARIABLES_ORDER: Tuple[str, ...] = (
     "unemployment_rate", "gdp_growth", "interest_rate", "hpi_growth", "inflation_rate",
 )
@@ -421,31 +575,66 @@ MACRO_VARIABLES_ORDER: Tuple[str, ...] = (
 class PDModelConfig:
     """Configuration des modeles de Probabilite de Defaut.
 
+    3 familles genuinement differentes :
+        - LR_WoE : lineaire (frontiere convexe, interpretable)
+        - TabNet : deep learning tabulaire (attention sequentielle, Sparsemax)
+        - XGBoost : ensemble d'arbres (frontiere en escalier)
+
     Attributes:
         n_woe_bins: Nombre de bins pour le WoE binning.
         lr_C: Regularisation Logistic Regression.
         lr_max_iter: Iterations max LR.
-        rf_n_estimators: Nombre d'arbres Random Forest.
-        rf_max_depth: Profondeur max RF.
-        rf_min_samples_leaf: Nombre min d'echantillons par feuille RF.
+        tabnet_n_d: Largeur couche decision TabNet (64 = ~120k params).
+        tabnet_n_a: Largeur couche attention TabNet (64 = Gold Standard).
+        tabnet_n_steps: Etapes d'attention sequentielle.
+        tabnet_gamma: Coefficient relaxation reutilisation features.
+        tabnet_lambda_sparse: Penalite sparsite.
+        tabnet_lr: Learning rate Adam.
+        tabnet_batch_size: Taille batch (8192 pour 1M lignes).
+        tabnet_virtual_batch_size: Ghost BN virtual batch.
+        tabnet_max_epochs: Epoques max (200 avec patience 20).
+        tabnet_patience: Early stopping patience.
         xgb_n_estimators: Nombre d'arbres XGBoost.
         xgb_max_depth: Profondeur max XGB.
         xgb_learning_rate: Learning rate XGB.
         xgb_subsample: Sous-echantillonnage XGB.
         calibration_method: Methode de calibration ('isotonic' ou 'sigmoid').
+        iv_min_threshold: Seuil IV minimum pour selection des features (0.02 = non predictif).
+        vif_max_threshold: Seuil VIF maximum pour filtrage multicolinearite (5.0 = standard).
+            VIF > 5 indique une multicolinearite forte. Applique avant la contrainte beta < 0.
+        woe_epsilon: Lissage Laplace pour WoE (evite ln(0) si bin vide).
+        min_events_per_bin: Nombre minimum de defauts par bin WoE (robustesse statistique).
+        pdo: Points to Double the Odds pour le scaling scorecard.
+        target_score: Score cible au point d'ancrage (odds = target_odds).
+        target_odds: Ratio de cotes au target_score.
     """
 
     n_woe_bins: int = 10
     lr_C: float = 1.0
     lr_max_iter: int = 1000
-    rf_n_estimators: int = 200
-    rf_max_depth: int = 6
-    rf_min_samples_leaf: int = 50
+    # --- TabNet Gold Standard (1M lignes / ~120k params) ---
+    tabnet_n_d: int = 64
+    tabnet_n_a: int = 64
+    tabnet_n_steps: int = 5
+    tabnet_gamma: float = 1.3
+    tabnet_lambda_sparse: float = 1e-3
+    tabnet_lr: float = 0.02
+    tabnet_batch_size: int = 8192
+    tabnet_virtual_batch_size: int = 512
+    tabnet_max_epochs: int = 200
+    tabnet_patience: int = 20
     xgb_n_estimators: int = 200
     xgb_max_depth: int = 4
     xgb_learning_rate: float = 0.05
     xgb_subsample: float = 0.8
     calibration_method: str = "isotonic"
+    iv_min_threshold: float = 0.02
+    vif_max_threshold: float = 5.0
+    woe_epsilon: float = 0.5
+    min_events_per_bin: int = 20
+    pdo: int = 20
+    target_score: int = 600
+    target_odds: float = 50.0
 
 
 PD_CONFIG = PDModelConfig()
@@ -541,11 +730,11 @@ class SICRConfig:
         threshold: Seuil de declenchement SICR (calibre pour ~10% Stage 2).
     """
 
-    w_pd_ratio: float = 0.40
-    w_pd_delta: float = 0.20
+    w_pd_ratio: float = 0.30
+    w_pd_delta: float = 0.30
     w_dpd: float = 0.25
     w_macro: float = 0.15
-    threshold: float = 0.50
+    threshold: float = 0.70
 
 
 SICR_CONFIG = SICRConfig()
@@ -561,16 +750,49 @@ SICR_CONFIG = SICRConfig()
 # Pour la correlation d'actif corporate rho ≈ 0.20 (Bale II mid-point),
 # un stress 2-sigma donne un shift logit ≈ 0.89.
 #
-# Calibration empirique : avec un composite shock adverse moyen ≈ 0.25,
-# LOGIT_AMPLITUDE = 6.0 produit un shift de 1.5 logit units, soit :
-#   PD 0.06 → 0.18 (×3), PD 0.03 → 0.08 (×2.7), PD 0.20 → 0.45.
-# Coherent avec les stress tests EBA (PD corporate ×2-4 en adverse).
-LOGIT_AMPLITUDE: float = 6.0
+# RJ audit MEDIUM : Λ=6.0 etait un nombre magique. Desormais calibre via
+# _calibrate_logit_amplitude() a partir de 2 points d'ancrage EBA :
+#   PD_base=0.06, PD_adverse=0.18 (×3), composite_shock=0.25.
+# Formule : Λ = (logit(PD_adv) - logit(PD_base)) / composite_shock.
+def _calibrate_logit_amplitude(
+    pd_base: float = 0.06,
+    pd_adverse: float = 0.18,
+    composite_shock: float = 0.25,
+) -> float:
+    """Calibre Λ depuis 2 points d'ancrage EBA (stress test adverse).
+
+    Args:
+        pd_base: PD corporate baseline (defaut EBA mid-point).
+        pd_adverse: PD corporate sous scenario adverse (×3 EBA).
+        composite_shock: Choc macro composite moyen en scenario adverse.
+
+    Returns:
+        Λ tel que logit(PD_base) + Λ × composite_shock ≈ logit(PD_adverse).
+    """
+    import math
+    logit_base = math.log(pd_base / (1 - pd_base))
+    logit_adv = math.log(pd_adverse / (1 - pd_adverse))
+    return (logit_adv - logit_base) / composite_shock
+
+
+LOGIT_AMPLITUDE: float = _calibrate_logit_amplitude()  # ≈ 4.94, calibre sur PD 6%→18% (×3 EBA)
 
 # Echelle logit pour P(distress) PE.
 # Plus faible que credit car les PE sont en equity (junior tranche)
 # et les sensibilites PE sont deja plus elevees dans SectorConfig.
 PE_DISTRESS_LOGIT_SCALE: float = 3.0
+
+# Ratio charges d'exploitation pour convertir EBITDA en NOI (Net Operating Income)
+# pour la methode Cap_rate/NOI en immobilier.
+# L'EBITDA surestime le NOI car il inclut frais de gestion et charges non-operationnelles.
+# Source : benchmarks CBRE/JLL (2023), OPEX commercial RE = 12-18% du revenu brut.
+NOI_OPEX_RATIO: float = 0.15
+
+# Correlation intra-sectorielle pour le bruit de dispersion NAV.
+# Modele a facteur : ε_i = 1 + sqrt(ρ)·σ·Z_secteur + sqrt(1-ρ)·σ·Z_idio
+# Positions du meme secteur partagent un facteur commun (meme vintage, meme GP).
+# Source : Preqin (2023), correlation intra-fonds vintage estimee 0.3-0.5.
+PE_NOISE_INTRA_SECTOR_CORR: float = 0.40
 
 # ──────────────────────────────────────────────
 # CONTRAINTES BALE III / CRR3
@@ -599,6 +821,9 @@ class BaselConfig:
         cir: Cost/Income Ratio pour le calcul RAROC complet.
         tax_rate: Taux d'imposition effectif pour le profit net RAROC.
         liquidity_premium_bps: Prime de liquidite en bps ajoutee au spread Merton.
+        commercial_margin_bps: Marge commerciale bancaire en bps ajoutee au NII.
+            En pratique, les banques facturent 1.5-2.5x le spread risk-neutral.
+            150 bps est un proxy mid-market corporate (EBA 2023 benchmarks).
     """
 
     cet1_target: float = 0.13
@@ -618,6 +843,12 @@ class BaselConfig:
     tax_rate: float = 0.25
     # Spread Merton (H4) : prime de liquidite
     liquidity_premium_bps: int = 50
+    # Marge commerciale bancaire (NII = spread Merton + liquidite + marge)
+    commercial_margin_bps: int = 150
+    # Penalite de correlation pour l'optimiseur Softmax (RJ audit v3).
+    # Score_i = RAROC_i - lambda * sum(w_j * rho_ij).
+    # lambda > 0 penalise les secteurs correles aux autres.
+    lambda_correlation: float = 0.5
 
 
 BASEL_CONFIG = BaselConfig()
@@ -644,14 +875,18 @@ class RiskAppetiteConfig:
         nav_drawdown_amber: Seuil NAV drawdown PE ambre.
     """
 
-    ecl_ead_green: float = 0.005
-    ecl_ead_amber: float = 0.015
-    raroc_green: float = 0.12
-    raroc_amber: float = 0.08
+    ecl_ead_green: float = 0.020
+    ecl_ead_amber: float = 0.040
+    raroc_green: float = 0.04
+    raroc_amber: float = 0.02
     hhi_green: int = 1500
     hhi_amber: int = 2500
     nav_drawdown_green: float = 0.10
     nav_drawdown_amber: float = 0.25
+    # HHI Name Level (concentration par contrepartie, ICAAP Pilier 2)
+    # Echelle 10 000. Seuil 50 = alerte concentration idiosyncratique.
+    hhi_name_green: int = 30
+    hhi_name_amber: int = 50
 
 
 RISK_APPETITE_CONFIG = RiskAppetiteConfig()
@@ -664,17 +899,35 @@ RISK_APPETITE_CONFIG = RiskAppetiteConfig()
 class PEClassificationConfig:
     """Seuils de classification des participations PE.
 
+    Calibration sources :
+        - distress thresholds : quartiles historiques de defaut PE.
+          Preqin (2022) : ~8% des fonds en distress (Q3), ~25% en watchlist.
+          Seuils 10%/30% sont conservateurs vs. benchmarks industriels.
+        - lgd_equity : Moody's Recovery & LGD study (2023), equity tranche
+          recovery rate ~40% en moyenne -> LGD = 60%.
+        - secondary_discount : decote marche secondaire PE, Jefferies/Lazard
+          (2023) : median 8-12% pour buyouts mid-market.
+        - dlom_vintage_factor : DLOM (Discount for Lack of Marketability)
+          ajuste par la maturite. Fonds jeunes = moins liquides.
+          Lit. AICPA (2013), Pratt & Grabowski (2014) : DLOM 15-30% PE.
+          Le facteur 0.50 donne une fourchette 10-15% (conservateur).
+
     Attributes:
         distress_threshold_performing: P(distress) max pour rester Performing.
         distress_threshold_watchlist: P(distress) max pour Watchlist (au-dela = Distressed).
-        secondary_discount: Decote de marche secondaire pour rebalancement (~10% buyout).
+        secondary_discount: Decote de marche secondaire de base (~10% buyout).
         lgd_equity: LGD sur les investissements en equity (perte en cas de distress).
+        dlom_vintage_factor: Facteur multiplicatif pour l'ajustement DLOM vintage.
+            DLOM_effectif = secondary_discount × (1 + factor × max(0, threshold - holding) / threshold)
+        dlom_vintage_threshold: Seuil de maturite (annees) au-dela duquel pas de surcharge DLOM.
     """
 
     distress_threshold_performing: float = 0.10
     distress_threshold_watchlist: float = 0.30
     secondary_discount: float = 0.10
     lgd_equity: float = 0.60
+    dlom_vintage_factor: float = 0.50
+    dlom_vintage_threshold: float = 5.0
 
 
 PE_CLASSIFICATION_CONFIG = PEClassificationConfig()
@@ -736,23 +989,24 @@ class DashboardConfig:
     page_title: str = "IFRS 9 Risk Cockpit"
     page_icon: str = "$"
     layout: str = "wide"
-    # Palette Steel Blue (#3B82F6) sur fond sombre (#0C1222)
+    # Palette Steel Blue sur fond sombre — WCAG AAA (7:1+ sur #0C1222)
     theme_primary: str = "#3B82F6"
+    theme_primary_text: str = "#60A5FA"  # Blue 400 pour texte (8.2:1)
     theme_secondary: str = "#1E40AF"
-    theme_accent: str = "#10B981"
+    theme_accent: str = "#34D399"  # Emerald 400 (9.6:1)
     theme_bg_dark: str = "#0C1222"
     theme_bg_card: str = "#1E293B"
     theme_text: str = "#F8FAFC"
-    theme_text_muted: str = "#94A3B8"
-    # Couleurs semantiques
-    color_success: str = "#10B981"
-    color_warning: str = "#F59E0B"
-    color_danger: str = "#EF4444"
-    color_info: str = "#06B6D4"
+    theme_text_muted: str = "#A1B2C8"  # Slate clair (7.2:1)
+    # Couleurs semantiques — WCAG AAA
+    color_success: str = "#34D399"  # Emerald 400 (9.6:1)
+    color_warning: str = "#FBBF24"  # Amber 400 (11.2:1)
+    color_danger: str = "#F87171"  # Red 400 (7.5:1)
+    color_info: str = "#22D3EE"  # Cyan 400 (10.1:1)
     # Slider ranges (FR33) — taux en bp, chomage bipolaire, reste en pct
-    stress_interest_rate_range: Tuple[float, float, float] = (-200.0, 400.0, 25.0)
+    stress_interest_rate_range: Tuple[float, float, float] = (-400.0, 650.0, 25.0)
     stress_unemployment_range: Tuple[float, float, float] = (-7.0, 7.0, 1.0)
-    stress_gdp_range: Tuple[float, float, float] = (-5.0, 5.0, 0.5)
+    stress_gdp_range: Tuple[float, float, float] = (-8.0, 8.0, 0.5)
     stress_hpi_range: Tuple[float, float, float] = (-30.0, 20.0, 1.0)
     stress_inflation_range: Tuple[float, float, float] = (-2.0, 8.0, 0.5)
 
@@ -762,23 +1016,32 @@ DASHBOARD_CONFIG = DashboardConfig()
 # Palette de donnees pour les graphiques Plotly (6 couleurs, dans cet ordre)
 CHART_COLORS: Tuple[str, ...] = (
     "#3B82F6",  # Steel Blue (primary)
-    "#10B981",  # Emerald (success)
-    "#F59E0B",  # Amber (warning)
-    "#EF4444",  # Red (danger)
-    "#06B6D4",  # Cyan (info)
+    "#34D399",  # Emerald 400 (success) — WCAG AAA
+    "#FBBF24",  # Amber 400 (warning) — WCAG AAA
+    "#F87171",  # Red 400 (danger) — WCAG AAA
+    "#22D3EE",  # Cyan 400 (info) — WCAG AAA
     "#8B5CF6",  # Purple (accent)
 )
 
+# Palette CVD-safe IBM (daltoniens) — pour séries de données multi-catégories
+CVD_SAFE_COLORS: Tuple[str, ...] = (
+    "#648FFF",  # Blue
+    "#785EF0",  # Purple
+    "#DC267F",  # Magenta
+    "#FE6100",  # Orange
+    "#FFB000",  # Gold
+)
+
 STAGE_COLORS: Dict[int, str] = {
-    1: "#10B981",  # Emerald
-    2: "#F59E0B",  # Amber
-    3: "#EF4444",  # Red
+    1: "#34D399",  # Emerald 400 — WCAG AAA
+    2: "#FBBF24",  # Amber 400 — WCAG AAA
+    3: "#F87171",  # Red 400 — WCAG AAA
 }
 
 PE_CATEGORY_COLORS: Dict[str, str] = {
-    "Performing": "#10B981",
-    "Watchlist": "#F59E0B",
-    "Distressed": "#EF4444",
+    "Performing": "#34D399",
+    "Watchlist": "#FBBF24",
+    "Distressed": "#F87171",
 }
 
 # ──────────────────────────────────────────────
@@ -795,6 +1058,8 @@ CREDIT_NUMERICAL_FEATURES: List[str] = [
     "collateral",
     "loan_amount",
     "utilization_rate",
+    "loan_to_revenue",        # engineered
+    "collateral_coverage",    # engineered
 ]
 
 CREDIT_CATEGORICAL_FEATURES: List[str] = [
@@ -832,6 +1097,24 @@ REQUIRED_CREDIT_COLS: frozenset[str] = frozenset({
     "credit_score", "dpd", "collateral", "loan_amount", "utilization_rate",
     "default_flag", "pd_origination",
 })
+
+# ──────────────────────────────────────────────
+# CONTRAT DE DONNEES (Enums, Clipping, Features Engineered)
+# ──────────────────────────────────────────────
+
+# Domaines de valeurs categorielles (Enums strictes)
+ALLOWED_SECTORS: frozenset[str] = frozenset(s.name for s in SECTORS)
+ALLOWED_LOAN_TYPES: frozenset[str] = frozenset({"Revolving", "Term"})
+
+# Bornes de clipping outliers (appliquees avant entrainement)
+CLIPPING_BOUNDS: Dict[str, Tuple[Optional[float], Optional[float]]] = {
+    "debt_ratio": (0.0, 1.5),
+    "credit_score": (300.0, 850.0),
+    "utilization_rate": (0.0, 1.2),
+}
+
+# Features engineered calculees a la volee
+ENGINEERED_FEATURES: List[str] = ["loan_to_revenue", "collateral_coverage"]
 
 REQUIRED_PE_COLS: frozenset[str] = frozenset({
     "enterprise_id", "sector", "revenue", "ebitda",
@@ -876,11 +1159,19 @@ class MacroIncoherenceRule:
 
 MACRO_INCOHERENCE_RULES: Tuple[MacroIncoherenceRule, ...] = (
     MacroIncoherenceRule(
-        name="gdp_unemployment",
-        description="PIB > +3% et chomage > +3pp simultanement",
+        name="gdp_unemployment_crisis",
+        description="PIB > +3% et chomage crise > +3pp simultanement",
         conditions=(
             ("gdp_pct", "gt", 3.0),
             ("unemployment_bipolar", "lt", -3.0),
+        ),
+    ),
+    MacroIncoherenceRule(
+        name="gdp_unemployment_tech",
+        description="PIB > +3% et chomage techno > +3pp simultanement",
+        conditions=(
+            ("gdp_pct", "gt", 3.0),
+            ("unemployment_bipolar", "gt", 3.0),
         ),
     ),
     MacroIncoherenceRule(
@@ -984,14 +1275,14 @@ def validate_config() -> None:
             f"Secteurs attendus {expected_names}, trouves {actual_names}"
         )
 
-    # 5 scenarios predefinis attendus
+    # Scenarios predefinis minimum attendus
     expected_scenarios = {
-        "Central", "Crise financiere", "Stagflation", "Rupture techno", "Reprise"
+        "Central", "Stagflation", "Rupture techno", "Reprise"
     }
     actual_scenarios = set(PREDEFINED_SCENARIOS.keys())
-    if actual_scenarios != expected_scenarios:
+    if not expected_scenarios.issubset(actual_scenarios):
         raise ValueError(
-            f"Scenarios predefinis attendus {expected_scenarios}, "
+            f"Scenarios predefinis manquants {expected_scenarios - actual_scenarios}, "
             f"trouves {actual_scenarios}"
         )
 
@@ -1041,8 +1332,8 @@ if __name__ == "__main__":
     print(f"\n--- Risk Appetite ---")
     print(f"  ECL/EAD : vert < {RISK_APPETITE_CONFIG.ecl_ead_green:.1%} "
           f"| ambre < {RISK_APPETITE_CONFIG.ecl_ead_amber:.1%} | rouge")
-    print(f"  RAROC   : vert > {RISK_APPETITE_CONFIG.raroc_green:.0%} "
-          f"| ambre > {RISK_APPETITE_CONFIG.raroc_amber:.0%} | rouge")
+    print(f"  RAROC   : vert > {RISK_APPETITE_CONFIG.raroc_green:.1%} "
+          f"| ambre > {RISK_APPETITE_CONFIG.raroc_amber:.1%} | rouge")
     print(f"  HHI     : vert < {RISK_APPETITE_CONFIG.hhi_green} "
           f"| ambre < {RISK_APPETITE_CONFIG.hhi_amber} | rouge")
 

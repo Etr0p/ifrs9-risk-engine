@@ -289,12 +289,18 @@ class LGDModel:
     def _apply_beta_dispersion(self, mu: np.ndarray) -> np.ndarray:
         """Applique une dispersion Beta autour des moyennes.
 
+        Le RNG est reinitialise avant chaque appel pour garantir que
+        le meme portefeuille recoit les memes LGD de base, independamment
+        du nombre d'appels precedents (determinisme cross-scenario).
+
         Args:
             mu: Moyennes de LGD.
 
         Returns:
-            LGD avec dispersion aleatoire.
+            LGD avec dispersion aleatoire (deterministe pour un meme portefeuille).
         """
+        # Reinitialiser le RNG pour determinisme cross-scenario
+        self.rng = np.random.default_rng(self.seed + 1)
         sigma = LGD_CONFIG.lgd_ttc_std * 0.5
         return self._sample_beta(mu, sigma)
 

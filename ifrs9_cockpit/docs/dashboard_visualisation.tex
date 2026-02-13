@@ -1,0 +1,1182 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc, fit, backgrounds}
+\usepackage{listings}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- Dashboard}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── LISTINGS ────────────────────────────────────────────
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{steelblue}\bfseries,
+    stringstyle=\color{accentgreen!80!black},
+    commentstyle=\color{gray}\itshape,
+    backgroundcolor=\color{lightgray},
+    frame=single,
+    framerule=0.4pt,
+    rulecolor=\color{steelblue!30},
+    breaklines=true,
+    showstringspaces=false,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    tabsize=4,
+}
+\lstset{style=pythonstyle}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries\color{darkblue} IFRS 9 Risk Cockpit\par}
+\vspace{0.5cm}
+{\LARGE\color{steelblue} Dashboard Streamlit \& Couche de Visualisation\par}
+\vspace{1.5cm}
+{\large Documentation technique compl\`ete\par}
+\vspace{0.5cm}
+{\large Architecture, 7 onglets (CRO-first), sc\'enarios macro,\\ visualisations Plotly, accessibilit\'e WCAG~AAA et pipeline de recalcul\par}
+\vspace{2cm}
+{\large\color{gray} M1 Finance --- Paris-Saclay\par}
+\vspace{0.5cm}
+{\large\color{gray} Version 4.0\par}
+\vfill
+{\small\color{gray} \today}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════
+\section{Architecture Streamlit}
+\label{sec:architecture}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Application mono-page}
+
+Le cockpit IFRS~9 est con\c{c}u comme une \emph{single-page application} Streamlit. Le point d'entr\'ee est le fichier \texttt{app.py}, qui orchestre l'int\'egralit\'e du pipeline :
+
+\begin{enumerate}[leftmargin=2em]
+    \item G\'en\'eration ou chargement des donn\'ees synth\'etiques (cach\'e).
+    \item Entra\^{i}nement ou chargement des mod\`eles PD (cach\'e).
+    \item Calibration LGD et EAD (cach\'ee).
+    \item Calcul ECL avec stress test en temps r\'eel (5 variables macro).
+    \item Valorisation PE IFRS~13 (juste valeur).
+    \item Comparaison portefeuille, m\'etriques avanc\'ees, optimisation CRR3.
+    \item AI Analyst (2 passes it\'eratives).
+    \item Affichage des KPI, graphiques et exports.
+\end{enumerate}
+
+La configuration de page est pilot\'ee par \texttt{DASHBOARD\_CONFIG} :
+
+\begin{lstlisting}
+st.set_page_config(
+    page_title=DASHBOARD_CONFIG.page_title,   # "IFRS 9 Risk Cockpit"
+    page_icon=DASHBOARD_CONFIG.page_icon,      # "$"
+    layout=DASHBOARD_CONFIG.layout,            # "wide"
+)
+\end{lstlisting}
+
+\subsection{Strat\'egie de caching}
+
+Streamlit re-ex\'ecute l'int\'egralit\'e du script \`a chaque interaction utilisateur. Pour garantir un temps de r\'eponse de l'ordre de \textbf{1,1 seconde} (hors entra\^{i}nement initial), le cockpit exploite trois d\'ecorateurs de cache :
+
+\begin{definitionbox}[Strat\'egie de cache --- 3 niveaux]
+\begin{description}[leftmargin=1em]
+    \item[\texttt{@st.cache\_data}] Cache les donn\'ees s\'erialisables (DataFrames, arrays). Utilis\'e pour~:
+    \begin{itemize}
+        \item \texttt{load\_data()} --- g\'en\'eration du dataset (cr\'edit + PE + historique).
+        \item \texttt{compute\_shap\_values()} --- valeurs SHAP (calcul co\^uteux).
+    \end{itemize}
+    \item[\texttt{@st.cache\_resource}] Cache les objets non s\'erialisables (mod\`eles, pipelines). Utilis\'e pour~:
+    \begin{itemize}
+        \item \texttt{train\_pd\_models()} --- chargement des mod\`eles PD pr\'e-entra\^{i}n\'es ou entra\^{i}nement sur 30K lignes.
+        \item \texttt{train\_lgd\_ead()} --- calibration des mod\`eles LGD et EAD.
+    \end{itemize}
+    \item[\texttt{@st.fragment}] Isole un fragment de l'interface pour \'eviter le re-calcul du pipeline complet. Utilis\'e pour le s\'electeur SHAP individuel (onglet 6, FR49).
+\end{description}
+\end{definitionbox}
+
+Le param\`etre \texttt{df\_hash = str(len(df\_credit))} sert de cl\'e d'invalidation~: si la taille du dataset change, les mod\`eles sont r\'e-entra\^{i}n\'es.
+
+\subsection{Patron \texttt{@st.fragment} pour recomputation isol\'ee}
+
+Le d\'ecorateur \texttt{@st.fragment} est utilis\'e dans l'onglet \og Explainabilit\'e \fg{} pour isoler le s\'electeur d'entreprise individuelle. Sans ce patron, chaque changement d'indice client d\'eclencherait le pipeline complet ($\sim$1,1s). Avec \texttt{@st.fragment}, seul le force plot SHAP est recalcul\'e~:
+
+\begin{lstlisting}
+@st.fragment
+def _shap_individual_fragment(
+    _shap_vals, _X_sample, _feature_names, _n_sample
+):
+    client_idx = st.number_input(
+        "Indice de l'entreprise", min_value=0,
+        max_value=_n_sample - 1, value=0, step=1,
+    )
+    client_shap = _shap_vals[client_idx]
+    # ... affichage force plot et tableau
+\end{lstlisting}
+
+\subsection{Barre de progression}
+
+Le pipeline utilise une barre de progression \`a 5 \'etapes (FR52), affich\'ee puis effac\'ee~:
+
+\begin{lstlisting}
+_progress = st.progress(0, text="Initialisation pipeline...")
+_progress.progress(0.05, text="[1/5] Calcul ECL Credit...")
+# ... stages 2-5 ...
+_progress.progress(1.0, text="Pipeline complet.")
+_progress.empty()  # Efface la barre apres completion
+\end{lstlisting}
+
+Les 5 \'etapes sont~: (1) ECL Cr\'edit, (2) Valorisation PE IFRS~13, (3) Comparaison portefeuille, (4) Optimisation CRR3, (5) AI Analyst (2 passes).
+
+
+% ══════════════════════════════════════════════════════════
+\section{Flux de donn\'ees global}
+\label{sec:dataflow}
+% ══════════════════════════════════════════════════════════
+
+Le diagramme ci-dessous illustre le flux de donn\'ees depuis la sidebar (contr\^oles utilisateur) jusqu'aux 7 onglets de visualisation, en passant par le pipeline de calcul.
+
+\begin{center}
+\begin{tikzpicture}[
+    node distance=0.8cm and 1.2cm,
+    box/.style={draw, rounded corners=4pt, fill=steelblue!10, minimum width=3cm, minimum height=0.8cm, font=\small, align=center, text=darkblue},
+    sbox/.style={draw, rounded corners=4pt, fill=accentorange!10, minimum width=2.8cm, minimum height=0.7cm, font=\small\itshape, align=center},
+    tbox/.style={draw, rounded corners=4pt, fill=accentgreen!8, minimum width=2.6cm, minimum height=0.6cm, font=\scriptsize, align=center},
+    arrow/.style={-{Stealth[length=3mm]}, thick, steelblue!70},
+    darrow/.style={-{Stealth[length=2.5mm]}, steelblue!50},
+]
+
+% Sidebar
+\node[sbox, fill=accentorange!15, minimum width=3.5cm] (sidebar) {Sidebar\\5 sliders macro\\+ sc\'enarios};
+
+% Cache layer
+\node[box, right=1.5cm of sidebar, fill=steelblue!15] (cache) {Cache Streamlit\\{\scriptsize \texttt{@cache\_data}}\\{\scriptsize \texttt{@cache\_resource}}};
+
+% Pipeline
+\node[box, right=1.5cm of cache, fill=darkblue!10, minimum width=3.5cm] (pipeline) {Pipeline 5 \'etapes\\$\sim$1,1s recalcul};
+
+% Data sources below cache
+\node[box, below=0.6cm of cache, minimum width=2.5cm] (data) {Donn\'ees\\{\scriptsize 30K cr\'edit + PE}};
+\node[box, below=0.6cm of data, minimum width=2.5cm] (models) {Mod\`eles PD\\{\scriptsize LR / TabNet / XGB}};
+
+% Pipeline stages below pipeline
+\node[box, below=0.6cm of pipeline, minimum width=3cm, fill=steelblue!8] (ecl) {ECL Calculator\\{\scriptsize + Staging}};
+\node[box, below=0.5cm of ecl, minimum width=3cm, fill=steelblue!8] (pe) {PE Calculator\\{\scriptsize IFRS 13}};
+\node[box, below=0.5cm of pe, minimum width=3cm, fill=steelblue!8] (comp) {Comparator\\{\scriptsize + Optimisation}};
+\node[box, below=0.5cm of comp, minimum width=3cm, fill=steelblue!8] (ai) {AI Analyst\\{\scriptsize 5 couches, 2 passes}};
+
+% Tabs on the right (7 tabs, CRO-first)
+\node[tbox, right=1.8cm of pipeline, yshift=1.0cm] (t1) {Tab 1: Synth\`ese CRO};
+\node[tbox, below=0.2cm of t1] (t2) {Tab 2: Risque Cr\'edit};
+\node[tbox, below=0.2cm of t2] (t3) {Tab 3: Private Equity};
+\node[tbox, below=0.2cm of t3] (t4) {Tab 4: Optimisation};
+\node[tbox, below=0.2cm of t4] (t5) {Tab 5: Performance};
+\node[tbox, below=0.2cm of t5] (t6) {Tab 6: Explainabilit\'e};
+\node[tbox, below=0.2cm of t6] (t7) {Tab 7: Export};
+
+% Arrows
+\draw[arrow] (sidebar) -- (cache);
+\draw[arrow] (cache) -- (pipeline);
+\draw[arrow] (data) -- (cache);
+\draw[arrow] (models) -- (cache);
+\draw[darrow] (pipeline) -- (ecl);
+\draw[darrow] (ecl) -- (pe);
+\draw[darrow] (pe) -- (comp);
+\draw[darrow] (comp) -- (ai);
+
+% Pipeline to tabs
+\draw[arrow] (pipeline.east) -- ++(0.5,0) |- (t1.west);
+\draw[darrow] (pipeline.east) -- ++(0.5,0) |- (t2.west);
+\draw[darrow] (pipeline.east) -- ++(0.5,0) |- (t3.west);
+\draw[darrow] (pipeline.east) -- ++(0.5,0) |- (t4.west);
+\draw[darrow] (pipeline.east) -- ++(0.5,0) |- (t5.west);
+\draw[darrow] (pipeline.east) -- ++(0.5,0) |- (t6.west);
+\draw[darrow] (pipeline.east) -- ++(0.5,0) |- (t7.west);
+
+% Background for tabs
+\begin{scope}[on background layer]
+    \node[fit=(t1)(t7), draw=accentgreen!40, rounded corners=6pt, fill=accentgreen!3, inner sep=4pt] {};
+\end{scope}
+
+\end{tikzpicture}
+\end{center}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Les 7 onglets du dashboard}
+\label{sec:tabs}
+% ══════════════════════════════════════════════════════════
+
+Le dashboard pr\'esente 7 onglets cr\'e\'es via \texttt{st.tabs()}, r\'eorganis\'es selon le principe \emph{CRO-first} (synth\`ese ex\'ecutive en premier). L'ancien onglet \og Staging \& Transitions \fg{} a \'et\'e fusionn\'e dans \og Risque Cr\'edit \fg{} via un \texttt{st.expander}. Le tableau~\ref{tab:onglets} en donne une vue synth\'etique.
+
+\begin{table}[ht]
+\centering
+\caption{Vue synth\'etique des 7 onglets du dashboard (v4.0).}
+\label{tab:onglets}
+\small
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{N\textsuperscript{o}} & \textbf{Onglet} & \textbf{Contenu principal} & \textbf{Graphiques cl\'es} \\
+\midrule
+1 & Synth\`ese CRO & AI Analyst, risk appetite & Feux tricolores, r\'egime, RST, trajectoires \\
+2 & Risque Cr\'edit & ECL + staging fusionn\'es & Barres ECL, HHI, waterfall, Sankey \\
+3 & Private Equity & Portefeuille IFRS~13 & NAV, MOIC/drawdown, barres CVD \\
+4 & Optimisation \& Bilan & Cr\'edit vs PE, CRR3 & Heatmap, RAROC, sensibilit\'e CRR3 \\
+5 & Performance Mod\`eles & Benchmark PD (3 familles) & ROC, radar, calibration, scores \\
+6 & Explainabilit\'e & SHAP global + individuel & Bar SHAP, beeswarm, force plot \\
+7 & Donn\'ees \& Export & Aper\c{c}u + Excel 8 feuilles & Tableau interactif, 4 exports \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{interpretbox}[Principe de conception CRO-first]
+L'ordre des onglets suit le patron \emph{progressive disclosure}~: \og synth\`ese d'abord, d\'etail \`a la demande, donn\'ees \`a l'export \fg. Un d\'ecideur CRO commence par l'onglet~1 (vue synth\'etique, alertes, risk appetite) avant de plonger dans les d\'etails par classe d'actifs (onglets~2--3) puis dans l'optimisation (onglet~4). Les onglets techniques (mod\`eles, SHAP) sont positionn\'es en fin de parcours.
+\end{interpretbox}
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 1~: Synth\`ese CRO}
+\label{sec:tab1}
+
+Cet onglet (ex-onglet~8) est d\'esormais en premi\`ere position pour offrir une vue ex\'ecutive imm\'ediate au CRO. Il pr\'esente le moteur d'intelligence embarqu\'e \`a 5 couches, ex\'ecut\'e en 2 passes it\'eratives.
+
+\subsubsection{Matrice Risk Appetite (feux tricolores)}
+
+Le graphique \texttt{plot\_risk\_appetite\_matrix()} affiche une heatmap pivot\'ee (secteurs en lignes, canaux en colonnes) avec un code tricolore et des symboles CVD (daltonisme)~:
+\begin{itemize}[leftmargin=2em]
+    \item \textcolor{accentgreen}{\textbf{$\checkmark$ Vert}} (0) --- acceptable.
+    \item \textcolor{accentorange}{\textbf{$\triangle$ Ambre}} (1) --- vigilance.
+    \item \textcolor{accentred}{\textbf{$\times$ Rouge}} (2) --- breach.
+\end{itemize}
+
+\subsubsection{R\'egime macro d\'etect\'e}
+
+Affichage du r\'egime macro d\'etect\'e avec probabilit\'es (ex. \og Adverse: 65\% $|$ Normal: 30\% $|$ Favorable: 5\% \fg).
+
+\subsubsection{Tipping Points (seuils de basculement)}
+
+Tableau des seuils de basculement identifi\'es par la couche~3 (Layer~3 RST).
+
+\subsubsection{Distance au point de rupture (RST)}
+
+Affichage color\'e de la distance de Mahalanobis au sc\'enario de rupture~:
+\begin{itemize}[leftmargin=2em]
+    \item $< 1{,}0\,\sigma$ --- \textcolor{accentred}{rouge} (proximit\'e critique).
+    \item $1{,}0$--$2{,}0\,\sigma$ --- \textcolor{accentorange}{ambre} (vigilance).
+    \item $> 2{,}0\,\sigma$ --- \textcolor{accentgreen}{vert} (confortable).
+\end{itemize}
+
+Si un sc\'enario de rupture est trouv\'e (\texttt{breach=True}), un tableau d\'etaille les valeurs RST, les baselines et les deltas pour chaque variable macro.
+
+\subsubsection{Trajectoires prospectives}
+
+Le graphique \texttt{plot\_trajectories\_chart()} (nouveau v4.0) affiche les trajectoires T+3 \`a T+12 g\'en\'er\'ees par le processus d'Ornstein-Uhlenbeck. Chaque variable macro est trac\'ee en multi-lignes avec markers distincts. Les donn\'ees brutes restent accessibles via un \texttt{st.expander}.
+
+\subsubsection{Synth\`ese narrative}
+
+Le texte g\'en\'er\'e par l'AI Analyst (passe~1 ou 2) est affich\'e en Markdown, avec un rapport CRO d\'etaill\'e (moteur analytique local) accessible via un \texttt{st.expander} (r\'eduction du bruit visuel).
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 2~: Risque Cr\'edit}
+\label{sec:tab2}
+
+Cet onglet fusionne l'ancien \og Analyse ECL \fg{} et l'ancien \og Staging \& Transitions \fg{} en une seule vue coh\'erente du risque cr\'edit.
+
+\subsubsection{D\'ecomposition ECL par segment}
+
+Le graphique \texttt{plot\_ecl\_by\_segment()} affiche des barres group\'ees par segment, d\'ecompos\'ees selon les 3 sc\'enarios ECL~:
+
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Base} (50\%) --- couleur \texttt{\_PRIMARY} (\texttt{\#3B82F6}).
+    \item \textbf{Adverse} (25\%) --- couleur \texttt{\_DANGER} (\texttt{\#F87171}, rouge WCAG~AAA).
+    \item \textbf{Favorable} (25\%) --- couleur \texttt{\_SUCCESS} (\texttt{\#34D399}, \'emeraude WCAG~AAA).
+\end{itemize}
+
+\subsubsection{Scatter PD vs Coverage}
+
+Le scatter \texttt{plot\_ecl\_coverage\_scatter()} positionne chaque secteur dans l'espace (PD moyenne, ratio de couverture ECL/EAD). La taille des bulles est proportionnelle au nombre de clients.
+
+\subsubsection{Jauges HHI}
+
+Deux jauges \texttt{go.Indicator} affichent l'indice de concentration Herfindahl-Hirschman (HHI) pour les segments et les types de pr\^ets, avec trois zones color\'ees~:
+
+\begin{formulebox}[Seuils HHI]
+\begin{itemize}[leftmargin=1em]
+    \item HHI $< 0{,}15$ --- \textcolor{accentgreen}{Diversifi\'e} (vert).
+    \item $0{,}15 \leq$ HHI $< 0{,}25$ --- \textcolor{accentorange}{Mod\'er\'e} (orange).
+    \item HHI $\geq 0{,}25$ --- \textcolor{accentred}{Concentr\'e} (rouge).
+\end{itemize}
+\end{formulebox}
+
+\subsubsection{Waterfall ECL}
+
+Le waterfall \texttt{plot\_waterfall\_ecl()} d\'ecompose la variation ECL entre l'\'etat de base et l'\'etat stress\'e. Les composantes positives (augmentation de risque) sont en rouge (\texttt{\_DANGER}), les n\'egatives (am\'elioration) en vert (\texttt{\_SUCCESS}), et les totaux en bleu (\texttt{\_PRIMARY}).
+
+\subsubsection{Staging \& Transitions (expander)}
+
+Fusionn\'e dans cet onglet via \texttt{st.expander("Staging \& Transitions", expanded=True)}~:
+
+\begin{description}[leftmargin=1em]
+    \item[Distribution des stages] \texttt{plot\_stage\_distribution()} --- deux camemberts donut (clients / EAD). Palette~: Stage~1 = vert (\texttt{\_SUCCESS}), Stage~2 = ambre (\texttt{\_WARNING}), Stage~3 = rouge (\texttt{\_DANGER}).
+    \item[Diagramme Sankey] \texttt{plot\_stage\_sankey()} (nouveau v4.0) --- flux de migration entre stages (Base $\to$ Stress\'e). Les liens sont color\'es de mani\`ere semi-transparente selon le stage de destination, avec une palette WCAG~AAA.
+    \item[Matrice de transition] \texttt{plot\_transition\_matrix()} --- heatmap $3 \times 3$ de transition.
+\end{description}
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 3~: Private Equity}
+\label{sec:tab3}
+
+Cet onglet couvre le portefeuille Private Equity valoris\'e en juste valeur (IFRS~13).
+
+\begin{description}[leftmargin=1em]
+    \item[Barres empil\'ees CVD] \texttt{plot\_pe\_risk\_stacked\_bar()} (nouveau v4.0) --- Barres horizontales empil\'ees par secteur montrant la r\'epartition Performing / Watchlist / Distressed. Utilise la palette CVD-safe IBM avec \texttt{pattern\_shape} (vide, \texttt{/}, \texttt{x}) pour le double encodage (couleur + texture).
+    \item[NAV par secteur] \texttt{plot\_pe\_nav\_by\_sector()} --- Barres group\'ees montrant la NAV, le capital investi et l'Expected Loss PE par secteur.
+    \item[Classification IPEV] \texttt{plot\_pe\_risk\_categories()} --- Camembert donut (\texttt{hole=0.45}) des 3 cat\'egories.
+    \item[MOIC \& Drawdown] \texttt{plot\_pe\_moic\_drawdown()} --- Double axe (barres MOIC + scatter drawdown) par secteur.
+\end{description}
+
+Le tableau r\'ecapitulatif PE agr\`ege par secteur~: positions, NAV total, capital investi, MOIC moyen, IRR moyen, drawdown moyen, EL PE et RWA PE.
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 4~: Optimisation \& Bilan}
+\label{sec:tab4}
+
+Cet onglet (ex-onglet~5) analyse les divergences entre le canal cr\'edit et le canal PE.
+
+\subsubsection{Heatmap d'asym\'etrie}
+
+La heatmap \texttt{plot\_asymmetry\_heatmap()} pr\'esente 3 m\'etriques par secteur~:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Ratio Perte PE/Cr\'edit} (\texttt{loss\_ratio}).
+    \item \textbf{Ratio RWA PE/Cr\'edit} (\texttt{rwa\_ratio}).
+    \item \textbf{Delta RAROC PE--Cr\'edit} (\texttt{raroc\_delta}).
+\end{itemize}
+
+\subsubsection{RAROC Credit vs PE}
+
+Le graphique \texttt{plot\_raroc\_comparison()} affiche des barres group\'ees RAROC Cr\'edit (bleu) vs RAROC PE (vert) par secteur, avec une ligne de r\'ef\'erence horizontale \`a 4\% (cible RAROC, \texttt{\_SUCCESS} en pointill\'es).
+
+\subsubsection{Sensibilit\'e CRR3 (expander)}
+
+Encapsul\'e dans un \texttt{st.expander} pour r\'eduire la charge cognitive initiale. Le graphique \texttt{plot\_crr3\_sensitivity()} affiche le ratio CET1 r\'esultant pour chaque sc\'enario de Risk Weight PE (190\%, 250\%, 400\%).
+
+\subsubsection{Drill-down sectoriel (FR54)}
+
+Un s\'electeur \texttt{st.selectbox} permet de choisir un secteur pour afficher~:
+\begin{itemize}[leftmargin=2em]
+    \item L'allocation proportionnelle --- canal, montant de risque, part, RWA.
+    \item L'attribution factorielle macro --- variable, canal, delta par rapport \`a la base.
+    \item La matrice Risk Appetite du secteur.
+    \item Les trajectoires prospectives (si disponibles).
+\end{itemize}
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 5~: Performance Mod\`eles}
+\label{sec:tab5}
+
+Cet onglet (ex-onglet~1) pr\'esente le benchmark des trois familles de mod\`eles PD. Le contenu est organis\'e en 3 \texttt{st.expander} pour une lecture progressive~:
+
+\begin{description}[leftmargin=1em]
+    \item[Expander 1~: Calibration \& Backtesting] Courbes ROC (\texttt{plot\_roc\_curves}), radar benchmark (\texttt{plot\_model\_comparison}), courbe de calibration (\texttt{plot\_calibration\_curve}), \'evolution temporelle AUC/Gini/KS (\texttt{plot\_backtesting\_auc}).
+    \item[Expander 2~: Analyse des Features] Importance (\texttt{plot\_feature\_importance}), Information Value (\texttt{plot\_iv\_table}).
+    \item[Expander 3~: Scorecard Distribution] Histogramme superpos\'e des scores LR\_WoE (\texttt{plot\_score\_distribution}).
+\end{description}
+
+Trois familles de mod\`eles PD~:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{LR\_WoE}~: R\'egression logistique sur features encod\'ees en Weight of Evidence (lin\'eaire, interpr\'etable).
+    \item \textbf{TabNet}~: Deep learning tabulaire avec attention s\'equentielle Sparsemax ($\sim$120k param\`etres).
+    \item \textbf{XGBoost}~: Ensemble d'arbres avec hyperoptimisation RandomizedSearchCV.
+\end{itemize}
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 6~: Explainabilit\'e}
+\label{sec:tab6}
+
+\subsubsection{SHAP global}
+
+Deux graphiques c\^ote \`a c\^ote~:
+
+\begin{description}[leftmargin=1em]
+    \item[Bar chart importance] \texttt{plot\_shap\_summary()} --- Barres horizontales du \texttt{mean(|SHAP|)} par feature, tri\'ees par importance d\'ecroissante (top 12). Gradient de couleur \texttt{\_SECONDARY} $\to$ \texttt{\_PRIMARY}.
+    \item[Beeswarm] \texttt{plot\_shap\_beeswarm()} --- Nuage de points par feature (top 10), avec jitter vertical ($\sigma = 0{,}20$) et coloration RdBu (bleu $\to$ violet $\to$ rouge) selon la valeur normalis\'ee de la feature. 500 points sous-\'echantillonn\'es par feature pour la performance.
+\end{description}
+
+\subsubsection{SHAP individuel (\texttt{@st.fragment})}
+
+Le fragment isol\'e (FR49) permet de s\'electionner une entreprise par son indice dans le jeu de test. Le force plot \texttt{plot\_shap\_force\_individual()} affiche~:
+\begin{itemize}[leftmargin=2em]
+    \item Barres horizontales color\'ees (vert = diminue PD, rouge = augmente PD).
+    \item Valeur de la feature associ\'ee \`a chaque barre (\texttt{feature = valeur}).
+    \item Titre montrant la pr\'ediction et la valeur de base.
+    \item Un tableau d\'etaill\'e des 10 features les plus influentes (tri\'e par $|$SHAP$|$).
+\end{itemize}
+
+\begin{warningbox}[Choix de l'Explainer SHAP selon le mod\`ele]
+\begin{itemize}[leftmargin=1em]
+    \item \textbf{LR\_WoE} $\to$ \texttt{shap.LinearExplainer} --- exploite la lin\'earit\'e du mod\`ele.
+    \item \textbf{XGBoost} $\to$ \texttt{shap.TreeExplainer} --- algorithme exact pour arbres.
+    \item \textbf{TabNet} $\to$ \texttt{shap.KernelExplainer} --- model-agnostic via \'echantillonnage (\texttt{shap.sample(X, 100)} pour le background). Plus lent mais universel.
+\end{itemize}
+Les valeurs SHAP sont cach\'ees via \texttt{@st.cache\_data} pour \'eviter le recalcul.
+\end{warningbox}
+
+
+% ──────────────────────────────────────────────────────────
+\subsection{Onglet 7~: Donn\'ees \& Export}
+\label{sec:tab7}
+
+\subsubsection{Aper\c{c}u du portefeuille}
+
+Un \texttt{st.dataframe} affiche les 100 premi\`eres lignes du r\'esultat stress\'e avec les colonnes~: \texttt{client\_id}, \texttt{segment}, \texttt{age}, \texttt{credit\_score}, \texttt{income}, \texttt{debt\_ratio}, \texttt{loan\_type}, \texttt{loan\_amount}, \texttt{stage}, \texttt{pd\_12m}, \texttt{lgd}, \texttt{ead}, \texttt{ecl\_weighted}.
+
+Un encadr\'e affiche les statistiques cl\'es (nombre de clients, ECL total, EAD total, coverage, PD moyenne, segment le plus risqu\'e) et les param\`etres macro courants.
+
+\subsubsection{Export Excel 8 feuilles (FR50)}
+
+Quatre boutons d'export sont align\'es horizontalement~:
+
+\begin{table}[ht]
+\centering
+\caption{Structure de l'export Excel 8 feuilles.}
+\label{tab:excel}
+\small
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Feuille} & \textbf{Nom} & \textbf{Contenu} \\
+\midrule
+1 & \texttt{1\_Macro} & Param\`etres du sc\'enario macro (5 variables) \\
+2 & \texttt{2\_Transitions} & Matrice de transition des stages $3 \times 3$ \\
+3 & \texttt{3\_Alertes} & Alertes CRO (s\'ev\'erit\'e, titre, message, action) \\
+4 & \texttt{4\_SHAP\_Top10} & Top 10 features par \texttt{mean\_abs\_shap} \\
+5 & \texttt{5\_Credit} & M\'etriques portefeuille cr\'edit (PD, LGD, EAD, ECL, stage) \\
+6 & \texttt{6\_PE} & M\'etriques PE (NAV, MOIC, IRR, drawdown, distress) \\
+7 & \texttt{7\_Optimisation} & R\'esultat optimisation (allocations, RAROC, CET1) \\
+8 & \texttt{8\_Asymetrie} & Matrice d'asym\'etrie cr\'edit vs PE \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Les trois autres exports sont~:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Rapport CRO} (TXT) --- g\'en\'er\'e par \texttt{VirtualCRO.generate\_report()}.
+    \item \textbf{Synth\`ese AI Analyst} (TXT) --- narrative g\'en\'er\'ee par le \texttt{CROAnalyst}.
+    \item \textbf{Journal d'audit} (\LaTeX{}) --- g\'en\'er\'e par \texttt{generate\_audit\_latex()}.
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Sc\'enarios macroeconomiques}
+\label{sec:scenarios}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Contr\^oles sidebar --- 5 variables macro}
+
+La sidebar pr\'esente 5 sliders interactifs (FR33) dont les ranges sont d\'efinis dans \texttt{DASHBOARD\_CONFIG}~:
+
+\begin{table}[ht]
+\centering
+\caption{Param\'etrage des 5 sliders macro.}
+\label{tab:sliders}
+\small
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Variable} & \textbf{Unit\'e} & \textbf{Min} & \textbf{Max} & \textbf{Pas} \\
+\midrule
+Taux BCE & bp vs base & $-200$ & $+400$ & 25 \\
+Ch\^omage bipolaire & pp vs base & $-7{,}0$ & $+7{,}0$ & 1,0 \\
+Croissance PIB & \% & $-5{,}0$ & $+5{,}0$ & 0,5 \\
+Prix immobiliers (HPI) & \% & $-30$ & $+20$ & 1,0 \\
+Inflation IPC & \% & $-2{,}0$ & $+8{,}0$ & 0,5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{warningbox}[Convention bipolaire du ch\^omage]
+Le slider ch\^omage utilise une convention \emph{bipolaire}~: la valeur absolue $|s|$ repr\'esente l'amplitude de hausse du ch\^omage (en pp par rapport \`a la base de 7,5\%), tandis que le signe indique la \emph{nature} du choc~:
+\begin{itemize}[leftmargin=1em]
+    \item $s > 0$ : rupture technologique (le PE tech b\'en\'eficie, sensibilit\'e n\'egative).
+    \item $s < 0$ : crise \'economique (tout souffre, sensibilit\'e en valeur absolue).
+\end{itemize}
+Conversion~: \texttt{unemployment\_rate = SCENARIO\_BASE.unemployment\_rate + abs(slider)}.
+\end{warningbox}
+
+\subsection{Sc\'enarios pr\'ed\'efinis (FR34)}
+
+Un \texttt{st.selectbox} permet de pr\'e-remplir les sliders depuis 5 sc\'enarios pr\'ed\'efinis d\'efinis dans \texttt{PREDEFINED\_SCENARIOS}~:
+
+\begin{table}[ht]
+\centering
+\caption{Sc\'enarios pr\'ed\'efinis et valeurs des 5 sliders.}
+\label{tab:predefined}
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Sc\'enario} & \textbf{Taux (bp)} & \textbf{Ch\^om. (pp)} & \textbf{PIB (\%)} & \textbf{HPI (\%)} & \textbf{Infl. (\%)} \\
+\midrule
+Central & $+50$ & $0{,}0$ & $+1{,}2$ & $+2{,}0$ & $2{,}5$ \\
+Crise financi\`ere & $+200$ & $-4{,}0$ & $-3{,}0$ & $-15$ & $-1{,}0$ \\
+Stagflation & $+300$ & $-2{,}0$ & $-1{,}0$ & $-5{,}0$ & $+6{,}0$ \\
+Rupture techno & $0$ & $+3{,}0$ & $+2{,}0$ & $+5{,}0$ & $+1{,}0$ \\
+Reprise & $-100$ & $0{,}0$ & $+3{,}0$ & $+8{,}0$ & $+2{,}0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Le callback \texttt{\_apply\_scenario()} met \`a jour les cl\'es \texttt{st.session\_state} des 5 sliders \`a chaque changement de s\'election. L'option \og Manuel \fg{} d\'esactive le pr\'e-remplissage.
+
+\subsection{Conversion sliders $\to$ valeurs macro r\'eelles}
+
+\begin{formulebox}[Conversion des sliders]
+\begin{align}
+    \text{interest\_rate} &= \text{SCENARIO\_BASE.interest\_rate} + \frac{\text{slider\_bp}}{100} \\
+    \text{unemployment\_rate} &= \text{SCENARIO\_BASE.unemployment\_rate} + |\text{slider\_bipolar}| \\
+    \text{gdp\_growth} &= \text{slider\_pct} \quad \text{(valeur directe)} \\
+    \text{hpi\_growth} &= \text{slider\_pct} \quad \text{(valeur directe)} \\
+    \text{inflation\_rate} &= \text{slider\_pct} \quad \text{(valeur directe)}
+\end{align}
+Les valeurs baseline sont~: $\text{interest\_rate}_0 = 3{,}5\%$, $\text{unemployment}_0 = 7{,}5\%$, $\text{gdp}_0 = 1{,}2\%$, $\text{hpi}_0 = 2{,}0\%$, $\text{inflation}_0 = 2{,}5\%$.
+\end{formulebox}
+
+\subsection{D\'etection d'incoh\'erence macro (FR36)}
+
+Le cockpit \'evalue 4 r\`egles d'incoh\'erence d\'efinies dans \texttt{MACRO\_INCOHERENCE\_RULES} et affiche un \texttt{st.warning} si les conditions sont remplies simultan\'ement~:
+
+\begin{table}[ht]
+\centering
+\caption{R\`egles d'incoh\'erence macro.}
+\label{tab:incoherence}
+\small
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+\textbf{R\`egle} & \textbf{Conditions} \\
+\midrule
+\texttt{gdp\_unemployment\_crisis} & PIB $> +3\%$ et ch\^omage crise $< -3$ pp \\
+\texttt{gdp\_unemployment\_tech} & PIB $> +3\%$ et ch\^omage techno $> +3$ pp \\
+\texttt{deflation\_rates} & Inflation $< 0\%$ et taux $> +200$ bp \\
+\texttt{hpi\_gdp} & HPI $> +10\%$ et PIB $< -2\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Visualisations Plotly --- Patrons de conception}
+\label{sec:plotly}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Fonction \texttt{\_base\_layout()}}
+
+Tous les graphiques Plotly partagent un layout de base commun d\'efini par la fonction \texttt{\_base\_layout(title, height=400)}~:
+
+\begin{lstlisting}
+def _base_layout(title="", height=400):
+    return dict(
+        title=dict(text=title, font=dict(color=_TEXT, size=14)),
+        paper_bgcolor="rgba(0,0,0,0)",   # Fond transparent
+        plot_bgcolor="rgba(0,0,0,0)",    # Zone de tracage transparente
+        font=dict(color=_MUTED, size=11),
+        height=height,
+        margin=dict(l=50, r=30, t=50, b=40),
+        legend=dict(font=dict(color=_MUTED, size=10),
+                    bgcolor="rgba(0,0,0,0)"),
+        xaxis=dict(gridcolor="rgba(148,163,184,0.1)",
+                   zerolinecolor="rgba(148,163,184,0.15)"),
+        yaxis=dict(gridcolor="rgba(148,163,184,0.1)",
+                   zerolinecolor="rgba(148,163,184,0.15)"),
+    )
+\end{lstlisting}
+
+\begin{interpretbox}[Design system coh\'erent]
+Le fond transparent (\texttt{rgba(0,0,0,0)}) permet aux graphiques de s'int\'egrer naturellement dans le th\`eme sombre du dashboard. Les grilles sont tr\`es discr\`etes ($\alpha = 0{,}1$) pour \'eviter le bruit visuel.
+\end{interpretbox}
+
+\subsection{Palette \texttt{\_COLORS}}
+
+La palette de 6 couleurs est construite \`a partir des couleurs s\'emantiques de \texttt{DASHBOARD\_CONFIG}~:
+
+\begin{table}[ht]
+\centering
+\caption{Palette de couleurs du dashboard (WCAG~AAA $\geq 7{:}1$ sur fond \texttt{\#0C1222}).}
+\label{tab:colors}
+\small
+\begin{tabular}{@{}cllll@{}}
+\toprule
+\textbf{Index} & \textbf{Hex} & \textbf{Nom} & \textbf{Ratio} & \textbf{Usage s\'emantique} \\
+\midrule
+0 & \texttt{\#3B82F6} & Steel Blue 500 (primary) & 7,3:1 & Donn\'ees principales, totaux \\
+1 & \texttt{\#34D399} & Emerald 400 (accent) & 9,6:1 & Favorable, diminution, Stage~1 \\
+2 & \texttt{\#FBBF24} & Amber 400 (warning) & 12,1:1 & Vigilance, Stage~2, Watchlist \\
+3 & \texttt{\#F87171} & Red 400 (danger) & 7,1:1 & Adverse, augmentation, Stage~3 \\
+4 & \texttt{\#1E40AF} & Steel Blue 800 (secondary) & --- & Arri\`ere-plan, secondaire \\
+5 & \texttt{\#22D3EE} & Cyan 400 (info) & 10,8:1 & Informationnel \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{definitionbox}[Palette CVD-safe (daltonisme)]
+Pour les graphiques n\'ecessitant un double encodage (couleur + motif), une palette IBM CVD-safe est disponible via \texttt{CVD\_SAFE\_COLORS}~:
+\begin{center}
+\texttt{\#648FFF}, \texttt{\#785EF0}, \texttt{\#DC267F}, \texttt{\#FE6100}, \texttt{\#FFB000}
+\end{center}
+Utilis\'ee dans le graphique \texttt{plot\_pe\_risk\_stacked\_bar()} avec \texttt{pattern\_shape} Plotly (vide, \texttt{/}, \texttt{x}) pour assurer la lisibilit\'e sans perception des couleurs.
+\end{definitionbox}
+
+\subsection{Conversion des noms de features}
+
+La fonction \texttt{\_prettify\_feature(name)} convertit les noms techniques des features en labels lisibles en fran\c{c}ais. Elle g\`ere les suffixes \texttt{\_woe} (supprim\'es avant le lookup). Exemples~:
+
+\begin{center}
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Nom technique} & \textbf{Label affich\'e} \\
+\midrule
+\texttt{credit\_score} & Score Credit \\
+\texttt{debt\_ratio\_woe} & Ratio Endettement \\
+\texttt{nb\_past\_due\_30d} & Retards 30j \\
+\texttt{months\_since\_last\_delinquency} & Delai Dern. Incident \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Utilitaire \texttt{\_hex\_to\_rgba()}}
+
+Pour les remplissages semi-transparents (radar, etc.), la fonction \texttt{\_hex\_to\_rgba(hex, alpha)} convertit une couleur hexad\'ecimale en tuple RGBA~:
+
+\begin{lstlisting}
+def _hex_to_rgba(hex_color, alpha):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = int(hex_color[:2], 16), ...
+    return f"({r}, {g}, {b}, {alpha})"
+\end{lstlisting}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Pipeline de recalcul}
+\label{sec:pipeline}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Flux en 5 \'etapes ($\sim$1,1s)}
+
+\`A chaque interaction utilisateur (changement de slider, s\'election de sc\'enario), le pipeline complet est r\'e-ex\'ecut\'e. Seules les \'etapes co\^uteuses (g\'en\'eration de donn\'ees, entra\^{i}nement de mod\`eles) sont cach\'ees.
+
+\begin{table}[ht]
+\centering
+\caption{Les 5 \'etapes du pipeline de recalcul.}
+\label{tab:pipeline}
+\small
+\begin{tabular}{@{}clp{7.5cm}@{}}
+\toprule
+\textbf{\'Etape} & \textbf{Module} & \textbf{Description} \\
+\midrule
+1/5 & \texttt{ECLCalculator} & Pr\'ediction PD, calcul ECL base et stress\'e avec les 5 variables macro. Staging multi-facteurs (SICR). \\
+2/5 & \texttt{PECalculator} & Valorisation IFRS~13 des positions PE. Calcul NAV, MOIC, drawdown, P(distress), RWA. \\
+3/5 & \texttt{PortfolioComparator} & M\'etriques avanc\'ees~: HHI cross-cell, RAROC/EVA, matrice d'asym\'etrie. \\
+4/5 & \texttt{PortfolioComparator} & Optimisation allocation cr\'edit/PE. Sensibilit\'e CRR3 (190/250/400\%). \\
+5/5 & \texttt{CROAnalyst} & AI Analyst 5 couches, 2 passes it\'eratives. VirtualCRO (alertes r\`egles). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Architecture Train/Serve}
+
+\begin{definitionbox}[Chargement des mod\`eles pr\'e-entra\^{i}n\'es]
+La fonction \texttt{train\_pd\_models()} impl\'emente un patron \emph{train/serve}~:
+\begin{enumerate}[leftmargin=1em]
+    \item V\'erifie l'existence de \texttt{training/models/pd\_suite.joblib}.
+    \item Si le fichier existe~: charge les mod\`eles pr\'e-entra\^{i}n\'es (1,5M lignes offline) via \texttt{PDModelSuite.load()}.
+    \item Sinon (fallback)~: entra\^{i}ne sur les donn\'ees synth\'etiques 30K du dashboard.
+\end{enumerate}
+L'entra\^{i}nement offline est r\'ealis\'e via le script \texttt{training/train.py} avec \texttt{DEFAULT\_N\_CLIENTS = 1\,500\,000}.
+\end{definitionbox}
+
+Le d\'ecorateur \texttt{@st.cache\_resource} garantit que le mod\`ele n'est charg\'e qu'une seule fois par session, ind\'ependamment des changements de sliders macro.
+
+\subsection{Cartes KPI (FR45)}
+
+Apr\`es le pipeline, 4 cartes KPI sont affich\'ees en banni\`ere via \texttt{render\_kpi\_row()}~:
+
+\begin{table}[ht]
+\centering
+\caption{Les 4 KPI principaux du dashboard (ordre CRO-first).}
+\label{tab:kpi}
+\small
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{KPI} & \textbf{Source} & \textbf{Classification couleur} \\
+\midrule
+Risk Appetite & \texttt{analytics\_state.risk\_appetite} & Rouge si $> 3$ secteurs rouges \\
+ECL Credit & \texttt{summary["ecl\_total"]} & \textcolor{accentred}{N\'egatif} si $\Delta > 5\%$, \textcolor{accentgreen}{positif} si $\Delta \leq 0$ \\
+RAROC Credit & \texttt{raroc\_eva} (Total, Credit) & \textcolor{accentgreen}{Positif} si $> 12\%$, \textcolor{accentred}{n\'egatif} si $\leq 0$ \\
+NAV Drawdown PE & \texttt{max(0, -delta\_nav) / nav\_baseline} & \textcolor{accentred}{N\'egatif} si $> 15\%$, neutre si $> 5\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Les badges de classification (Stage~1/2/3 + PE Performing/Watchlist/Distressed) sont affich\'es en dessous via \texttt{render\_classification\_row()}.
+
+
+% ══════════════════════════════════════════════════════════
+\section{Explainabilit\'e SHAP}
+\label{sec:shap}
+% ══════════════════════════════════════════════════════════
+
+\subsection{S\'election du bon Explainer}
+
+Le choix de l'explainer SHAP est dict\'e par l'architecture du mod\`ele s\'electionn\'e dans la sidebar~:
+
+\begin{formulebox}[Strat\'egie SHAP par mod\`ele]
+\[
+\text{Explainer} = \begin{cases}
+    \texttt{shap.LinearExplainer}(M, X) & \text{si mod\`ele = LR\_WoE (lin\'eaire)} \\
+    \texttt{shap.TreeExplainer}(M) & \text{si mod\`ele = XGBoost (arbres)} \\
+    \texttt{shap.KernelExplainer}(\lambda x: M(x)_{[:,1]}, B) & \text{si mod\`ele = TabNet (agnostique)}
+\end{cases}
+\]
+o\`u $B = \texttt{shap.sample}(X, 100)$ est le background dataset pour le KernelExplainer.
+\end{formulebox}
+
+Pour LR\_WoE, le mod\`ele int\'erieur est extrait du \texttt{CalibratedClassifierCV} (sklearn) en traversant \texttt{calibrated\_classifiers\_[0].estimator}.
+
+\subsection{Gestion des formats de sortie SHAP}
+
+Les diff\'erentes versions de SHAP renvoient des formats vari\'es. Le code g\`ere les 3 cas~:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Liste de 2 arrays} (classe 0, classe 1) $\to$ prendre la classe~1.
+    \item \textbf{Array 3D} $(n, p, 2)$ $\to$ prendre \texttt{[:, :, 1]}.
+    \item \textbf{Array 2D} $(n, p)$ $\to$ utiliser directement.
+\end{itemize}
+
+\subsection{Sous-\'echantillonnage pour la performance}
+
+\begin{itemize}[leftmargin=2em]
+    \item Pour le calcul SHAP global~: $n = \min(1000, |X|)$ \'echantillons.
+    \item Pour l'export Excel (feuille SHAP\_Top10)~: $n = 500$ \'echantillons.
+    \item Pour le beeswarm plot~: $n = 500$ points par feature (avec RNG d\'eterministe, seed 42).
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Composants UI r\'eutilisables}
+\label{sec:components}
+% ══════════════════════════════════════════════════════════
+
+Le module \texttt{dashboard/components.py} fournit les briques de construction du layout. Chaque composant g\'en\`ere du HTML inject\'e via \texttt{st.markdown(..., unsafe\_allow\_html=True)}.
+
+\begin{table}[ht]
+\centering
+\caption{Composants UI du module \texttt{components.py}.}
+\label{tab:components}
+\small
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+\textbf{Fonction} & \textbf{R\^ole} \\
+\midrule
+\texttt{render\_header()} & Titre d\'egrad\'e du cockpit (\og IFRS~9 Risk Cockpit \fg). \\
+\texttt{render\_kpi\_row(cards)} & Rang\'ee de KPI avec ARIA \texttt{role="status"} + \texttt{aria-label}. \\
+\texttt{render\_kpi\_cards(...)} & 4 KPI historiques (ECL, PD, Stage~2, Coverage). \\
+\texttt{render\_classification\_row(...)} & Badges Stage~1/2/3 + PE Performing/Watchlist/Distressed. \\
+\texttt{render\_ai\_narrative\_box(...)} & Encadr\'e AI Analyst avec narrative et recommandations. \\
+\texttt{render\_insight\_box(alerts)} & Encadr\'e Virtual CRO avec alertes color\'ees par s\'ev\'erit\'e. \\
+\texttt{render\_smart\_insight\_box(briefing)} & Briefing ex\'ecutif CRO avec constats et pr\'econisations. \\
+\texttt{render\_stage\_badges(...)} & Badges de r\'epartition des stages (avec pourcentages). \\
+\texttt{render\_section\_title(title)} & Titre de section \texttt{<h2>} s\'emantique (CSS class \texttt{section-title}). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Encadr\'e AI Analyst (\texttt{render\_ai\_narrative\_box})}
+
+Cet encadr\'e affiche~:
+\begin{enumerate}[leftmargin=2em]
+    \item Un \textbf{niveau de risque} d\'eriv\'e du \texttt{risk\_appetite\_status} de la premi\`ere recommandation~:
+    \begin{itemize}
+        \item Rouge $\to$ \texttt{\_CFG.color\_danger} (\texttt{\#F87171}), niveau ELEVE.
+        \item Ambre $\to$ \texttt{\_CFG.color\_warning} (\texttt{\#FBBF24}), niveau MODERE.
+        \item Vert $\to$ \texttt{\_CFG.color\_success} (\texttt{\#34D399}), niveau BON.
+    \end{itemize}
+    \item La \textbf{narrative} g\'en\'er\'ee par l'AI Analyst (sauts de ligne convertis en \texttt{<br/>}).
+    \item Les \textbf{recommandations} avec actions et alternatives.
+\end{enumerate}
+
+\subsection{Classification des badges}
+
+Les badges de stage utilisent des classes CSS d\'edi\'ees~:
+\begin{itemize}[leftmargin=2em]
+    \item \texttt{badge-stage1} --- vert (\texttt{\#34D399}, WCAG~AAA 9,6:1).
+    \item \texttt{badge-stage2} --- ambre (\texttt{\#FBBF24}, WCAG~AAA 12,1:1).
+    \item \texttt{badge-stage3} --- rouge (\texttt{\#F87171}, WCAG~AAA 7,1:1).
+\end{itemize}
+
+Les cat\'egories PE sont mapp\'ees sur les m\^emes classes~: Performing $\to$ Stage~1, Watchlist $\to$ Stage~2, Distressed $\to$ Stage~3.
+
+
+% ══════════════════════════════════════════════════════════
+\section{Export Excel --- Structure d\'etaill\'ee}
+\label{sec:export}
+% ══════════════════════════════════════════════════════════
+
+L'export Excel est g\'en\'er\'e en m\'emoire via \texttt{pd.ExcelWriter} avec le moteur \texttt{openpyxl}, puis propos\'e en t\'el\'echargement via \texttt{st.download\_button}.
+
+\subsection{Feuille 1~: Macro}
+
+Un DataFrame d'une seule ligne contenant les 5 param\`etres macro du sc\'enario courant~:
+\[
+\{\texttt{unemployment\_rate}, \texttt{gdp\_growth}, \texttt{interest\_rate}, \texttt{hpi\_growth}, \texttt{inflation\_rate}\}
+\]
+
+\subsection{Feuille 2~: Transitions}
+
+La matrice de transition $3 \times 3$ (base $\to$ stress\'e), avec les stages en index et en colonnes.
+
+\subsection{Feuille 3~: Alertes}
+
+Les alertes CRO avec colonnes~: \texttt{severity}, \texttt{title}, \texttt{message}, \texttt{action}. Si aucune alerte, un DataFrame vide avec ces 4 colonnes est \'ecrit.
+
+\subsection{Feuille 4~: SHAP Top 10}
+
+Les 10 features les plus influentes (par \texttt{mean\_abs\_shap}), calcul\'ees sur 500 \'echantillons. Robuste aux erreurs via \texttt{try/except} (retourne un DataFrame vide en cas d'\'echec).
+
+\subsection{Feuilles 5 et 6~: Credit et PE}
+
+Export brut des m\'etriques portefeuille pour chaque canal. Les colonnes sont filtr\'ees dynamiquement (\texttt{[c for c in cols if c in df.columns]}) pour g\'erer les \'evolutions de schema.
+
+\subsection{Feuille 7~: Optimisation}
+
+R\'esultat de l'optimisation d'allocation~: \texttt{credit\_allocation}, \texttt{pe\_allocation}, \texttt{raroc\_credit}, \texttt{raroc\_pe}, \texttt{rwa\_weighted}, \texttt{cet1\_ratio}, \texttt{cet1\_headroom}.
+
+\subsection{Feuille 8~: Asym\'etrie}
+
+La matrice d'asym\'etrie compl\`ete (cr\'edit vs PE) par secteur.
+
+
+% ══════════════════════════════════════════════════════════
+\section{Configuration pilot\'ee par \texttt{config.py}}
+\label{sec:config}
+% ══════════════════════════════════════════════════════════
+
+Le fichier \texttt{config.py} est la \textbf{source unique de v\'erit\'e} pour l'ensemble du cockpit. Aucun seuil ou hyperparam\`etre n'est hardcod\'e dans les modules.
+
+\subsection{\texttt{DashboardConfig}}
+
+\begin{table}[ht]
+\centering
+\caption{Attributs cl\'es de \texttt{DashboardConfig} (v4.0, WCAG~AAA).}
+\label{tab:dashconfig}
+\small
+\begin{tabular}{@{}llp{5cm}@{}}
+\toprule
+\textbf{Attribut} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+\texttt{page\_title} & \texttt{"IFRS 9 Risk Cockpit"} & Titre du navigateur \\
+\texttt{layout} & \texttt{"wide"} & Layout pleine largeur \\
+\texttt{theme\_primary} & \texttt{\#3B82F6} & Steel Blue 500 principal (7,3:1) \\
+\texttt{theme\_primary\_text} & \texttt{\#60A5FA} & Blue 400 pour texte sur fond sombre (8,2:1) \\
+\texttt{theme\_secondary} & \texttt{\#1E40AF} & Steel Blue 800 fonc\'e \\
+\texttt{theme\_accent} & \texttt{\#34D399} & Emerald 400 WCAG~AAA (9,6:1) \\
+\texttt{theme\_bg\_dark} & \texttt{\#0C1222} & Fond sombre global \\
+\texttt{theme\_bg\_card} & \texttt{\#1E293B} & Fond des cartes \\
+\texttt{theme\_text} & \texttt{\#F8FAFC} & Texte principal (quasi-blanc) \\
+\texttt{theme\_text\_muted} & \texttt{\#A1B2C8} & Texte secondaire WCAG~AAA (7,2:1) \\
+\texttt{color\_success} & \texttt{\#34D399} & Emerald 400 (9,6:1) \\
+\texttt{color\_warning} & \texttt{\#FBBF24} & Amber 400 (12,1:1) \\
+\texttt{color\_danger} & \texttt{\#F87171} & Red 400 (7,1:1) \\
+\texttt{color\_info} & \texttt{\#22D3EE} & Cyan 400 (10,8:1) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Secteurs et sensibilit\'es duales}
+
+Chaque secteur (\texttt{SectorConfig}) poss\`ede 10 sensibilit\'es macro (5 variables $\times$ 2 canaux). La table~\ref{tab:sectors} r\'esume les 5 secteurs~:
+
+\begin{table}[ht]
+\centering
+\caption{Les 5 secteurs entreprise du portefeuille synth\'etique.}
+\label{tab:sectors}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Secteur} & \textbf{Proportion} & \textbf{PD base} & \textbf{IPEV} & \textbf{$\rho_{\text{LGD}}$} \\
+\midrule
+Technologie & 25\% & 6\% & EV/Revenue & 0,25 \\
+Industrie & 25\% & 5\% & EV/EBITDA & 0,30 \\
+Sant\'e & 15\% & 3\% & EV/EBITDA & 0,10 \\
+Immobilier & 20\% & 5\% & Cap rate/NOI & 0,35 \\
+Services & 15\% & 4\% & EV/EBITDA & 0,20 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sc\'enarios ECL}
+
+Les 3 sc\'enarios ECL sont pond\'er\'es 50/25/25 conform\'ement \`a IFRS~9 par.~5.5.17~:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Base} (50\%)~: PIB $+1{,}2\%$, ch\^omage $7{,}5\%$, taux $3{,}5\%$, HPI $+2\%$, inflation $2{,}5\%$.
+    \item \textbf{Adverse} (25\%)~: PIB $-1{,}5\%$, ch\^omage $10{,}5\%$, taux $5\%$, HPI $-8\%$, inflation $5{,}5\%$.
+    \item \textbf{Favorable} (25\%)~: PIB $+2{,}5\%$, ch\^omage $5{,}5\%$, taux $2\%$, HPI $+5\%$, inflation $1{,}5\%$.
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{R\'esum\'e des graphiques}
+\label{sec:chart_summary}
+% ══════════════════════════════════════════════════════════
+
+La table~\ref{tab:charts} r\'ecapitule les 24 fonctions de visualisation du module \texttt{charts.py} (21 existantes + 3 nouvelles en v4.0)~:
+
+\begin{longtable}{@{}lp{3.5cm}lp{4cm}@{}}
+\caption{Catalogue des fonctions de visualisation Plotly (v4.0).}
+\label{tab:charts} \\
+\toprule
+\textbf{Fonction} & \textbf{Type Plotly} & \textbf{Onglet} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fonction} & \textbf{Type Plotly} & \textbf{Onglet} & \textbf{Description} \\
+\midrule
+\endhead
+\texttt{plot\_risk\_appetite\_matrix} & Heatmap (tricolore) & 1 & Feux tricolores risk appetite (CVD~$\checkmark\triangle\times$) \\
+\texttt{plot\_trajectories\_chart} & Scatter (multi-line) & 1 & \textbf{Nouveau}~: trajectoires macro O-U \\
+\texttt{plot\_ecl\_by\_segment} & Bar (grouped, horizontal) & 2 & ECL par sc\'enario et segment \\
+\texttt{plot\_ecl\_coverage\_scatter} & Scatter (markers+text) & 2 & PD vs Coverage par segment \\
+\texttt{plot\_hhi\_gauge} & Indicator (gauge) & 2 & Jauges HHI segments et pr\^ets \\
+\texttt{plot\_waterfall\_ecl} & Waterfall & 2 & D\'ecomposition variation ECL \\
+\texttt{plot\_stage\_distribution} & 2 Pie (donut) & 2 & R\'epartition clients et EAD \\
+\texttt{plot\_stage\_sankey} & Sankey & 2 & \textbf{Nouveau}~: flux migration stages \\
+\texttt{plot\_transition\_matrix} & Heatmap & 2 & Matrice transition $3\times3$ \\
+\texttt{plot\_pe\_risk\_stacked\_bar} & Bar (stacked, patterns) & 3 & \textbf{Nouveau}~: r\'epartition CVD-safe PE \\
+\texttt{plot\_pe\_nav\_by\_sector} & Bar (grouped, horizontal) & 3 & NAV, capital, EL PE par secteur \\
+\texttt{plot\_pe\_risk\_categories} & Pie (donut) & 3 & Classification IPEV \\
+\texttt{plot\_pe\_moic\_drawdown} & Bar + Scatter (dual axis) & 3 & MOIC et drawdown par secteur \\
+\texttt{plot\_asymmetry\_heatmap} & Heatmap & 4 & Asym\'etrie cr\'edit vs PE \\
+\texttt{plot\_raroc\_comparison} & Bar (grouped) + hline & 4 & RAROC Cr\'edit vs PE + cible 4\% \\
+\texttt{plot\_crr3\_sensitivity} & Bar + hline & 4 & CET1 par Risk Weight PE \\
+\texttt{plot\_roc\_curves} & Scatter (lines) & 5 & Courbes ROC comparatives \\
+\texttt{plot\_model\_comparison} & Scatterpolar & 5 & Radar benchmark AUC/Gini/KS \\
+\texttt{plot\_calibration\_curve} & Scatter (lines+markers) & 5 & Reliability diagram \\
+\texttt{plot\_feature\_importance} & Bar (horizontal) & 5 & Importance des features \\
+\texttt{plot\_iv\_table} & Bar (horizontal) & 5 & Information Value \\
+\texttt{plot\_backtesting\_auc} & Scatter (lines+markers) & 5 & \'Evolution temporelle AUC/Gini/KS \\
+\texttt{plot\_score\_distribution} & Histogram (overlay) & 5 & Distribution scorecard \\
+\texttt{plot\_shap\_summary} & Bar (horizontal) & 6 & Mean $|$SHAP$|$ global \\
+\texttt{plot\_shap\_beeswarm} & Scatter (jitter RdBu) & 6 & Impact directionnel SHAP \\
+\texttt{plot\_shap\_force\_individual} & Bar (horizontal) & 6 & Force plot individuel \\
+\bottomrule
+\end{longtable}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Sidebar compl\'ementaire}
+\label{sec:sidebar_extra}
+% ══════════════════════════════════════════════════════════
+
+Outre les 5 sliders macro, la sidebar contient~:
+
+\subsection{S\'election du mod\`ele PD}
+
+Un \texttt{st.selectbox} permet de choisir parmi les mod\`eles entra\^{i}n\'es (LR\_WoE, TabNet, XGBoost). Ce choix affecte~:
+\begin{itemize}[leftmargin=2em]
+    \item Le calcul ECL (PD utilis\'ee pour le staging et l'ECL).
+    \item Les graphiques de l'onglet~1 (importance, backtesting).
+    \item Le choix de l'explainer SHAP dans l'onglet~6.
+\end{itemize}
+
+\subsection{Configuration Private Equity}
+
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Allocation PE} (\%) --- slider de 0 \`a \texttt{pe\_max\_allocation $\times$ 100} (40\%), pas de 5.
+    \item \textbf{Risk Weight PE} (CRR3) --- selectbox parmi les 3 classifications~: 190\% (IRB diversifi\'e), 250\% (g\'en\'eral), 400\% (sp\'eculatif).
+\end{itemize}
+
+\subsection{Reverse Stress Test personnalis\'e (FR54)}
+
+\begin{itemize}[leftmargin=2em]
+    \item Checkbox d'activation de la cible ECL personnalis\'ee.
+    \item Si activ\'e~: \texttt{st.number\_input} pour la cible ECL de rupture (min 1M EUR, max = capital CET1).
+    \item D\'efaut~: 10\% du CET1 = \texttt{rwa\_budget $\times$ cet1\_target $\times$ 0.10}.
+\end{itemize}
+
+\subsection{Pied de page}
+
+Le pied de page affiche~:
+\begin{center}
+\textit{IFRS 9 Risk Cockpit v3.0 --- Moteur ECL $|$ PE IFRS 13 $|$ Virtual CRO $|$ AI Analyst --- M1 Finance Paris-Saclay}
+\end{center}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Synth\`ese et bonnes pratiques}
+\label{sec:synthese}
+% ══════════════════════════════════════════════════════════
+
+\begin{interpretbox}[Patrons cl\'es du dashboard]
+\begin{enumerate}[leftmargin=1em]
+    \item \textbf{Configuration centralis\'ee}~: tous les seuils, couleurs, ranges de sliders et hyperparam\`etres proviennent de \texttt{config.py}. Aucun magic number dans le code du dashboard.
+    \item \textbf{Cache \`a 3 niveaux}~: \texttt{@cache\_data} pour les donn\'ees, \texttt{@cache\_resource} pour les mod\`eles, \texttt{@st.fragment} pour l'interaction SHAP individuelle.
+    \item \textbf{Layout de base mutualis\'e}~: \texttt{\_base\_layout()} assure la coh\'erence visuelle de tous les graphiques.
+    \item \textbf{Palette s\'emantique WCAG~AAA}~: 6 couleurs v\'erifi\'ees \`a $\geq 7{:}1$ de contraste sur fond sombre + palette CVD-safe IBM.
+    \item \textbf{Composants HTML r\'eutilisables}~: \texttt{components.py} fournit des fonctions \texttt{render\_*()} avec attributs ARIA (\texttt{role="status"}, \texttt{aria-label}).
+    \item \textbf{Pipeline temps r\'eel}~: $\sim$1,1s de recalcul complet (5 \'etapes) avec barre de progression.
+    \item \textbf{Train/Serve}~: chargement de mod\`eles pr\'e-entra\^{i}n\'es sur 1,5M lignes, fallback sur entra\^{i}nement 30K.
+    \item \textbf{D\'etection d'incoh\'erence}~: 4 r\`egles macro \'evalu\'ees en temps r\'eel dans la sidebar.
+    \item \textbf{Progressive disclosure}~: \texttt{st.expander} pour le contenu secondaire (staging, CRR3, rapport CRO d\'etaill\'e, mod\`eles).
+    \item \textbf{Feedback utilisateur}~: \texttt{st.toast()} apr\`es chaque t\'el\'echargement d'export.
+\end{enumerate}
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Am\'eliorations UX v4.0}
+\label{sec:ux_v4}
+% ══════════════════════════════════════════════════════════
+
+La version 4.0 du dashboard int\`egre un audit UX professionnel inspir\'e des standards Bloomberg Terminal, Moody's Analytics et SAS Risk Dashboard.
+
+\subsection{Accessibilit\'e WCAG~AAA}
+
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Couleurs}~: toutes les couleurs s\'emantiques v\'erifi\'ees \`a $\geq 7{:}1$ de ratio de contraste sur le fond \texttt{\#0C1222} (WCAG~AAA, le niveau le plus exigeant).
+    \item \textbf{Double encodage CVD}~: les graphiques critiques (PE risk categories) utilisent simultan\'ement la couleur \emph{et} un motif (\texttt{pattern\_shape} Plotly) pour rester lisibles en cas de daltonisme.
+    \item \textbf{Symboles Risk Appetite}~: $\checkmark$ (vert), $\triangle$ (ambre), $\times$ (rouge) en plus de la couleur.
+    \item \textbf{HTML s\'emantique}~: \texttt{render\_section\_title()} g\'en\`ere un \texttt{<h2>} (pas un \texttt{<div>}) pour la structure du document.
+    \item \textbf{ARIA}~: \texttt{role="status"} et \texttt{aria-label} sur chaque carte KPI.
+\end{itemize}
+
+\subsection{Architecture d'information CRO-first}
+
+Le r\'eordonnancement des onglets suit le \emph{progressive disclosure pattern}~:
+
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{Synth\`ese CRO} (ex-onglet 8 $\to$ onglet 1)~: le d\'ecideur voit imm\'ediatement les alertes, le risk appetite et les recommandations.
+    \item \textbf{D\'etail par classe d'actifs} (onglets 2--3)~: cr\'edit puis PE, chacun autonome.
+    \item \textbf{Optimisation} (onglet 4)~: analyse crois\'ee cr\'edit/PE.
+    \item \textbf{Technique} (onglets 5--7)~: mod\`eles, SHAP, donn\'ees brutes.
+\end{enumerate}
+
+\subsection{Banni\`ere de contexte}
+
+Une banni\`ere horizontale au-dessus des onglets affiche les param\`etres macro du sc\'enario courant~: nom du sc\'enario, taux BCE, ch\^omage, PIB, HPI et inflation. Cela \'evite au CRO de retourner \`a la sidebar pour v\'erifier les hypoth\`eses.
+
+\subsection{Configuration Streamlit native}
+
+Le fichier \texttt{.streamlit/config.toml} d\'efinit le th\`eme sombre au niveau Streamlit~:
+\begin{lstlisting}
+[theme]
+base = "dark"
+primaryColor = "#3B82F6"
+backgroundColor = "#0C1222"
+secondaryBackgroundColor = "#1E293B"
+textColor = "#F8FAFC"
+font = "sans serif"
+\end{lstlisting}
+
+Cela assure la coh\'erence entre le CSS custom et les widgets natifs Streamlit (sliders, selectbox, checkbox).
+
+
+\vfill
+\begin{center}
+\small\color{gray}
+Document g\'en\'er\'e \`a partir du code source du cockpit IFRS~9 Risk Cockpit v4.0.\\
+Fichiers de r\'ef\'erence~: \texttt{app.py}, \texttt{dashboard/charts.py}, \texttt{dashboard/components.py}, \texttt{dashboard/styles.py}, \texttt{config.py}.
+\end{center}
+
+\end{document}

@@ -2,7 +2,7 @@
 
 Orchestre le calcul complet des metriques de performance PE :
     - MOIC (Multiple on Invested Capital)
-    - IRR (Internal Rate of Return)
+    - IRR approx. (Internal Rate of Return, simplifiee sans J-curve)
     - DPI (Distributed to Paid-In)
     - RVPI (Residual Value to Paid-In)
     - TVPI (Total Value to Paid-In)
@@ -14,10 +14,23 @@ Et les analyses de risque :
 Formules simplifiees (pas de cash flows intermediaires) :
     Capital_investi = Metric x Entry_Multiple x (1 - Leverage)
     MOIC = NAV / Capital_investi
-    IRR = MOIC^(1/holding_years) - 1
+    IRR_approx = MOIC^(1/holding_years) - 1
     DPI = 0 (pas de distributions intermediaires)
     RVPI = MOIC
     TVPI = DPI + RVPI = MOIC
+
+Limites du modele :
+    L1. IRR simplifiee : pas de cash flows intermediaires (appels de fonds,
+        distributions partielles). L'IRR est surestimee pour vintages recents
+        et ne capture pas la J-curve. Ne pas comparer aux IRR GP publiees.
+    L2. Sensibilites statiques : les sensibilites PE par secteur sont des
+        moyennes de cycle (expert judgment). Pas de modulation par vintage
+        ni par position dans le cycle economique.
+    L3. Bruit intra-sectoriel : le modele a facteur capture la correlation
+        systematique (macro) et intra-sectorielle, mais pas la correlation
+        idiosyncratique entre positions du meme GP ou fonds.
+    L4. Pas de backtesting : les parametres sont calibres sur jugement expert
+        et benchmarks industriels, pas sur historique de portefeuille reel.
 """
 
 from __future__ import annotations
@@ -81,6 +94,7 @@ class PECalculator:
         interest_rate_override: Optional[float] = None,
         hpi_override: Optional[float] = None,
         inflation_override: Optional[float] = None,
+        unemployment_crisis: bool = False,
     ) -> pd.DataFrame:
         """Calcule les metriques PE pour chaque position.
 
@@ -91,6 +105,9 @@ class PECalculator:
             interest_rate_override: Override taux BCE pour stress test.
             hpi_override: Override HPI pour stress test.
             inflation_override: Override inflation pour stress test.
+            unemployment_crisis: Si True, le chomage est de nature "crise
+                economique" et les sensibilites PE negatives (ex. Tech)
+                sont prises en abs() pour penaliser tous les secteurs.
 
         Returns:
             DataFrame avec colonnes ajoutees : nav, capital_invested,
@@ -106,6 +123,7 @@ class PECalculator:
             interest_rate_override=interest_rate_override,
             hpi_override=hpi_override,
             inflation_override=inflation_override,
+            unemployment_crisis=unemployment_crisis,
         )
 
         # NAV reference (sans stress) pour calculer delta_nav
@@ -142,6 +160,7 @@ class PECalculator:
             interest_rate_override=interest_rate_override,
             hpi_override=hpi_override,
             inflation_override=inflation_override,
+            unemployment_crisis=unemployment_crisis,
         )
 
         # Classification PE (FR17)
@@ -151,9 +170,15 @@ class PECalculator:
         lgd_eq = PE_CLASSIFICATION_CONFIG.lgd_equity
         expected_loss_pe = distress_prob * lgd_eq * nav_base
 
-        # Cout de sortie (FR18) = NAV x (1 - secondary_discount)
-        sec_disc = PE_CLASSIFICATION_CONFIG.secondary_discount
-        exit_cost = nav_base * (1 - sec_disc)
+        # Cout de sortie (FR18) avec DLOM ajuste par vintage.
+        # Fonds jeunes (holding < threshold) sont moins liquides → decote plus elevee.
+        # DLOM_eff = base × (1 + factor × max(0, threshold - holding) / threshold)
+        # Ref: AICPA Practice Aid (2013), Pratt & Grabowski (2014).
+        cfg_pe = PE_CLASSIFICATION_CONFIG
+        holding = df_pe["holding_years"].values.astype(float)
+        vintage_adj = np.maximum(0, cfg_pe.dlom_vintage_threshold - holding) / cfg_pe.dlom_vintage_threshold
+        effective_discount = cfg_pe.secondary_discount * (1 + cfg_pe.dlom_vintage_factor * vintage_adj)
+        exit_cost = nav_base * (1 - effective_discount)
 
         # H8 : RWA PE via score CRR3 composite (Art. 133) — position par position
         # Remplace le RW fixe par un score gradue (190/250/400)
@@ -331,6 +356,7 @@ class PECalculator:
         interest_rate_override: Optional[float] = None,
         hpi_override: Optional[float] = None,
         inflation_override: Optional[float] = None,
+        unemployment_crisis: bool = False,
     ) -> np.ndarray:
         """Calcule la probabilite de distress conditionnelle (FR16, logit-space).
 
@@ -349,6 +375,8 @@ class PECalculator:
             interest_rate_override: Override taux BCE.
             hpi_override: Override HPI.
             inflation_override: Override inflation.
+            unemployment_crisis: Si True, utilise abs(sensitivity) pour
+                chomage PE (crise eco = toujours adverse).
 
         Returns:
             Array de P(distress) par position, dans ]0, 1[.
@@ -389,8 +417,14 @@ class PECalculator:
                 continue
 
             # Choc macro composite via sensibilites PE (logit-space)
+            # En mode crise, abs(sensitivity) pour chomage : tout secteur souffre.
+            unemp_sens = (
+                abs(sector.unemployment_sensitivity_pe)
+                if unemployment_crisis
+                else sector.unemployment_sensitivity_pe
+            )
             macro_adj = (
-                d_unemp * sector.unemployment_sensitivity_pe
+                d_unemp * unemp_sens
                 + d_gdp * sector.gdp_sensitivity_pe
                 + d_ir * sector.interest_rate_sensitivity_pe
                 + d_hpi * sector.hpi_sensitivity_pe
@@ -431,6 +465,7 @@ class PECalculator:
         """Calcule le capital investi a l'entree (equity portion du LBO).
 
         Capital = Metric x Entry_Multiple x (1 - Leverage)
+        Pour Cap_rate/NOI (Immobilier) : Metric = EBITDA × (1 - NOI_OPEX_RATIO).
 
         Args:
             df_pe: DataFrame PE.
@@ -438,6 +473,8 @@ class PECalculator:
         Returns:
             Array de capital investi en M EUR.
         """
+        from ifrs9_cockpit.config import NOI_OPEX_RATIO
+
         n = len(df_pe)
         capital = np.zeros(n)
 
@@ -451,13 +488,16 @@ class PECalculator:
                 metric = df_pe.loc[mask, "revenue"].values.astype(float)
             else:
                 metric = df_pe.loc[mask, "ebitda"].values.astype(float)
+                if sector.valuation_method == "Cap_rate/NOI":
+                    metric = metric * (1 - NOI_OPEX_RATIO)
 
             entry_mult = df_pe.loc[mask, "entry_multiple"].values.astype(float)
             leverage = df_pe.loc[mask, "leverage"].values.astype(float)
 
             capital[mask] = metric * entry_mult * (1 - leverage)
 
-        return np.maximum(capital, 0)
+        # Floor a 1 EUR (1e-6 M EUR) — tout investissement PE a un capital > 0
+        return np.maximum(capital, 1e-6)
 
 
 if __name__ == "__main__":

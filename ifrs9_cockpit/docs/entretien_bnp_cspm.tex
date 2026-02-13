@@ -1,0 +1,1370 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage[margin=2.0cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{multicol}
+\usepackage{tabularx}
+
+% --- Couleurs BNP-inspired ---
+\definecolor{bnpgreen}{HTML}{00915A}
+\definecolor{bnpdark}{HTML}{1A1A2E}
+\definecolor{accent}{HTML}{2563EB}
+\definecolor{warmgray}{HTML}{4B5563}
+\definecolor{lightbg}{HTML}{F0FDF4}
+\definecolor{warnbg}{HTML}{FEF3C7}
+\definecolor{infobg}{HTML}{EFF6FF}
+\definecolor{darkbg}{HTML}{F3F4F6}
+\definecolor{successbg}{HTML}{ECFDF5}
+\definecolor{dangerbg}{HTML}{FEF2F2}
+\definecolor{dangerframe}{HTML}{DC2626}
+
+\hypersetup{colorlinks=true, linkcolor=accent, urlcolor=accent}
+
+\tcbuselibrary{breakable}
+
+% --- Boxes ---
+\newtcolorbox{pitchbox}{
+  colback=lightbg, colframe=bnpgreen, breakable,
+  fonttitle=\bfseries\large, title={\textcolor{bnpgreen}{Pitch principal} \hfill \textit{$\sim$90 secondes}},
+  arc=3pt, boxrule=1pt, left=8pt, right=8pt, top=6pt, bottom=6pt
+}
+
+\newtcolorbox{modulebox}[1]{
+  colback=infobg, colframe=accent, breakable,
+  fonttitle=\bfseries, title={#1},
+  arc=2pt, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+
+\newtcolorbox{warnbox}[1]{
+  colback=warnbg, colframe={orange!80!black}, breakable,
+  fonttitle=\bfseries, title={#1},
+  arc=2pt, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+
+\newtcolorbox{verbatimbox}{
+  colback=white, colframe=warmgray, breakable,
+  arc=2pt, boxrule=0.5pt, left=8pt, right=8pt, top=6pt, bottom=6pt
+}
+
+\newtcolorbox{goodbox}[1]{
+  colback=successbg, colframe=bnpgreen, breakable,
+  fonttitle=\bfseries, title={#1},
+  arc=2pt, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+
+\newtcolorbox{dangerbox}[1]{
+  colback=dangerbg, colframe=dangerframe, breakable,
+  fonttitle=\bfseries, title={#1},
+  arc=2pt, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+
+\newtcolorbox{graybox}[1]{
+  colback=darkbg, colframe=warmgray, breakable,
+  fonttitle=\bfseries, title={#1},
+  arc=2pt, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+
+% --- Headers ---
+\titleformat{\section}{\Large\bfseries\color{bnpdark}}{}{0pt}{}[\color{bnpgreen}\rule{\textwidth}{0.8pt}]
+\titleformat{\subsection}{\large\bfseries\color{accent}}{}{0pt}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{warmgray}}{}{0pt}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{warmgray}{Pr\'eparation entretien --- BNP Paribas CIB}}
+\fancyhead[R]{\small\textcolor{warmgray}{CSPM --- Stage Analyste Cr\'edit}}
+\fancyfoot[C]{\small\textcolor{warmgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+% ============================================================
+%                       PAGE DE TITRE
+% ============================================================
+\begin{center}
+{\LARGE\bfseries\textcolor{bnpdark}{Pr\'eparation Entretien}}\\[6pt]
+{\Large\textcolor{bnpgreen}{BNP Paribas CIB --- Stage Assistant Analyste Cr\'edit}}\\[4pt]
+{\large\textcolor{warmgray}{\'Equipe CSPM $\cdot$ Services MFS $\cdot$ Front Office $\cdot$ Pantin}}\\[12pt]
+\textcolor{warmgray}{\rule{0.5\textwidth}{0.5pt}}\\[8pt]
+{\small\textcolor{warmgray}{R\'ef. IS\_CIB2SIDF26\_0018 $\cdot$ 6 mois \`a partir de mars 2026}}
+\end{center}
+
+\vspace{4pt}
+
+\tableofcontents
+
+\newpage
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%         PARTIE I --- PR\'ESENTATION DU PROJET
+%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\part*{Partie I --- Pr\'esentation du projet}
+\addcontentsline{toc}{part}{Partie I --- Pr\'esentation du projet}
+
+% ============================================================
+\section{Pitch principal --- Pr\'esentation du projet}
+% ============================================================
+
+\begin{pitchbox}
+\og Mon m\'emoire de M1 \`a Paris-Saclay porte sur le \textbf{monitoring de fonds
+et la gestion du collat\'eral} : j'ai construit un syst\`eme d'aide \`a la d\'ecision
+pour des hedge funds, avec calcul automatis\'e de NAV et de LTV, suivi des margin calls,
+valorisation et haircuts du collat\'eral, et stress tests de liquidit\'e sur portefeuilles.
+
+En parall\`ele, j'ai d\'evelopp\'e un \textbf{cockpit de risque cr\'edit IFRS\,9} complet
+--- calcul d'ECL, mod\`eles de probabilit\'e de d\'efaut, stress tests macro\'economiques,
+RAROC et allocation de capital --- qui m'a donn\'e une \textbf{vision bout-en-bout} de la
+cha\^ine de risque, du client individuel jusqu'au pilotage CRO.
+
+Ces deux projets convergent vers le poste CSPM : le premier m'a donn\'e les
+\textbf{outils Front Office} --- LTV, collat\'eral, margin calls --- et le second la
+\textbf{profondeur analytique c\^ot\'e Risques}. C'est exactement l'intersection
+du poste, \`a la fronti\`ere entre le Front Office et le d\'epartement des risques. \fg{}
+\end{pitchbox}
+
+\begin{warnbox}{Timing \& d\'ebit}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{90 secondes max} --- ne pas d\'epasser 2 minutes, l'interviewer doit pouvoir rebondir.
+\item D\'ebit pos\'e, pauses naturelles apr\`es chaque bloc (m\'emoire / cockpit / convergence).
+\item \textbf{Ne pas r\'eciter} --- adapter le wording selon la dynamique.
+\item Si on te demande \og Pr\'esentez-vous \fg{} au sens large, ins\'erer le pitch \textit{apr\`es}
+      2--3 phrases de parcours (Saclay, M1 finance/\'eco, quanti).
+\end{itemize}
+\end{warnbox}
+
+\vspace{10pt}
+
+% ============================================================
+\section{Modules th\'ematiques --- Selon la conversation}
+% ============================================================
+
+\textcolor{warmgray}{\textit{Chaque module est autonome. Utilise celui qui correspond
+\`a la direction prise par l'interviewer. Ne les d\'eroule \textbf{pas} tous --- choisis
+1--2 modules pertinents selon les questions.}}
+
+\vspace{8pt}
+
+% --- Module A ---
+\begin{modulebox}{Module A --- Si on te parle de \textbf{LTV / Collat\'eral / Margin Calls}}
+
+\textit{C'est le c\oe{}ur du poste. C'est l\`a que ton m\'emoire M1 brille.}
+
+\begin{verbatimbox}
+\og Dans mon m\'emoire, j'ai impl\'ement\'e un monitoring quotidien de LTV avec
+identification automatique des seuils critiques. Concr\`etement, le syst\`eme
+calcule la NAV des fonds, en d\'eduit le LTV de chaque ligne de financement,
+et d\'eclenche des alertes quand on approche des covenants.
+
+Pour le collat\'eral, j'ai travaill\'e sur la valorisation des actifs mis en
+garantie, le calcul des haircuts selon la nature de l'actif, et l'analyse
+d'\'eligibilit\'e. J'ai aussi automatis\'e le suivi des margin calls ---
+identification du d\'eficit, calcul du montant \`a appeler, et suivi de la
+r\'egularisation. \fg{}
+\end{verbatimbox}
+
+\textbf{Mots-cl\'es \`a placer} : LTV, NAV, haircut, \'eligibilit\'e, margin call,
+covenant, seuil critique, monitoring quotidien.
+
+\textbf{Question de rebond possible} : \og Comment g\'eriez-vous un client dont le
+LTV d\'epasse le seuil ? \fg{} $\rightarrow$ Escalade, appel de marge,
+restructuration du collat\'eral, coordination avec le risk management.
+\end{modulebox}
+
+\vspace{6pt}
+
+% --- Module B ---
+\begin{modulebox}{Module B --- Si on te parle de \textbf{Risque de cr\'edit / Analyse financi\`ere}}
+
+\textit{C'est l\`a que le projet IFRS\,9 te diff\'erencie des autres candidats.}
+
+\begin{verbatimbox}
+\og Mon cockpit IFRS\,9 calcule l'ECL --- Expected Credit Loss --- en trois
+\'etapes : mod\'elisation de la PD, estimation de la LGD cyclique, et staging
+SICR multi-facteurs. J'ai impl\'ement\'e trois familles de mod\`eles de PD
+--- r\'egression logistique avec scorecard, XGBoost, et deep learning
+tabulaire --- pour comparer leurs performances et r\'epondre aux exigences
+de model risk management.
+
+Ce qui est directement utile pour CSPM, c'est que je comprends comment
+le risque assum\'e par la banque sur chaque exposition est couvert par la
+garantie d\'etenue. Quand l'\'equipe CSPM \'echange avec le d\'epartement
+des risques, je parle le m\^eme langage. \fg{}
+\end{verbatimbox}
+
+\textbf{Mots-cl\'es \`a placer} : ECL, PD, LGD, IFRS\,9, staging, SICR,
+risk-weighted assets, model risk management.
+
+\textbf{Attention} : ne pas tomber dans le technique pur. L'interviewer est
+Front Office, pas quant. Rester sur la \textbf{logique m\'etier}.
+\end{modulebox}
+
+\vspace{6pt}
+
+% --- Module C ---
+\begin{modulebox}{Module C --- Si on te parle de \textbf{Stress Tests / Sc\'enarios de crise}}
+
+\textit{Les deux projets se compl\`etent ici.}
+
+\begin{verbatimbox}
+\og J'ai travaill\'e sur les stress tests dans les deux projets. C\^ot\'e
+monitoring de fonds, j'ai mod\'elis\'e des sc\'enarios de crise de liquidit\'e
+et leur impact sur les covenants --- typiquement, que se passe-t-il si la
+NAV du fonds chute de 20\,\% en un mois.
+
+C\^ot\'e IFRS\,9, j'ai impl\'ement\'e des reverse stress tests qui
+identifient les combinaisons macro\'economiques --- ch\^omage, taux,
+immobilier --- qui am\`enent le portefeuille \`a un point de rupture.
+C'est pertinent pour CSPM parce que l'\'equipe doit anticiper les
+situations o\`u la capacit\'e de financement d'un client se d\'egrade
+avant que \c{c}a ne devienne critique. \fg{}
+\end{verbatimbox}
+
+\textbf{Mots-cl\'es \`a placer} : sc\'enario adverse, reverse stress test,
+point de rupture, anticipation, capacit\'e de financement.
+\end{modulebox}
+
+\vspace{6pt}
+
+% --- Module D ---
+\begin{modulebox}{Module D --- Si on te parle de \textbf{Python / Automatisation / Outils}}
+
+\begin{verbatimbox}
+\og J'ai automatis\'e l'ensemble de la cha\^ine avec Python : extraction
+de donn\'ees march\'e, calculs de NAV et LTV, g\'en\'eration de reportings
+Front Office. Mon cockpit IFRS\,9 recalcule un portefeuille complet de
+30\,000 lignes en environ une seconde, avec export Excel multi-onglets.
+
+J'utilise aussi VBA pour les reportings Excel classiques. Et de mani\`ere
+plus large, j'ai d\'evelopp\'e une vraie m\'ethodologie de travail avec
+l'IA --- pas juste des prompts basiques, mais du pilotage structur\'e
+pour acc\'el\'erer l'impl\'ementation tout en gardant le contr\^ole sur
+la qualit\'e et la rigueur financi\`ere. \fg{}
+\end{verbatimbox}
+
+\textbf{Mots-cl\'es \`a placer} : Python, VBA, automatisation, reporting,
+Excel, gain de temps, scalabilit\'e.
+
+\textbf{Transition naturelle vers le Module G} (IA) si l'interviewer rebondit.
+\end{modulebox}
+
+\vspace{6pt}
+
+% --- Module E ---
+\begin{modulebox}{Module E --- Si on te demande \textbf{\og Pourquoi BNP / Pourquoi CSPM ? \fg{}}}
+
+\begin{verbatimbox}
+\og Trois raisons. D'abord, le poste est \`a l'intersection exacte de mes
+deux projets --- Front Office avec une dimension risque forte. Ensuite,
+l'\'equipe CSPM travaille sur plusieurs offres de financement --- fonds de
+couverture, ABC, Capdoc, FOF --- ce qui offre une exposition tr\`es large
+aux produits de financement. Enfin, la relation directe avec les clients
+et la coordination avec New York, Paris et Londres me motivent parce que
+je veux comprendre le financement de bout en bout, pas seulement le
+mod\`ele derri\`ere. \fg{}
+\end{verbatimbox}
+
+\textbf{Variante si on insiste} : mentionner le Graduate Programme et le
+VIE comme perspectives d'\'evolution \`a moyen terme.
+\end{modulebox}
+
+\vspace{6pt}
+
+% --- Module F ---
+\begin{modulebox}{Module F --- Si on te demande tes \textbf{qualit\'es / d\'efauts / soft skills}}
+
+\begin{verbatimbox}
+\og Je suis rigoureux --- mon cockpit IFRS\,9 a 600 tests automatis\'es
+et a pass\'e trois audits successifs. Je suis aussi autonome --- les deux
+projets sont des initiatives personnelles, pas des travaux dirig\'es.
+Et j'aime aller au fond des sujets : quand j'ai identifi\'e des
+approximations math\'ematiques dans mon moteur de calcul, j'ai men\'e
+un audit de 24 points et tout corrig\'e plut\^ot que de laisser passer.
+
+Mon point d'am\'elioration, c'est que j'ai tendance \`a vouloir trop
+optimiser avant de livrer. J'apprends \`a privil\'egier le pragmatisme
+--- livrer une version fonctionnelle puis it\'erer. \fg{}
+\end{verbatimbox}
+\end{modulebox}
+
+\vspace{6pt}
+
+% --- Module G --- IA
+\begin{modulebox}{Module G --- Si on te parle d'\textbf{IA} ou si on te demande \textbf{\og Comment tu as fait le projet ? \fg{}}}
+
+\textit{Ce module est important. Le cockpit fait 15\,000 lignes --- un M1 ne code pas
+\c{c}a seul en deux mois. Il faut \^etre honn\^ete et transformer \c{c}a en force.}
+
+\begin{verbatimbox}
+\og Le cockpit fait 15\,000 lignes de code, 600 tests, et a pass\'e trois
+audits de rigueur math\'ematique. En M1, en deux mois, c'est \'evidemment
+pas du code \'ecrit ligne par ligne \`a la main. J'ai utilis\'e l'IA de
+mani\`ere intensive --- pas juste des prompts basiques, mais une vraie
+m\'ethodologie de pilotage.
+
+Concr\`etement : je con\c{c}ois l'architecture en amont, je r\'edige des
+sp\'ecifications fonctionnelles d\'etaill\'ees, je pilote des agents IA
+pour l'impl\'ementation, et surtout je fais la revue, la validation et la
+correction de chaque module.
+
+Ma valeur ajout\'ee c'est pas d'\'ecrire du Python --- c'est de
+\textbf{savoir qu'un ECL se calcule avec un taux de hasard et pas une
+approximation de Bernoulli}, que la LGD doit \^etre cyclique, que le RAROC
+int\`egre un CIR et un taux d'imposition. L'IA impl\'emente vite, mais
+elle ne sait pas si c'est financièrement correct. Moi si.
+
+Et concr\`etement pour une \'equipe comme CSPM, \c{c}a veut dire que l\`a o\`u
+quelqu'un met trois mois \`a automatiser un reporting ou un suivi de LTV,
+je peux le faire en une semaine. C'est un vrai levier de productivit\'e. \fg{}
+\end{verbatimbox}
+
+\begin{goodbox}{Ce que ce module d\'emontre}
+\begin{enumerate}[nosep, leftmargin=16pt]
+\item \textbf{Honn\^etet\'e} --- tu ne pr\'etends pas avoir tout cod\'e \`a la main
+\item \textbf{Expertise m\'etier} --- tu sais ce qui est financièrement correct
+\item \textbf{M\'ethodologie} --- ce n'est pas \og copier-coller de ChatGPT \fg{}
+\item \textbf{Valeur concr\`ete pour l'\'equipe} --- gain de productivit\'e mesurable
+\end{enumerate}
+\end{goodbox}
+
+\begin{dangerbox}{Les lignes rouges}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{Ne dis jamais} \og l'IA a cod\'e mon moteur d'ECL \fg{}
+      --- dis \og j'ai con\c{c}u et valid\'e un moteur d'ECL, en utilisant l'IA comme acc\'el\'erateur \fg{}
+\item \textbf{Ne d\'etaille pas} l'outillage (Claude Code, sous-agents, orchestration)
+      --- l'interviewer s'en fiche, il veut savoir ce que \c{c}a produit
+\item \textbf{Ne t'excuse pas} --- pr\'esente-le comme une comp\'etence, pas une b\'equille
+\end{itemize}
+\end{dangerbox}
+
+\textbf{M\'etaphore utile si besoin} : \og C'est comme un architecte qui ne pose pas
+les briques lui-m\^eme mais qui con\c{c}oit le b\^atiment et v\'erifie qu'il tient debout. \fg{}
+
+\textbf{Rebond offensif} : \og Si l'\'equipe CSPM a besoin d'automatiser un nouveau
+suivi de LTV ou de cr\'eer un reporting pour un type de fonds, je sais comment
+sp\'ecifier le besoin, produire rapidement avec l'IA, et surtout valider que le
+r\'esultat est financièrement correct. C'est pas juste taper un prompt et copier-coller. \fg{}
+
+\end{modulebox}
+
+\vspace{10pt}
+
+% ============================================================
+\section{Correspondance poste $\leftrightarrow$ comp\'etences}
+% ============================================================
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{5.2cm}p{4.0cm}p{4.0cm}@{}}
+\toprule
+\textbf{Mission CSPM} & \textbf{M\'emoire M1} & \textbf{Cockpit IFRS\,9} \\
+\midrule
+V\'erifier niveaux de LTV & Calcul NAV \& LTV, seuils & --- \\[3pt]
+Monitoring collat\'eral & Haircuts, \'eligibilit\'e & LGD cyclique, collateral \\[3pt]
+Analyser margin calls & Suivi margin calls auto. & --- \\[3pt]
+Optimiser financement & --- & RAROC, allocation capital \\[3pt]
+Relation avec Risques & --- & ECL, staging, stress tests \\[3pt]
+Onboarding clients & --- & --- \textit{(motivation)} \\[3pt]
+Stress tests & Tests liquidit\'e, covenants & RST, sc\'enarios macro \\[3pt]
+Excel, AI, automatisation & Python/VBA, reportings & Pipeline 1s, IA pilot\'ee \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%         PARTIE II --- GUIDE G\'EN\'ERAL D'ENTRETIEN
+%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage
+\part*{Partie II --- Guide g\'en\'eral d'entretien}
+\addcontentsline{toc}{part}{Partie II --- Guide g\'en\'eral d'entretien}
+
+% ============================================================
+\section{BNP Paribas --- Histoire \& actualit\'e CIB}
+% ============================================================
+
+\subsection{Dates cl\'es --- De la cr\'eation \`a aujourd'hui}
+
+\begin{graybox}{Chronologie}
+\begin{description}[style=nextline, leftmargin=0.8cm, nosep, itemsep=5pt]
+
+\item[\textbf{1848}] Cr\'eation du Comptoir National d'Escompte de Paris (CNEP) ---
+l'une des plus anciennes institutions bancaires fran\c{c}aises.
+
+\item[\textbf{1872}] Fondation de la Banque de Paris et des Pays-Bas (\textbf{Paribas}),
+banque d'investissement \`a vocation internationale.
+
+\item[\textbf{1966}] Naissance de la \textbf{BNP} (Banque Nationale de Paris) par fusion
+du CNEP et de la BNCI (Banque Nationale pour le Commerce et l'Industrie).
+
+\item[\textbf{1993}] Privatisation de la BNP par l'\'Etat fran\c{c}ais.
+
+\item[\textbf{1999--2000}] \textbf{Naissance de BNP Paribas.}
+F\'evrier 1999 : la Soci\'et\'e G\'en\'erale annonce une fusion avec Paribas.
+Mars 1999 : BNP lance une contre-offre hostile sur \textit{les deux} --- une premi\`ere
+dans la banque fran\c{c}aise. BNP obtient 65,2\,\% de Paribas mais seulement 31,8\,\%
+de la SocGen. R\'esultat : BNP + Paribas fusionnent le \textbf{23 mai 2000}.
+La nouvelle entit\'e devient la premi\`ere banque fran\c{c}aise et parmi le top\,5 europ\'een.
+
+\item[\textbf{2009}] \textbf{Acquisition de Fortis Bank} (Belgique \& Luxembourg) pour
+14,5\,Md\texteuro{}. Op\'eration transform\-ationnelle men\'ee en pleine crise financi\`ere
+apr\`es l'effondrement de Fortis. BNP Paribas devient la \textbf{premi\`ere banque de Belgique}.
+
+\item[\textbf{2019}] \textbf{Rachat du Prime Brokerage de Deutsche Bank} + Electronic Equities.
+$\sim$900 collaborateurs transf\'er\'es dans le monde. Donne \`a BNPP une plateforme
+d'ex\'ecution et de risk management de premier plan, pris\'ee par les fonds quantitatifs.
+Int\'egration achev\'ee fin 2021. \textit{C'est le moment fondateur du MFS actuel.}
+
+\item[\textbf{2022}] Vente de Bank of the West (banque de d\'etail US) \`a BMO pour
+$\sim$16,3\,Md\$. BNP se recentre sur le CIB et la banque de d\'etail europ\'eenne.
+Lancement du plan strat\'egique \textbf{GTS\,2025} (Growth, Technology, Sustainability).
+
+\item[\textbf{2023}] \textbf{Effondrement de Credit Suisse.} BNP recrute des \'equipes
+seniors de CS en prime brokerage et capte le flux client via un accord de r\'ef\'erencement.
+Opportunit\'e g\'en\'erationnelle pour gagner des parts de march\'e.
+
+\item[\textbf{2024--2025}] Acquisition d'\textbf{AXA Investment Managers} pour
+5,1\,Md\texteuro{} (finalis\'ee juillet 2025). Cr\'ee un leader europ\'een de la gestion
+d'actifs avec 1\,500\,Md\texteuro{} d'encours.
+
+\end{description}
+\end{graybox}
+
+\subsection{Chiffres cl\'es du Groupe (au 31 d\'ecembre 2025)}
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Indicateur} & \textbf{Valeur} \\
+\midrule
+Total des actifs & $\sim$2\,800\,Md\texteuro{} (2\textsuperscript{e} banque europ\'eenne, 8\textsuperscript{e} mondiale) \\
+Capitalisation boursi\`ere & $\sim$105\,Md\texteuro{} (jan.\,2026) \\
+Revenus Groupe (2025) & 51,2\,Md\texteuro{} (+4,9\,\%) \\
+R\'esultat net (2025) & \textbf{12,2\,Md\texteuro{}} --- record historique (+4,6\,\%) \\
+Ratio CET1 & 12,6\,\% \\
+ROTE & 11,6\,\% \\
+Collaborateurs & $\sim$190\,000 dans 64 pays \\
+Dividende 2025 & 5,16\,\texteuro{}/action (+7,7\,\%), payout 60\,\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{CIB --- R\'esultats 2025 (publi\'es le 5 f\'evrier 2026)}
+
+\textit{Le CIB a r\'ealis\'e une \textbf{ann\'ee record} avec +4,5\,\% de revenus
+(+7,7\,\% \`a taux de change constants).}
+
+\begin{center}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{M\'etier CIB} & \textbf{Revenus 2025} & \textbf{$\Delta$ YoY} \\
+\midrule
+Global Banking & 6\,244\,M\texteuro{} & $-$0,5\,\% \\
+Global Markets --- FICC & 5\,522\,M\texteuro{} & +8,3\,\% \\
+\textbf{Global Markets --- Equity \& Prime Services} & \textbf{4\,046\,M\texteuro{}} & \textbf{+10,2\,\%} \\
+Securities Services & 3\,185\,M\texteuro{} & +8,1\,\% \\
+\midrule
+\textbf{CIB Total} & \textbf{$\sim$19,0\,Md\texteuro{}} & \textbf{+4,5\,\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warnbox}{\`A retenir pour l'entretien}
+\textbf{Equity \& Prime Services} (l\`a o\`u se situe CSPM) est le m\'etier CIB qui
+cro\^it le plus vite : +10,2\,\% en 2025, +42,1\,\% au T1\,2025.
+Les encours prime brokerage ont \textbf{quadrupl\'e en 6 ans}.
+CAGR revenus >35\,\% depuis l'acquisition de Deutsche Bank en 2019.
+\end{warnbox}
+
+\subsection{Dirigeants cl\'es}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{5cm}p{4cm}p{4.5cm}@{}}
+\toprule
+\textbf{Fonction} & \textbf{Nom} & \textbf{Contexte} \\
+\midrule
+DG Groupe & Jean-Laurent Bonnaf\'e & DG depuis 2011, reconduit mai 2025 \\
+DGA + Pr\'esident CIB & Yann G\'erardin & Nomm\'e sept.\,2025 \\
+DGA + DG CIB & Olivier Osty & Ex-Head Global Markets \\
+Head Prime Brokerage & Ashley Wilson & Ex-Deutsche Bank \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Plan strat\'egique GTS\,2025 \& objectifs 2028}
+
+\begin{graybox}{GTS\,2025 --- 3 piliers}
+\begin{description}[style=nextline, leftmargin=0.8cm, nosep, itemsep=4pt]
+\item[\textbf{Growth}] Consolider le leadership europ\'een, croissance organique rentable.
+\item[\textbf{Technology}] IA, APIs, cloud comme fondations. \textbf{800+ applications IA en production}.
+Plateforme \og LLM as a Service \fg{} interne (partenariat strat\'egique avec Mistral AI).
+\item[\textbf{Sustainability}] 252\,Md\texteuro{} de financements durables accord\'es en 2025
+(objectif d\'epass\'e). Cadre Green Bond mis \`a jour en mai 2025.
+\end{description}
+\end{graybox}
+
+\begin{goodbox}{Objectifs 2028 (relev\'es en f\'evrier 2026)}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item ROTE cible : \textbf{>13\,\%} (relev\'e)
+\item Croissance r\'esultat net : \textbf{CAGR >10\,\%} (2025--2028)
+\item Ratio CET1 cible : \textbf{13\,\%} fin 2027
+\item Coefficient d'exploitation : \textbf{<56\,\%} d'ici 2028
+\item \'Economies op\'erationnelles : 600\,M\texteuro{} en 2025 + 600\,M\texteuro{} en 2026
+\end{itemize}
+\end{goodbox}
+
+\subsection{Prime Brokerage \& Fund Financing --- L'\'ecosyst\`eme CSPM}
+
+\begin{graybox}{\'Evolution du Prime Brokerage chez BNP}
+\begin{enumerate}[nosep, leftmargin=16pt]
+\item \textbf{Avant 2019} : prime brokerage de taille moyenne, principalement europ\'een,
+forte franchise FICC mais equity prime limit\'e.
+\item \textbf{2019 --- Acquisition Deutsche Bank} : plateforme d'ex\'ecution \'electronique
+reconnue, $\sim$900 collaborateurs, relations \'etablies avec les grands hedge funds
+multi-strat\'egies et quantitatifs. \textit{Moment fondateur.}
+\item \textbf{2021--2022} : Int\'egration compl\`ete. Plateforme prime mondiale unifi\'ee.
+\item \textbf{2023} : Sortie de Credit Suisse --- BNP recrute des \'equipes CS seniors et
+capture le flux client. Opportunit\'e unique.
+\item \textbf{2024--2026} : +600\,bp de part de portefeuille chez les 30 premiers clients.
+Expansion Asie, Moyen-Orient, US.
+\end{enumerate}
+\end{graybox}
+
+\begin{graybox}{Offre de financement de fonds --- ce que fait MFS}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{Equity bridge facilities} (lignes de souscription / capital call facilities)
+      adoss\'ees aux engagements non appel\'es des LPs
+\item \textbf{Margin financing} dans 31 march\'es et 13 devises
+\item \textbf{Securities lending} avec inventaire profond (y compris Chine, march\'es du Golfe)
+\item \textbf{Cross-margining} actions, cr\'edit, futures et options sur une plateforme unique
+\item \textbf{Capital introduction} --- \'equipes d\'edi\'ees dans toutes les r\'egions
+\end{itemize}
+BNP est l'une des \textbf{4 seules banques au monde} offrant la suite compl\`ete
+de services aux investisseurs (prime brokerage + clearing + d\'eriv\'es list\'es +
+repo/financing).
+\end{graybox}
+
+\subsection{Paysage concurrentiel --- O\`u se situe BNP}
+
+\begin{center}
+\small
+\begin{tabular}{@{}clp{6.5cm}@{}}
+\toprule
+\textbf{Tier} & \textbf{Banque} & \textbf{Position} \\
+\midrule
+\multirow{3}{*}{\textbf{Tier 1}} & Goldman Sachs & \#1 mondial, $\sim$63\,\% de p\'en\'etration chez les HF >1\,Md\$ \\
+ & Morgan Stanley & \#2, 226 nouveaux fonds au T1\,2025 \\
+ & JP Morgan & \#3, 210 nouveaux fonds au T1\,2025 \\
+\midrule
+\multirow{3}{*}{\textbf{Tier 2}} & \textbf{BNP Paribas} & \textbf{\#6--7 mondial, \#1--2 en Europe},
+  challenger \`a la croissance la plus rapide (CAGR >35\,\%) \\
+ & Barclays & Fort en equities \& FICC prime europ\'een \\
+ & UBS (ex-CS) & En phase de reconsolidation post-int\'egration CS \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textit{Ambition d\'eclar\'ee de BNP : devenir \og incontestablement le premier en dehors
+des US \fg{}.}
+
+\subsection{R\'eglementation --- B\^ale\,IV / CRR3}
+
+\begin{graybox}{Ce qu'il faut savoir}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{CRR3 en vigueur depuis le 1\textsuperscript{er} janvier 2025} dans l'UE,
+      CRD6 depuis le 11 janvier 2026
+\item \textbf{Output floor} : 50\,\% en 2025, mont\'ee progressive \`a 72,5\,\% d'ici 2030
+\item \textbf{Impact sur BNP} : $\sim$20\,bp de hausse des exigences de capital vs. pairs.
+      Le ratio CET1 peut baisser \`a mesure que les exigences montent.
+\item \textbf{FRTB} (risque de march\'e) : certains \'el\'ements report\'es au 1\textsuperscript{er}
+      janvier 2026
+\item BNP cible un CET1 de 13\,\% fin 2027, offrant un coussin substantiel
+\end{itemize}
+\textbf{Lien avec CSPM} : CRR3 augmente le co\^ut en capital des expositions.
+Un bon monitoring du collat\'eral (LTV bas, haircuts conservateurs) \textbf{r\'eduit le RW}
+et donc le capital immobilis\'e. Le travail de CSPM a un impact direct sur l'efficacit\'e
+du bilan.
+\end{graybox}
+
+\subsection{IA chez BNP Paribas --- \'El\'ements \`a placer}
+
+\begin{graybox}{Les initiatives IA du Groupe}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{800+ applications IA en production} dans tous les m\'etiers
+\item Plateforme \textbf{\og LLM as a Service \fg{}} : acc\`es s\'ecuris\'e aux mod\`eles
+      open source, Mistral AI et mod\`eles internes via une interface standardis\'ee
+\item \textbf{NOA} : assistant IA d\'eploy\'e sur la plateforme Centric pour les clients
+      corporate du CIB
+\item \textbf{CapLink Private} : portail automatis\'e par IA/robotique pour le traitement
+      et la validation des appels de capital chez les clients fonds
+\item \textbf{Outils ESG} : NLP/LLM pour estimer les \'emissions GES (Scope 1 \& 2)
+      des entreprises non-reportantes
+\item \textbf{Intelligent Document Processing} : automatisation des workflows documentaires
+\end{itemize}
+\end{graybox}
+
+\subsection{Distinctions r\'ecentes}
+
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{IFR Awards 2025} : 5 prix dont Sustainable Finance House of the Year,
+      Euro Bond House of the Year, EMEA CLO House (2\textsuperscript{e} ann\'ee cons\'ecutive)
+\item \textbf{Euromoney 2025} : 14 prix dont Europe's Best Bank for Securities Services,
+      Europe's Best Investment Bank for Financing
+\item \textbf{Risk.net} : \textbf{Prime Broker of the Year} --- BNP Paribas
+\item \textbf{\#1 Western Europe Bookrunner 2025} : 48,8\,Md\$ de volume, 5,33\,\% de
+      part de march\'e --- devant JP Morgan
+\item \textbf{\#1 EMEA Loan Bookrunner 2024}
+\end{itemize}
+
+\vspace{6pt}
+
+\begin{goodbox}{Synth\`ese --- Les 5 faits \`a conna\^itre sur BNP CIB}
+\begin{enumerate}[nosep, leftmargin=16pt]
+\item \textbf{Premi\`ere banque de la zone euro}, 190\,000 collaborateurs, 64 pays
+\item \textbf{Equity \& Prime Services} = m\'etier CIB qui cro\^it le plus vite (+10,2\,\% en 2025),
+      quadruplement des encours prime en 6 ans
+\item \textbf{Acquisition Deutsche Bank 2019 + exit Credit Suisse 2023} = moment
+      g\'en\'erationnel pour le fund financing
+\item \textbf{800+ applications IA en production}, plateforme LLM interne, partenariat Mistral
+\item \textbf{R\'esultat net record 2025} (12,2\,Md\texteuro{}), objectifs 2028 relev\'es
+\end{enumerate}
+\end{goodbox}
+
+\vspace{10pt}
+
+% ============================================================
+\section{Comprendre le poste --- Ce que fait l'\'equipe CSPM}
+% ============================================================
+
+\begin{graybox}{L'\'equipe CSPM en bref}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{Rattachement} : Services Clients \& Gestion de Portefeuille, au sein du
+      Front Office des Services MFS (Margin Financing Services)
+\item \textbf{Activit\'e} : financement de fonds --- \`a l'origine fonds de fonds (FoF) avec
+      faible LTV (Loan-to-Value), p\'erim\`etre \'elargi depuis
+\item \textbf{Produits de financement} :
+  \begin{itemize}[nosep, leftmargin=12pt]
+    \item Fonds de couverture (hedge funds)
+    \item Financement ABC (Asset-Based Credit --- adoss\'e aux actifs)
+    \item Offre de discount engag\'e
+    \item Capdoc (Capital Document --- facilit\'e de cr\'edit)
+    \item Financement FOHF de tiers avec facilit\'es de levier
+  \end{itemize}
+\item \textbf{R\^ole cl\'e} : centraliser les demandes clients li\'ees au financement
+      \textbf{et} fournir une assistance post-trade (options, change, FX, pr\^ets, remboursements)
+\item \textbf{Position dans la banque} : Front Office mais relation forte avec le d\'epartement
+      des risques --- le LTV est l'indicateur qui connecte les deux
+\end{itemize}
+\end{graybox}
+
+\subsection{Les 6 missions du stagiaire --- d\'ecrypt\'ees}
+
+\begin{enumerate}[leftmargin=16pt]
+\item \textbf{V\'erifier le niveau de LTV des clients en financement au sein de notre desk}\\
+\textcolor{warmgray}{$\rightarrow$ Tu re\c{c}ois des donn\'ees de NAV des fonds, tu calcules le LTV
+(encours de pr\^et / valeur du collat\'eral), tu v\'erifies qu'on est sous le seuil contractuel.
+C'est du monitoring quotidien, souvent sur Excel/Bloomberg.}
+
+\item \textbf{Monitoring du collat\'eral et optimisation de la capacit\'e de financement}\\
+\textcolor{warmgray}{$\rightarrow$ V\'erifier que les actifs en garantie sont toujours \'eligibles,
+appliquer les bons haircuts, identifier des marges de man\oe{}uvre pour que le client puisse
+emprunter davantage sans d\'epasser les seuils.}
+
+\item \textbf{Analyser des demandes de marge et \'emettre des pre-approvals}\\
+\textcolor{warmgray}{$\rightarrow$ Quand le LTV se d\'egrade, il faut appeler de la marge (margin call).
+Tu analyses la situation, estimes le montant, et pr\'epares un avis pour le manager.}
+
+\item \textbf{R\'epondre aux diverses demandes des clients}\\
+\textcolor{warmgray}{$\rightarrow$ Questions sur les positions, les mouvements de tr\'esorerie,
+les \'ech\'eanciers. Relation client directe.}
+
+\item \textbf{Participation \`a l'onboarding de nouveaux clients}\\
+\textcolor{warmgray}{$\rightarrow$ Analyse des portefeuilles du nouveau client avec la Structuration,
+matrices d'\'eligibilit\'e, capacit\'e d'emprunt.}
+
+\item \textbf{Demandes ad hoc de structuration et du management}\\
+\textcolor{warmgray}{$\rightarrow$ Analyses ponctuelles, projets d'am\'elioration, reportings sp\'eciaux.
+C'est l\`a que tes comp\'etences Python/IA sont les plus valoris\'ees.}
+\end{enumerate}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Vocabulaire technique --- Ma\^itriser avant l'entretien}
+% ============================================================
+
+\textcolor{warmgray}{\textit{L'interviewer peut tester tes connaissances de base. Tu dois
+d\'efinir chaque terme ci-dessous en 1--2 phrases, sans h\'esiter.}}
+
+\subsection{Financement \& collat\'eral}
+
+\begin{graybox}{D\'efinitions cl\'es}
+\begin{description}[style=nextline, leftmargin=1cm, nosep, itemsep=6pt]
+\item[\textbf{LTV (Loan-to-Value)}]
+Ratio encours de pr\^et / valeur du collat\'eral.
+Exemple : pr\^et de 70\,M\texteuro{} garanti par un portefeuille de 100\,M\texteuro{}
+$\rightarrow$ LTV = 70\,\%.
+Un LTV qui monte = risque qui augmente.
+
+\item[\textbf{NAV (Net Asset Value)}]
+Valeur liquidative nette d'un fonds = actifs $-$ passifs.
+Publi\'ee quotidiennement ou mensuellement selon le fonds.
+C'est la base du calcul de LTV.
+
+\item[\textbf{Haircut}]
+D\'ecote appliqu\'ee \`a la valeur d'un actif mis en garantie pour refl\'eter
+sa volatilit\'e et son risque de liquidit\'e.
+Exemple : actions liquides $\rightarrow$ haircut 10\,\% ; immobilier $\rightarrow$ haircut 40\,\%.
+Collat\'eral apr\`es haircut = valeur march\'e $\times$ (1 $-$ haircut).
+
+\item[\textbf{Margin call (appel de marge)}]
+Demande adress\'ee au client de d\'eposer du collat\'eral suppl\'ementaire
+(ou de rembourser une partie du pr\^et) quand le LTV d\'epasse le seuil contractuel.
+
+\item[\textbf{Covenant}]
+Clause contractuelle qui impose des limites au client (LTV max,
+diversification minimale, etc.). Le non-respect peut d\'eclencher un
+margin call ou un \'ev\'enement de d\'efaut.
+
+\item[\textbf{\'Eligibilit\'e}]
+Crit\`eres qui d\'eterminent si un actif peut servir de collat\'eral
+(liquidit\'e, notation, devise, concentration\ldots).
+
+\item[\textbf{ABC (Asset-Based Credit)}]
+Financement adoss\'e directement aux actifs du fonds (pas \`a sa NAV globale).
+Chaque actif a un taux d'avance sp\'ecifique selon son profil de risque.
+
+\item[\textbf{Capdoc (Capital Call Document)}]
+Facilit\'e de cr\'edit adoss\'ee aux engagements non appel\'es (\textit{unfunded commitments})
+des investisseurs d'un fonds. Utilis\'e par les fonds de PE pour financer des acquisitions
+avant d'appeler le capital des LPs.
+
+\item[\textbf{FoF / FOHF (Fund of Hedge Funds)}]
+Fonds qui investit dans un portefeuille de hedge funds.
+Diversification mais double couche de frais. Historiquement le c\oe{}ur de CSPM.
+
+\item[\textbf{Facility / ligne de cr\'edit}]
+Accord de financement entre la banque et le client : montant maximal,
+dur\'ee, collat\'eral requis, covenants. Le stagiaire monitore l'utilisation.
+\end{description}
+\end{graybox}
+
+\subsection{Risque de cr\'edit (niveau Front Office)}
+
+\begin{graybox}{Notions \`a conna\^itre --- pas besoin d'\^etre expert, mais de comprendre la logique}
+\begin{description}[style=nextline, leftmargin=1cm, nosep, itemsep=6pt]
+\item[\textbf{Exposition (EAD)}]
+Montant que la banque perdrait si le client fait d\'efaut.
+Pour CSPM = encours du pr\^et + engagements potentiels.
+
+\item[\textbf{RWA (Risk-Weighted Assets)}]
+Actifs pond\'er\'es par le risque --- base du calcul de capital r\'eglementaire.
+Un LTV \'elev\'e $\rightarrow$ RW plus \'elev\'e $\rightarrow$ plus de capital immobilis\'e.
+
+\item[\textbf{ECL (Expected Credit Loss)}]
+Perte attendue sous IFRS\,9 = PD $\times$ LGD $\times$ EAD.
+Tu n'as pas besoin de le calculer en stage, mais tu dois comprendre
+que le d\'epartement des risques l'utilise pour \'evaluer les expositions
+que tu monitores.
+
+\item[\textbf{IFRS\,9 --- staging}]
+Stage 1 (performant), Stage 2 (d\'egradation significative), Stage 3 (d\'efaut).
+Un client dont le LTV se d\'egrade peut passer en Stage 2 $\rightarrow$ impact
+provisionnel pour la banque.
+\end{description}
+\end{graybox}
+
+\subsection{Environnement BNP CIB}
+
+\begin{graybox}{Contexte organisationnel}
+\begin{description}[style=nextline, leftmargin=1cm, nosep, itemsep=6pt]
+\item[\textbf{CIB (Corporate \& Institutional Banking)}]
+Banque de financement et d'investissement. C'est le p\^ole qui g\`ere
+les grands clients institutionnels (fonds, corporates, souverains).
+
+\item[\textbf{MFS (Margin Financing Services)}]
+Sous-ensemble du Front Office qui fournit des solutions de financement
+avec effet de levier aux fonds d'investissement.
+
+\item[\textbf{Front Office vs. Middle/Back Office}]
+Front Office = contact client, pricing, structuration, monitoring.
+CSPM est FO mais avec une forte composante op\'erationnelle (monitoring quotidien).
+
+\item[\textbf{Structuration}]
+\'Equipe qui con\c{c}oit les produits de financement (termes, collat\'eral,
+covenants). CSPM travaille en aval : une fois le deal structur\'e,
+c'est CSPM qui monitore au quotidien.
+\end{description}
+\end{graybox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Questions classiques --- R\'eponses pr\'epar\'ees}
+% ============================================================
+
+\subsection{\og Pr\'esentez-vous \fg{} ($\sim$2 minutes)}
+
+\begin{verbatimbox}
+\og Je suis en M1 \`a Paris-Saclay, sp\'ecialisation finance et \'economie
+quantitative. Mon parcours est orient\'e vers l'analyse de risque et le
+financement : mon m\'emoire porte sur le monitoring de fonds et la gestion
+du collat\'eral, et j'ai d\'evelopp\'e en parall\`ele un cockpit de risque
+cr\'edit IFRS\,9 complet.
+
+\textit{[Ins\'erer le pitch de 90s]}
+
+Je cherche un stage o\`u je peux appliquer ces comp\'etences dans un
+environnement op\'erationnel, avec une relation client directe. Le poste
+CSPM coche toutes les cases. \fg{}
+\end{verbatimbox}
+
+\subsection{\og Qu'est-ce que vous connaissez de BNP Paribas ? \fg{}}
+
+\begin{verbatimbox}
+\og BNP Paribas est la premi\`ere banque de la zone euro, avec un r\'esultat
+net record de 12,2 milliards d'euros en 2025. C\^ot\'e CIB, le m\'etier
+Equity \& Prime Services cro\^it de plus de 10\,\% par an --- c'est le
+segment le plus dynamique, port\'e par l'acquisition du prime brokerage
+de Deutsche Bank en 2019 et la captation de clients apr\`es la sortie
+de Credit Suisse en 2023.
+
+Ce qui m'int\'eresse sp\'ecifiquement, c'est que BNP est l'une des quatre
+seules banques au monde \`a offrir la suite compl\`ete de services aux
+investisseurs, et que l'\'equipe CSPM est au c\oe{}ur de cette dynamique
+--- avec un p\'erim\`etre qui s'est \'elargi au-del\`a des fonds de fonds
+initiaux pour couvrir le hedge fund financing, l'ABC et le Capdoc.
+
+Et le plan GTS\,2025 montre une banque qui investit massivement dans
+l'IA --- plus de 800 applications en production, un partenariat avec
+Mistral --- ce qui est coh\'erent avec mon profil. \fg{}
+\end{verbatimbox}
+
+\subsection{\og Votre plus grand d\'efi / \'echec ? \fg{}}
+
+\begin{verbatimbox}
+\og Dans mon cockpit IFRS\,9, j'ai d\'ecouvert apr\`es des semaines de
+d\'eveloppement que mon RAROC \'etait insensible aux stress
+macro\'economiques --- il restait \`a 2,85\,\% quel que soit le sc\'enario.
+
+Le probl\`eme \'etait subtil : les revenus d'int\'er\^ets \'etaient
+calcul\'es \`a partir du spread stress\'e, ce qui compensait presque
+exactement la hausse des pertes attendues. Il a fallu repenser le
+mod\`ele en s\'eparant les spreads d'origination des conditions de
+march\'e stress\'ees.
+
+Ce que j'en retiens : quand un r\'esultat semble trop stable, il faut
+creuser. La rigueur de validation est aussi importante que la mod\'elisation. \fg{}
+\end{verbatimbox}
+
+\subsection{\og O\`u vous voyez-vous dans 5 ans ? \fg{}}
+
+\begin{verbatimbox}
+\og \`A court terme, je veux consolider mes comp\'etences en financement
+structur\'e --- comprendre les produits, la relation client, le monitoring
+au quotidien. Si le stage se passe bien, le Graduate Programme ou un VIE
+me permettrait de voir d'autres desks ou d'autres g\'eographies.
+
+\`A moyen terme, je me vois \'evoluer vers un r\^ole d'analyste senior
+en financement de fonds, \`a l'intersection entre la structuration et
+la gestion du risque --- exactement l\`a o\`u se situe CSPM aujourd'hui. \fg{}
+\end{verbatimbox}
+
+\subsection{\og Pourquoi vous et pas un autre candidat ? \fg{}}
+
+\begin{verbatimbox}
+\og La plupart des candidats M1 connaissent la th\'eorie du financement.
+Moi, j'ai impl\'ement\'e un syst\`eme de monitoring de LTV et de margin
+calls de bout en bout. Et avec le cockpit IFRS\,9, je comprends aussi
+le c\^ot\'e risque --- ECL, staging, capital --- ce qui me permet d'\^etre
+op\'erationnel quand l'\'equipe \'echange avec le d\'epartement des risques.
+
+En plus, je sais utiliser l'IA pour acc\'el\'erer le travail --- pas
+juste des prompts, mais un pilotage structur\'e qui me rend concr\`etement
+plus productif. Si l'\'equipe a besoin d'automatiser un nouveau reporting
+ou un suivi, je peux livrer en jours, pas en semaines. \fg{}
+\end{verbatimbox}
+
+\subsection{\og Avez-vous d\'ej\`a travaill\'e en \'equipe ? \fg{}}
+
+\begin{verbatimbox}
+\og Mes projets sont individuels, mais ils m'ont appris des m\'ethodes
+d'\'equipe. Mon cockpit a 600 tests automatis\'es et une architecture
+modulaire --- c'est exactement ce qu'on fait quand on code \`a plusieurs
+pour que chacun puisse contribuer sans casser le travail des autres.
+
+Et dans mes projets universitaires en groupe, j'ai souvent pris le
+r\^ole de structuration technique --- d\'efinir le cadre de travail
+pour que chacun puisse avancer de mani\`ere autonome. \fg{}
+\end{verbatimbox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Questions techniques potentielles}
+% ============================================================
+
+\textcolor{warmgray}{\textit{L'interviewer est un manager CSPM, pas un quant. Les questions
+techniques seront orient\'ees m\'etier, pas mod\'elisation.}}
+
+\vspace{6pt}
+
+\begin{graybox}{Q1 : \og Le LTV d'un client passe de 65\,\% \`a 85\,\%. Que faites-vous ? \fg{}}
+\textbf{R\'eponse structur\'ee} :
+\begin{enumerate}[nosep, leftmargin=16pt]
+\item V\'erifier la cause : la NAV a baiss\'e ? Le client a tir\'e davantage sur sa ligne ?
+\item Comparer au seuil contractuel (covenant) --- si on est au-dessus, margin call
+\item Calculer le montant de l'appel de marge : combien faut-il pour revenir sous le seuil
+\item Contacter le client et/ou escalader au manager
+\item Documenter et informer le risk management
+\end{enumerate}
+\end{graybox}
+
+\vspace{4pt}
+
+\begin{graybox}{Q2 : \og Qu'est-ce qu'un haircut et pourquoi c'est important ? \fg{}}
+\textbf{R\'eponse} : C'est la d\'ecote appliqu\'ee au collat\'eral pour absorber la volatilit\'e
+en cas de liquidation. Un haircut de 20\,\% sur un portefeuille de 100\,M\texteuro{} signifie
+qu'on ne compte que 80\,M\texteuro{} de garantie. C'est important parce que \c{c}a d\'etermine
+directement la capacit\'e de financement du client et le LTV effectif.
+\end{graybox}
+
+\vspace{4pt}
+
+\begin{graybox}{Q3 : \og Quelle diff\'erence entre financement ABC et financement classique ? \fg{}}
+\textbf{R\'eponse} : Le financement classique repose sur la NAV globale du fonds.
+L'ABC (Asset-Based Credit) regarde actif par actif --- chaque ligne a son propre
+taux d'avance selon sa liquidit\'e et son risque. C'est plus granulaire, plus
+conservateur, mais permet de financer des portefeuilles h\'et\'erog\`enes o\`u la NAV
+globale serait trop volatile.
+\end{graybox}
+
+\vspace{4pt}
+
+\begin{graybox}{Q4 : \og Comment l'IA peut aider dans le monitoring de portefeuilles ? \fg{}}
+\textbf{R\'eponse} : Trois niveaux. D'abord, \textbf{automatisation des calculs r\'ep\'etitifs}
+--- calcul de LTV quotidien, extraction de NAV, g\'en\'eration de reportings.
+Ensuite, \textbf{d\'etection d'anomalies} --- rep\'erer les fonds dont le
+comportement d\'evie de l'historique. Enfin, \textbf{acc\'el\'eration des analyses
+ad hoc} --- quand un manager demande un nouveau reporting, l'IA permet de le
+prototyper en heures plut\^ot qu'en semaines.
+\end{graybox}
+
+\vspace{4pt}
+
+\begin{graybox}{Q5 : \og Expliquez IFRS\,9 en une minute \fg{}}
+\textbf{R\'eponse} : IFRS\,9 est la norme comptable qui r\'egit le provisionnement
+des cr\'eances. Avant (IAS\,39), on provisionnait quand la perte \'etait \og av\'er\'ee \fg{}.
+Depuis IFRS\,9, on provisionne les pertes \og attendues \fg{} (ECL = PD $\times$ LGD $\times$ EAD).
+Les cr\'eances sont class\'ees en 3 stages : Stage 1 (sain, perte \`a 12 mois),
+Stage 2 (d\'egradation significative, perte \textit{lifetime}), Stage 3 (d\'efaut).
+Pour CSPM, c'est pertinent parce qu'un client dont le LTV se d\'egrade peut passer
+en Stage 2, ce qui augmente le co\^ut de provisionnement pour la banque.
+\end{graybox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Gestion du stress \& body language}
+% ============================================================
+
+\begin{goodbox}{Les fondamentaux}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{Contact visuel} --- alterner entre les deux interviewers (2 entretiens avec des managers op\'erationnels)
+\item \textbf{Posture} --- droit, l\'eg\`erement pench\'e en avant (int\'er\^et), mains visibles sur la table
+\item \textbf{Silences} --- c'est \textbf{OK} de prendre 3 secondes pour r\'efl\'echir avant de r\'epondre.
+      Dire \og C'est une bonne question, laissez-moi structurer ma r\'eponse \fg{} est mieux qu'un \og euh\ldots \fg{}
+\item \textbf{Si tu ne sais pas} --- \og Je ne connais pas ce produit en d\'etail, mais
+      voici comment j'aborderais le probl\`eme\ldots \fg{}. Ne jamais inventer.
+\item \textbf{Sourire} --- un entretien c'est aussi un test de compatibilit\'e humaine.
+      L'\'equipe cherche quelqu'un avec qui ils veulent travailler 6 mois.
+\end{itemize}
+\end{goodbox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Logistique \& checklist}
+% ============================================================
+
+\begin{graybox}{Avant l'entretien}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item[$\square$] \textbf{Tenue} : costume ou blazer + chemise, pas de cravate (stage FO, pas interview MD).
+      Pantin = bureau, pas trading floor, mais rester professionnel.
+\item[$\square$] \textbf{Trajet} : v\'erifier l'acc\`es au b\^atiment BNP \`a Pantin (m\'etro ligne 5,
+      Hoche ou Eglise de Pantin). Arriver 10--15 min en avance.
+\item[$\square$] \textbf{CV imprim\'e} : 2--3 copies (un par interviewer + un pour toi).
+\item[$\square$] \textbf{Bloc-notes} : pour noter les noms des interviewers et leurs questions.
+\item[$\square$] \textbf{Recherche LinkedIn} : identifier les managers qui t'interviewent si possible.
+      Conna\^itre leur parcours montre de l'int\'er\^et.
+\end{itemize}
+\end{graybox}
+
+\begin{graybox}{Apr\`es l'entretien}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item[$\square$] \textbf{Email de remerciement} dans les 24h --- court (5 lignes), personnalis\'e
+      avec un \'el\'ement sp\'ecifique de la conversation.
+\item[$\square$] \textbf{D\'ebriefing personnel} : noter les questions pos\'ees, tes r\'eponses,
+      ce qui a bien march\'e et ce qui peut \^etre am\'elior\'e (utile si deuxi\`eme tour).
+\end{itemize}
+\end{graybox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Questions \`a poser en fin d'entretien}
+% ============================================================
+
+\textcolor{warmgray}{\textit{Pr\'epare 4--5 questions, poses-en 2--3 selon le temps. \'Evite
+les questions dont la r\'eponse est dans l'annonce.}}
+
+\begin{enumerate}[leftmargin=16pt]
+\item \og Quels types de fonds repr\'esentent la majorit\'e de l'activit\'e CSPM
+      aujourd'hui --- plut\^ot hedge funds, fonds de dette, ou mixte ? \fg{}
+\item \og Comment se passe concr\`etement la coordination avec l'\'equipe de
+      recherche \`a New York ? \fg{}
+\item \og Quel est l'outil principal utilis\'e pour le suivi de LTV au quotidien
+      --- d\'eveloppement interne, Bloomberg, ou autre ? \fg{}
+\item \og Y a-t-il des projets d'automatisation en cours dans l'\'equipe o\`u un
+      stagiaire pourrait apporter de la valeur ajout\'ee ? \fg{}
+\item \og Quel est le plus grand d\'efi op\'erationnel de l'\'equipe en ce moment ? \fg{}
+\end{enumerate}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Pi\`eges \`a \'eviter --- R\'ecapitulatif}
+% ============================================================
+
+\begin{dangerbox}{Les 10 erreurs qui tuent un entretien}
+\begin{enumerate}[nosep, leftmargin=16pt]
+\item \textbf{R\'eciter} un pitch appris par c\oe{}ur --- adapt\'e \`a la dynamique
+\item \textbf{Parler trop longtemps} --- r\`egle des 90 secondes par r\'eponse
+\item \textbf{Dire} \og j'ai chang\'e de projet \fg{} --- dis \og j'ai approfondi \fg{}
+\item \textbf{Sur-vendre la technique} (TabNet, Mahalanobis\ldots) \`a un manager Front Office
+\item \textbf{Minimiser le m\'emoire M1} --- c'est lui le match direct
+\item \textbf{Dire} \og c'est un projet acad\'emique \fg{} --- dis \og j'ai construit / impl\'ement\'e \fg{}
+\item \textbf{Mentir sur l'IA} --- l'honn\^etet\'e + le framing \og pilotage \fg{} est bien plus fort
+\item \textbf{Critiquer} une ancienne \'equipe/projet/prof --- toujours positif
+\item \textbf{Ne poser aucune question} --- montre un manque d'int\'er\^et
+\item \textbf{Parler salaire en premier} --- c'est un stage, la gratification est fix\'ee par la loi
+\end{enumerate}
+\end{dangerbox}
+
+\vspace{10pt}
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%         PARTIE III --- ENGLISH SWITCH
+%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage
+\part*{Partie III --- English switch}
+\addcontentsline{toc}{part}{Partie III --- English switch}
+
+% ============================================================
+\section{G\'erer le passage en anglais}
+% ============================================================
+
+\begin{warnbox}{Pourquoi c'est tr\`es probable}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item L'annonce exige \textbf{\og anglais courant \fg{}}
+\item L'\'equipe CSPM coordonne avec \textbf{New York et Londres} au quotidien
+\item Le manager CSPM travaille avec l'\'equipe de recherche sur les fonds sp\'ecialis\'es \`a NY
+\item En CIB, le switch en anglais en milieu d'entretien est un \textbf{classique}
+      pour tester le niveau r\'eel --- plus fiable qu'un score TOEIC
+\end{itemize}
+\end{warnbox}
+
+\begin{goodbox}{Comment r\'eagir au switch}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{Ne pas paniquer.} Prends une seconde, souris, et r\'eponds naturellement.
+\item \textbf{Ne t'excuse pas} pour ton anglais --- ne dis pas \og Sorry, my English is not perfect \fg{}.
+      Parle, c'est tout.
+\item \textbf{Accepte un vocabulaire plus simple.} En anglais, tes phrases seront plus courtes
+      et moins nuanc\'ees qu'en fran\c{c}ais --- c'est normal et \c{c}a suffit.
+\item \textbf{Utilise le jargon financier.} LTV, NAV, margin call, haircut, covenant, ECL, staging
+      --- ces mots sont les m\^emes dans les deux langues. C'est ton filet de s\'ecurit\'e.
+\item \textbf{Si tu bloques sur un mot} : d\'ecris le concept. \og The ratio that measures how much
+      the loan is covered by the collateral \fg{} est parfaitement valide si tu oublies \og LTV \fg{}.
+\end{itemize}
+\end{goodbox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Pitch --- English version ($\sim$90 seconds)}
+% ============================================================
+
+\begin{pitchbox}
+``My Master's thesis at Paris-Saclay focuses on \textbf{fund monitoring and
+collateral management}: I built a decision-support system for hedge funds,
+with automated NAV and LTV calculations, margin call tracking, collateral
+valuation with haircuts, and liquidity stress tests on portfolios.
+
+Alongside this, I developed a full \textbf{IFRS\,9 credit risk cockpit} ---
+ECL computation, probability of default models, macroeconomic stress testing,
+RAROC and capital allocation --- which gave me an \textbf{end-to-end view}
+of the risk chain, from individual exposures all the way up to CRO-level
+reporting.
+
+Both projects converge towards the CSPM role: the first one gave me the
+\textbf{Front Office toolkit} --- LTV, collateral, margin calls --- and the
+second one gave me the \textbf{analytical depth on the Risk side}. That's
+exactly the intersection of this position, at the boundary between Front
+Office and the Risk department.''
+\end{pitchbox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{Key questions --- English answers}
+% ============================================================
+
+\subsection{``Tell me about yourself''}
+
+\begin{verbatimbox}
+``I'm a Master's student at Paris-Saclay, specialising in quantitative
+finance and economics. My work is oriented towards risk analysis and
+financing.
+
+\textit{[Insert the 90-second pitch above]}
+
+I'm looking for an internship where I can apply these skills in an
+operational environment, with direct client interaction. The CSPM role
+is exactly that.''
+\end{verbatimbox}
+
+\subsection{``Why BNP Paribas? Why CSPM?''}
+
+\begin{verbatimbox}
+``Three reasons. First, the role sits at the exact intersection of my
+two projects --- Front Office with a strong risk dimension. Second,
+the CSPM team covers a wide range of financing products --- hedge funds,
+ABC, Capdoc, fund of funds --- which gives me broad exposure to the
+fund financing business. And third, BNP's Equity and Prime Services
+division is the fastest-growing segment in CIB --- over 10 percent
+revenue growth in 2025, and prime brokerage balances have quadrupled
+in six years. It's an exciting time to join this business.''
+\end{verbatimbox}
+
+\subsection{``What is LTV and why does it matter?''}
+
+\begin{verbatimbox}
+``LTV stands for Loan-to-Value. It's the ratio of the outstanding loan
+to the value of the collateral. For example, if a client has a 70-million
+euro loan secured by a portfolio worth 100 million, the LTV is 70 percent.
+
+It matters because it's the key risk indicator for fund financing. When
+the LTV goes up --- either because the collateral value drops or the client
+draws more on the facility --- the bank's exposure increases relative to the
+guarantee. If it breaches the contractual covenant, we need to issue a
+margin call.''
+\end{verbatimbox}
+
+\subsection{``Walk me through a margin call scenario''}
+
+\begin{verbatimbox}
+``Let's say a client's LTV goes from 65 to 85 percent, and the covenant
+is set at 75 percent. First, I'd check the cause --- has the NAV of the
+fund dropped, or did the client draw more on the facility?
+
+Then I'd calculate how much additional collateral is needed to bring the
+LTV back below 75 percent. I'd prepare the analysis for the manager, and
+we'd contact the client to request either additional collateral or a
+partial repayment of the loan. At the same time, I'd flag it to the
+risk department and document everything.''
+\end{verbatimbox}
+
+\subsection{``Tell me about your IFRS\,9 project''}
+
+\begin{verbatimbox}
+``I built a complete IFRS\,9 credit risk cockpit in Python. It covers the
+full pipeline: PD modelling with three model families --- logistic regression
+with scorecards, gradient boosting, and deep learning --- LGD estimation
+with cyclical adjustments, and a multi-factor SICR staging engine.
+
+The cockpit also computes RAROC, capital allocation, reverse stress tests,
+and generates a 7-tab dashboard for CRO reporting. The whole portfolio
+recalculates in about one second.
+
+What's directly relevant for CSPM is that I understand how the risk
+assumed by the bank on each exposure relates to the collateral held.
+When the team discusses with the risk department, I can speak their
+language.''
+\end{verbatimbox}
+
+\subsection{``How did you build a 15,000-line project as an M1 student?''}
+
+\begin{verbatimbox}
+``I used AI as an implementation accelerator --- not just basic prompts,
+but a structured methodology. I designed the architecture upfront, wrote
+detailed functional specifications, then steered the AI for implementation,
+and most importantly, I reviewed, validated and corrected every module.
+
+My value added is not writing Python code. It's knowing that an ECL should
+be computed using hazard rates rather than a Bernoulli approximation, that
+LGD needs to be cyclical, that RAROC must include a cost-income ratio and
+a tax rate. The AI implements fast, but it doesn't know whether the output
+is financially correct. I do.
+
+For a team like CSPM, it means that if you need to automate a new LTV
+tracker or build a reporting tool, I can deliver in days rather than weeks.
+It's a real productivity lever.''
+\end{verbatimbox}
+
+\subsection{``What do you know about BNP Paribas?''}
+
+\begin{verbatimbox}
+``BNP Paribas is the largest bank in the eurozone, with a record net income
+of 12.2 billion euros in 2025. On the CIB side, Equity and Prime Services
+is the fastest-growing business line --- over 10 percent growth last year ---
+driven by the Deutsche Bank prime brokerage acquisition in 2019 and the
+capture of clients after Credit Suisse exited in 2023.
+
+What interests me specifically is that BNP is one of only four banks
+globally that offer the full suite of investor services --- prime brokerage,
+clearing, listed derivatives, and securities financing. And with over
+800 AI applications in production and a partnership with Mistral AI,
+the bank is also investing heavily in technology.''
+\end{verbatimbox}
+
+\subsection{``What are your strengths and weaknesses?''}
+
+\begin{verbatimbox}
+``I'm rigorous --- my IFRS\,9 cockpit has 600 automated tests and went
+through three mathematical audits. I'm also autonomous --- both projects
+were personal initiatives, not coursework.
+
+My area for improvement is that I sometimes tend to over-optimise before
+delivering. I'm learning to prioritise pragmatism --- ship a working
+version first, then iterate.''
+\end{verbatimbox}
+
+\subsection{``Where do you see yourself in five years?''}
+
+\begin{verbatimbox}
+``In the short term, I want to build a solid foundation in fund financing
+--- understand the products, the client relationships, the day-to-day
+monitoring. If the internship goes well, the Graduate Programme or a VIE
+would let me see other desks or other geographies.
+
+In the medium term, I see myself growing into a senior analyst role in
+fund financing, at the intersection of structuring and risk management ---
+exactly where CSPM sits today.''
+\end{verbatimbox}
+
+\vspace{8pt}
+
+% ============================================================
+\section{English vocabulary cheat sheet}
+% ============================================================
+
+\textcolor{warmgray}{\textit{Termes que tu utilises en fran\c{c}ais et dont tu dois conna\^itre
+l'\'equivalent anglais naturel.}}
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll|ll@{}}
+\toprule
+\textbf{Fran\c{c}ais} & \textbf{English} & \textbf{Fran\c{c}ais} & \textbf{English} \\
+\midrule
+Collat\'eral & Collateral & Appel de marge & Margin call \\
+D\'ecote & Haircut & Covenant & Covenant \\
+Encours & Outstanding / Exposure & Ligne de cr\'edit & Credit facility \\
+Taux d'avance & Advance rate & Seuil & Threshold / Trigger \\
+Fonds de couverture & Hedge fund & Fonds de fonds & Fund of funds \\
+Engagement non appel\'e & Unfunded commitment & Levier & Leverage \\
+Tirage & Drawdown & \'Ech\'eancier & Schedule / Amortisation \\
+Provisionnement & Provisioning & Perte attendue & Expected loss \\
+D\'egradation & Deterioration & Portefeuille & Portfolio \\
+Rendement & Return / Yield & Actif pond\'er\'e & Risk-weighted asset \\
+B\^ale / CRR & Basel / CRR & Ratio de solvabilit\'e & Capital adequacy ratio \\
+Structuration & Structuring & R\`eglement-livraison & Settlement \\
+Marge commerciale & Commercial spread & Co\^ut du risque & Cost of risk \\
+Notation & Rating & D\'efaut & Default \\
+Flux de tr\'esorerie & Cash flow & Valeur liquidative & Net Asset Value (NAV) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{6pt}
+
+\begin{warnbox}{Faux amis \& pi\`eges linguistiques}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textbf{``Actually''} $\neq$ actuellement. Actuellement = \textit{currently}.
+      Actually = \textit{en fait}.
+\item \textbf{``Eventually''} $\neq$ \'eventuellement. Eventually = \textit{finalement / \`a terme}.
+      \'Eventuellement = \textit{possibly}.
+\item \textbf{``Delay''} $\neq$ d\'elai. Delay = retard. D\'elai = \textit{deadline / timeframe}.
+\item \textbf{``Resume''} $\neq$ r\'esum\'e. Resume = reprendre. R\'esum\'e (en anglais) = CV.
+      R\'esum\'e (en fran\c{c}ais) = \textit{summary}.
+\item \textbf{``Sensible''} $\neq$ sensible. Sensible (EN) = \textit{raisonnable}.
+      Sensible (FR) = \textit{sensitive}.
+\item \textbf{``Comprehensive''} $\neq$ compr\'ehensif. Comprehensive = \textit{exhaustif / complet}.
+\end{itemize}
+\end{warnbox}
+
+\vspace{6pt}
+
+\begin{goodbox}{Phrases de transition utiles}
+\begin{itemize}[nosep, leftmargin=12pt]
+\item \textit{``That's a great question. Let me walk you through...''}
+      --- pour gagner 2 secondes de r\'eflexion
+\item \textit{``To put it simply...''} --- pour simplifier un concept technique
+\item \textit{``What I find particularly relevant for CSPM is that...''}
+      --- pour toujours relier au poste
+\item \textit{``In practical terms, this means...''}
+      --- pour passer de la th\'eorie \`a l'op\'erationnel
+\item \textit{``I'm not entirely familiar with that specific product, but
+      here's how I'd approach it...''} --- si tu ne sais pas
+\item \textit{``From a risk perspective...''} --- pour montrer ta double casquette
+\item \textit{``The way I see it...''} --- pour donner ton point de vue
+\end{itemize}
+\end{goodbox}
+
+\vspace{10pt}
+
+% ============================================================
+\section{Aide-m\'emoire express --- \`A relire 30 min avant}
+% ============================================================
+
+\begin{goodbox}{Les 7 messages \`a faire passer}
+\begin{enumerate}[nosep, leftmargin=16pt]
+\item Mon m\'emoire M1 porte \textbf{exactement} sur le monitoring de fonds et le collat\'eral
+\item Le cockpit IFRS\,9 me donne la \textbf{profondeur risque} que les autres n'ont pas
+\item Je sais utiliser l'IA comme \textbf{acc\'el\'erateur}, pas comme b\'equille
+\item Je suis \textbf{op\'erationnel rapidement} : LTV, margin calls, Python, Excel
+\item Je comprends le \textbf{langage des risques} (ECL, staging, RWA)
+\item Je suis \textbf{rigoureux} (600 tests, 3 audits) et \textbf{autonome}
+\item Je veux apprendre le \textbf{m\'etier du financement} sur le terrain
+\end{enumerate}
+\end{goodbox}
+
+\vspace{12pt}
+
+\begin{center}
+\textcolor{warmgray}{\rule{0.4\textwidth}{0.5pt}}\\[6pt]
+\textcolor{warmgray}{\small\textit{Structure : pitch 90s + modules \`a la demande.
+Partie II = filet de s\'ecurit\'e, pas un script.\\
+Laisser l'interviewer guider. \^Etre naturel. Montrer l'envie.}}
+\end{center}
+
+\end{document}

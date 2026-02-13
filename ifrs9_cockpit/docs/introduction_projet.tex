@@ -1,0 +1,442 @@
+% ============================================================================
+% IFRS 9 Risk Cockpit — Problématique de Thèse
+% Arbitrage Crédit / Private Equity sous chocs macroéconomiques
+% et contraintes réglementaires
+% ============================================================================
+\documentclass[12pt,a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+\usepackage{multicol}
+\usepackage{setspace}
+\usepackage{csquotes}
+
+\geometry{margin=2.5cm}
+\onehalfspacing
+
+% --- Couleurs ---
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{1B3A5C}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{34D399}
+\definecolor{warnorange}{HTML}{E67E22}
+
+% --- En-têtes ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{steelblue}{IFRS~9 Risk Cockpit}}
+\fancyhead[R]{\small\textcolor{steelblue}{Problématique de Thèse}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Titres ---
+\titleformat{\section}{\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{steelblue}}{\thesubsubsection}{1em}{}
+
+% --- Boîtes ---
+\newtcolorbox{thesis}{
+  colback=darkblue!5,
+  colframe=darkblue,
+  fonttitle=\bfseries\color{white},
+  colbacktitle=darkblue,
+  title=Problématique de thèse,
+  arc=2mm
+}
+
+\newtcolorbox{keypoint}{
+  colback=steelblue!8,
+  colframe=steelblue,
+  fonttitle=\bfseries,
+  title=Point clé,
+  arc=2mm
+}
+
+\newtcolorbox{tension}{
+  colback=warnorange!8,
+  colframe=warnorange,
+  fonttitle=\bfseries,
+  title=Tension fondamentale,
+  arc=2mm
+}
+
+\newtcolorbox{conclusion}{
+  colback=accentgreen!8,
+  colframe=accentgreen!70!black,
+  fonttitle=\bfseries,
+  title=Conclusion,
+  arc=2mm
+}
+
+% ============================================================================
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\Huge\bfseries\textcolor{darkblue}{IFRS~9 Risk Cockpit}}
+
+\vspace{1cm}
+{\LARGE\textcolor{steelblue}{Arbitrage entre Portefeuille de Crédit\\et Private Equity sous Chocs\\Macroéconomiques et Contraintes\\Réglementaires}}
+
+\vspace{2cm}
+
+\rule{0.6\textwidth}{1pt}
+
+\vspace{1.5cm}
+
+{\Large Problématique, Démarche et Conclusions}
+
+\vspace{2cm}
+
+{\large
+\textbf{Domaine :} Gestion des risques financiers\\[0.5em]
+\textbf{Normes :} IFRS~9, IFRS~13, Bâle~III / CRR3\\[0.5em]
+\textbf{Méthode :} Data science \& optimisation sous contraintes réglementaires
+}
+
+\vfill
+
+{\small Février 2026}
+
+\end{titlepage}
+
+% ============================================================================
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Introduction : deux portefeuilles, un même bilan}
+% ============================================================================
+
+Une institution financière qui détient à la fois un \textbf{portefeuille de prêts bancaires classiques} et un \textbf{portefeuille de private equity} (PE) fait face à une réalité que les normes comptables traitent séparément mais que le bilan, lui, subit de manière unifiée : lorsqu'un choc macroéconomique survient, les deux poches d'actifs se dégradent \textit{simultanément}, elles consomment du capital \textit{conjointement}, et le directeur des risques doit arbitrer entre elles avec un budget de fonds propres \textit{unique}.
+
+Or, ces deux classes d'actifs ne réagissent pas de la même manière à un même choc. Une hausse du chômage fait migrer des prêts du Stade~1 au Stade~2 IFRS~9, ce qui multiplie les provisions. Mais elle comprime aussi les EBITDA des participations PE, faisant chuter leur valeur liquidative et augmentant leur pondération de risque CRR3. L'amplitude, la vitesse et la réversibilité de ces deux réactions sont \textbf{fondamentalement différentes}.
+
+C'est cette \textbf{asymétrie de comportement} face aux chocs qui ouvre la possibilité --- et la nécessité --- d'un arbitrage.
+
+\begin{thesis}
+\textbf{En cas de choc macroéconomique, comment un établissement financier peut-il arbitrer entre son portefeuille de crédit bancaire et son portefeuille de private equity pour minimiser sa perte globale et préserver son ratio de solvabilité, sous les contraintes conjointes d'IFRS~9, d'IFRS~13 et de Bâle~III / CRR3~?}
+\end{thesis}
+
+% ============================================================================
+\section{Pourquoi cette question est importante}
+% ============================================================================
+
+\subsection{Le piège de la gestion en silo}
+
+Traditionnellement, crédit et private equity sont gérés par des équipes distinctes, avec des outils distincts, des métriques distinctes et des reportings distincts. Le portefeuille de crédit produit un tableau de provisions IFRS~9 (ECL par stade, coût du risque). Le portefeuille PE produit une évaluation IFRS~13 à la juste valeur (NAV, MOIC, drawdown). Ces deux reportings remontent au comité des risques comme deux rapports séparés.
+
+Cette approche en silo masque une réalité : \textbf{les deux portefeuilles partagent les mêmes facteurs de risque macroéconomiques}. Lorsque le PIB se contracte, le chômage augmente et les taux d'intérêt bougent, les deux portefeuilles se dégradent --- mais pas dans les mêmes proportions, pas au même rythme, et pas avec les mêmes conséquences en capital.
+
+\begin{keypoint}
+Un choc de +2 points de chômage peut faire migrer 15\% du portefeuille de crédit du Stade~1 au Stade~2, triplant les provisions sur ces lignes. Le même choc comprime les EBITDA du portefeuille PE de 10 à 20\%, mais la perte de NAV peut être partiellement absorbée par les multiples de sortie. Les \textbf{profils de perte} sont structurellement différents.
+\end{keypoint}
+
+\subsection{Le coût de l'ignorance des interactions}
+
+Gérer les deux poches indépendamment conduit à des décisions sous-optimales. Un établissement qui renforce son portefeuille PE en période de taux bas (recherche de rendement) tout en maintenant un crédit de bonne qualité apparente peut se retrouver, lors d'un retournement conjoncturel, avec :
+
+\begin{itemize}
+  \item Une \textbf{explosion des provisions IFRS~9} : les prêts performants migrent massivement en Stade~2, la provision passe de 12 mois à durée de vie résiduelle.
+  \item Une \textbf{chute de la NAV PE} : les valorisations à la juste valeur se dégradent, les pondérations CRR3 augmentent (de 190\% à 400\% pour les positions les plus touchées).
+  \item Une \textbf{consommation cumulée de capital} qui dépasse ce que chaque poche aurait consommé isolément, en raison des \textbf{corrélations} entre secteurs.
+\end{itemize}
+
+L'établissement découvre alors qu'il n'avait pas de marge de man\oe uvre --- non pas parce que chaque portefeuille était trop risqué, mais parce que leur \textbf{combinaison} l'était.
+
+\subsection{L'opportunité de l'arbitrage}
+
+À l'inverse, l'asymétrie de comportement est aussi une \textbf{opportunité}. Si crédit et PE ne réagissent pas de la même manière aux chocs, alors il existe en théorie une allocation qui :
+
+\begin{enumerate}
+  \item \textbf{Diversifie le risque} : les pertes de crédit (migration de stade, hausse de l'ECL) peuvent être partiellement compensées par la résilience de certaines positions PE (secteurs défensifs, fonds matures avec MOIC élevé), et réciproquement.
+  \item \textbf{Optimise la consommation de capital} : le capital réglementaire n'étant pas gratuit, arbitrer entre une ligne de crédit à RWA modéré et une position PE à 400\% de pondération est un levier direct sur le ratio CET1.
+  \item \textbf{Exploite les décalages temporels} : le PE a un horizon d'investissement long (5-10 ans) avec un effet J-curve, tandis que le crédit a un profil de risque qui se matérialise sur 12 mois (Stade~1) à la durée de vie du prêt. Ces temporalités différentes créent des fenêtres d'arbitrage.
+\end{enumerate}
+
+Mais cet arbitrage n'est pas libre : il se fait \textbf{sous contraintes réglementaires}.
+
+% ============================================================================
+\section{Les contraintes de l'arbitrage}
+% ============================================================================
+
+\begin{tension}
+Le gestionnaire ne peut pas arbitrer librement entre crédit et PE comme il le ferait entre deux actifs cotés sur un marché liquide. Chaque classe d'actifs est encadrée par un corpus réglementaire qui impose ses propres règles de provisionnement, de valorisation et de consommation en capital. L'arbitrage doit respecter \textbf{simultanément} toutes ces contraintes.
+\end{tension}
+
+\subsection{Contrainte IFRS~9 : le cliquet du staging}
+
+Le modèle IFRS~9 en trois stades crée un \textbf{effet de cliquet asymétrique}. La migration du Stade~1 au Stade~2 se déclenche dès qu'une augmentation significative du risque de crédit (SICR) est détectée, et la provision passe brutalement de 12 mois à la durée de vie résiduelle. C'est un saut discontinu, pas une dégradation progressive.
+
+Ce mécanisme a des conséquences majeures pour l'arbitrage :
+
+\begin{itemize}
+  \item En période de stress, réduire le portefeuille de crédit (vente ou titrisation) ne fait pas immédiatement reculer les provisions : les prêts déjà en Stade~2 y restent tant que le risque ne s'est pas amélioré de manière durable.
+  \item Augmenter le portefeuille de crédit en période favorable (Stade~1 massif) est peu coûteux en provisions, mais crée un risque latent de migration future.
+  \item Le \textbf{coût de migration} (passage d'une provision 12 mois à une provision durée de vie) est d'autant plus brutal que la durée résiduelle des prêts est longue.
+\end{itemize}
+
+L'arbitrage ne peut donc pas ignorer la \textbf{distribution des prêts par stade} et la \textbf{sensibilité du staging} aux variables macroéconomiques.
+
+\subsection{Contrainte IFRS~13 : l'illiquidité du PE}
+
+Le private equity est par nature \textbf{illiquide}. Contrairement au crédit (qui peut être titrisé, vendu sur le marché secondaire ou couvert par des dérivés), une position PE ne se cède pas en quelques jours. Le marché secondaire du PE existe mais reste étroit, avec des décotes de liquidité (DLOM) pouvant atteindre 15 à 30\% selon la maturité du fonds.
+
+Cette illiquidité impose des contraintes fortes :
+
+\begin{itemize}
+  \item L'arbitrage ne peut pas être \textbf{tactique à court terme} : augmenter ou réduire l'exposition PE prend des mois, voire des années (appels de fonds, distributions, ventes secondaires).
+  \item La \textbf{valorisation} est elle-même incertaine : en l'absence de prix de marché, IFRS~13 impose des méthodes de juste valeur (multiples, DCF, taux de capitalisation) qui contiennent une part de jugement.
+  \item La \textbf{décote de sortie} dépend de la maturité du fonds : un fonds jeune (vintage récent) est plus illiquide qu'un fonds mature proche de la distribution. L'arbitrage doit en tenir compte.
+\end{itemize}
+
+\subsection{Contrainte CRR3 : le plancher de capital}
+
+Le cadre Bâle~III / CRR3 impose des exigences en capital qui diffèrent radicalement entre crédit et PE :
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[Crédit classique] La pondération de risque dépend de la qualité de l'emprunteur (notation interne ou approche standard). Un prêt à une entreprise bien notée peut peser 50 à 100\% en RWA.
+  \item[Private equity] L'article~133 du CRR3 prévoit des pondérations nettement plus élevées : 190\% pour un portefeuille diversifié de qualité, 250\% pour le cas général, et jusqu'à 400\% pour les positions spéculatives ou en difficulté.
+\end{description}
+
+Le ratio CET1 --- fonds propres de base rapportés aux actifs pondérés par le risque --- est le \textbf{juge de paix} de l'arbitrage. Toute réallocation entre crédit et PE modifie le dénominateur de ce ratio. Augmenter le PE au détriment du crédit peut améliorer le rendement (le PE offre historiquement un premium de 300 à 500 points de base), mais au prix d'une consommation de capital potentiellement trois à quatre fois supérieure.
+
+\begin{keypoint}
+L'arbitrage crédit/PE est un problème d'optimisation multi-objectif : maximiser le rendement ajusté du risque (RAROC) sous la contrainte d'un ratio CET1 minimum (8\% réglementaire, souvent 10-12\% en cible interne), tout en respectant les règles de provisionnement d'IFRS~9 et de valorisation d'IFRS~13.
+\end{keypoint}
+
+\subsection{Contrainte de concentration}
+
+Au-delà du capital, le régulateur impose des \textbf{limites de concentration} : un établissement ne peut pas allouer l'essentiel de ses fonds propres à une seule classe d'actifs, un seul secteur ou un seul nom. L'indice de Herfindahl-Hirschman (HHI) mesure cette concentration. Un portefeuille PE très concentré sur un seul secteur (par exemple la technologie) sera pénalisé même si sa performance historique est excellente.
+
+L'arbitrage doit donc intégrer la \textbf{diversification} comme une contrainte à part entière, et non comme un simple objectif secondaire.
+
+% ============================================================================
+\section{L'asymétrie : le c\oe ur du problème}
+% ============================================================================
+
+\subsection{Deux réactions différentes au même choc}
+
+Considérons un choc macroéconomique stylisé : une récession avec hausse du chômage de 2 points, contraction du PIB de 1,5\%, et hausse des taux d'intérêt de 100 points de base. Voici comment les deux portefeuilles réagissent :
+
+\subsubsection{Côté crédit}
+
+\begin{itemize}
+  \item Les probabilités de défaut augmentent, déclenchant des migrations de stade IFRS~9.
+  \item Les prêts qui passent du Stade~1 au Stade~2 voient leur provision multipliée par un facteur qui dépend de la durée résiduelle (un prêt de 5 ans restant peut voir sa provision multipliée par 3 à 5).
+  \item La hausse des taux augmente le coût de refinancement des emprunteurs fragiles, créant un effet de second tour sur les défauts.
+  \item Mais la LGD peut bénéficier de la valeur des garanties si le marché immobilier n'est pas touché.
+  \item L'effet est \textbf{rapide} (migration en 1 à 2 trimestres) et \textbf{discontinu} (saut de stade).
+\end{itemize}
+
+\subsubsection{Côté PE}
+
+\begin{itemize}
+  \item Les EBITDA se contractent, ce qui réduit les valorisations par multiples.
+  \item Les multiples de sortie eux-mêmes se compriment en récession (les acquéreurs sont plus prudents).
+  \item Le levier amplifie les pertes : une baisse de 15\% de l'EBITDA peut entraîner une baisse de 30 à 40\% de la NAV pour un fonds avec un levier de 3.
+  \item Mais les fonds matures avec un MOIC élevé disposent d'un coussin de sécurité : même avec une baisse de NAV, la probabilité de détresse reste faible.
+  \item L'effet est \textbf{progressif} (la NAV s'ajuste trimestriellement) mais \textbf{amplifié par le levier}.
+\end{itemize}
+
+\subsection{Les décalages temporels}
+
+L'asymétrie n'est pas seulement dans l'amplitude : elle est aussi dans le \textbf{temps}.
+
+Le crédit bancaire subit le choc rapidement via le mécanisme de staging IFRS~9 : dès que les indicateurs avancés se dégradent, les modèles SICR déclenchent les migrations. La provision augmente \textit{avant même que les défauts ne se matérialisent}. C'est d'ailleurs la raison d'être d'IFRS~9 --- mais cela signifie que le \textbf{P\&L est touché immédiatement}.
+
+Le PE, lui, a un horizon plus long. La valorisation IFRS~13 est mise à jour trimestriellement. Un fonds dont l'EBITDA sous-jacent se dégrade mettra un à deux trimestres avant que la juste valeur ne reflète pleinement le choc. De plus, les distributions (DPI) cessent en période de stress, retardant le retour de capital. L'effet J-curve joue en sens inverse : les fonds jeunes, déjà en phase de consommation de capital, sont les plus vulnérables.
+
+Ce décalage crée une \textbf{fenêtre d'action} : entre le moment où le crédit absorbe le choc (impact P\&L immédiat via les provisions) et le moment où le PE reflète pleinement la dégradation (valorisation trimestrielle), le gestionnaire dispose d'une information avancée pour ajuster son allocation.
+
+\subsection{Les corrélations cachées}
+
+L'asymétrie serait un atout parfait pour la diversification si les deux portefeuilles étaient indépendants. Mais ils ne le sont pas. Ils partagent les mêmes \textbf{facteurs macroéconomiques} (chômage, PIB, taux) et souvent les mêmes \textbf{secteurs} (technologie, santé, immobilier, industrie). En période de crise, les corrélations augmentent --- c'est le phénomène bien documenté de \textit{corrélation en queue de distribution}.
+
+La question centrale n'est donc pas seulement \og comment les deux portefeuilles réagissent-ils séparément~?\fg{} mais \og \textbf{comment se comportent-ils ensemble}~?\fg{} --- et c'est précisément ce que notre outil cherche à mesurer.
+
+% ============================================================================
+\section{Ce que notre projet apporte à cette question}
+% ============================================================================
+
+\subsection{Un cadre unifié pour deux normes}
+
+Le premier apport est de \textbf{modéliser les deux portefeuilles dans un même environnement macroéconomique}. Les cinq variables de stress (chômage, croissance du PIB, taux d'intérêt, prix immobiliers, inflation) alimentent simultanément :
+
+\begin{itemize}
+  \item Le moteur IFRS~9 (staging multi-facteurs, PD stressée, LGD downturn, ECL par stade),
+  \item Le moteur IFRS~13 (NAV stressée via les trois canaux EBITDA / multiples / levier, probabilité de détresse, pondération CRR3).
+\end{itemize}
+
+Cela permet de répondre pour la première fois à la question : \textit{pour un même scénario macroéconomique, quelle est la perte combinée sur le bilan, et comment se répartit-elle entre crédit et PE~?}
+
+\subsection{La mesure de l'asymétrie}
+
+Le projet construit un \textbf{analyseur d'asymétries} qui compare, pour chaque scénario de stress, la réaction des deux portefeuilles sur plusieurs dimensions :
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[Provisionnement vs. juste valeur] Combien coûte le choc en provisions IFRS~9 d'un côté, et en perte de NAV IFRS~13 de l'autre~?
+  \item[Consommation de capital] Le RWA crédit augmente modérément (migration vers des pondérations plus élevées), tandis que le RWA PE peut doubler si les pondérations CRR3 passent de 190\% à 400\%.
+  \item[RAROC sectoriel] Le rendement ajusté du risque de chaque secteur est calculé pour les deux portefeuilles, permettant d'identifier les secteurs où le crédit est plus efficient que le PE --- et inversement.
+  \item[Concentration croisée] Un même secteur (par exemple l'immobilier) peut être présent à la fois dans le crédit (prêts immobiliers commerciaux) et dans le PE (fonds immobiliers). Le HHI croisé mesure cette double exposition.
+\end{description}
+
+\subsection{L'attribution factorielle}
+
+Pour arbitrer, il faut savoir \textbf{quel facteur macroéconomique pèse le plus} sur chaque portefeuille. Le projet décompose l'impact de chaque variable via une attribution proportionnelle :
+
+\begin{itemize}
+  \item Si le chômage est le premier facteur de risque du crédit (via les migrations de stade) mais que le PE est surtout sensible aux taux d'intérêt (via l'effet de levier), alors une couverture de taux protège davantage le PE que le crédit.
+  \item Si les deux portefeuilles sont principalement sensibles au même facteur, la diversification est faible et la corrélation en stress sera élevée.
+\end{itemize}
+
+Cette attribution fournit au gestionnaire la carte des \textbf{sensibilités relatives}, indispensable pour orienter l'arbitrage.
+
+\subsection{Le reverse stress test comme outil d'arbitrage}
+
+Le projet retourne le problème avec le \textbf{reverse stress test} : au lieu de simuler un scénario et de mesurer les pertes, il part du seuil de tolérance (ratio CET1 minimum, ECL maximum acceptable) et remonte vers le scénario qui le déclencherait.
+
+Cela répond directement à la question de l'arbitrage : \textit{avec l'allocation actuelle, quel degré de récession suffirait à épuiser mon capital~?} Et surtout : \textit{en réallouant 5\% du PE vers le crédit (ou l'inverse), de combien recule ce seuil de rupture~?}
+
+La distance de Mahalanobis dans l'espace macroéconomique mesure la \og vraisemblance\fg{} du scénario de rupture : plus il est loin en distance standardisée, plus l'allocation est robuste.
+
+\subsection{L'optimisation RAROC sous contrainte CET1}
+
+Le RAROC (rendement du capital ajusté du risque) permet de comparer crédit et PE sur une base commune :
+
+\begin{displayquote}
+\textit{Pour chaque euro de capital réglementaire mobilisé, combien d'euros de marge nette --- après déduction des pertes attendues --- chaque portefeuille génère-t-il~?}
+\end{displayquote}
+
+Le projet calcule le RAROC par secteur et par canal (crédit vs. PE), intégrant les revenus, les pertes attendues, les coûts opérationnels et la fiscalité. L'arbitrage optimal est celui qui \textbf{maximise le RAROC global du bilan} sous les contraintes de :
+
+\begin{enumerate}
+  \item Ratio CET1 supérieur au minimum réglementaire,
+  \item Provisions IFRS~9 absorbables par le P\&L,
+  \item Concentration sectorielle dans les limites de l'appétit au risque,
+  \item Liquidité du PE compatible avec l'horizon de gestion.
+\end{enumerate}
+
+% ============================================================================
+\section{La démarche expérimentale}
+% ============================================================================
+
+\subsection{Données synthétiques calibrées}
+
+Le projet utilise un \textbf{générateur de données synthétiques} qui reproduit les propriétés statistiques d'un portefeuille réel d'entreprises : cinq secteurs (technologie, industrie, santé, immobilier, services), des ratios financiers corrélés de manière réaliste, des effets de seuil (un ratio d'endettement au-delà de 60\% amplifie le risque de manière non linéaire), et des interactions entre variables (l'endettement combiné à la hausse des taux crée un effet multiplicateur).
+
+Ce choix permet de travailler sans données confidentielles, tout en garantissant que les comportements observés sont \textbf{économiquement cohérents}.
+
+\subsection{Trois scénarios macroéconomiques}
+
+L'arbitrage est testé sous trois régimes :
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[Scénario de base] Conditions macroéconomiques actuelles. Le portefeuille est en régime de croisière. Ce scénario sert de référence.
+  \item[Scénario adverse] Récession sévère : hausse du chômage, contraction du PIB, stress sur les taux. C'est ici que l'arbitrage est le plus critique --- les deux portefeuilles se dégradent, mais pas de la même manière.
+  \item[Scénario de reprise] Amélioration conjoncturelle : baisse du chômage, reprise de la croissance. Ce scénario teste la \textbf{réversibilité} : le PE se redresse-t-il plus vite que le crédit~? Le déblocage du staging IFRS~9 est-il symétrique à la migration~?
+\end{description}
+
+\subsection{Trois familles de modèles}
+
+Pour éviter de fonder l'arbitrage sur un seul modèle, le projet entraîne trois familles de prédiction du défaut :
+
+\begin{itemize}
+  \item Une \textbf{régression logistique} (transparente, auditable, produit un scorecard).
+  \item Un \textbf{réseau de neurones tabulaire} (TabNet, capture les non-linéarités avec des mécanismes d'attention explicables).
+  \item Un \textbf{modèle d'arbres} (XGBoost, performance maximale).
+\end{itemize}
+
+Si les trois modèles convergent vers la même recommandation d'arbitrage, la confiance est élevée. S'ils divergent, c'est un signal que l'arbitrage dépend d'hypothèses de modélisation qu'il faut examiner de plus près. Cette approche multi-modèles est elle-même une forme de \textbf{diversification du risque de modèle}.
+
+% ============================================================================
+\section{Ce que nous montrons}
+% ============================================================================
+
+\subsection{L'asymétrie est structurelle, pas conjoncturelle}
+
+Le premier résultat est que la \textbf{différence de réaction entre crédit et PE} n'est pas un artefact du scénario choisi. Quel que soit le choc simulé, le crédit réagit plus vite (via le staging) mais de manière plus réversible, tandis que le PE réagit plus lentement mais de manière plus amplifiée (via le levier). Cette asymétrie est \textbf{structurelle} : elle découle de la nature même des deux classes d'actifs et de leurs cadres comptables respectifs.
+
+\subsection{L'arbitrage est contraint mais pas nul}
+
+Malgré les contraintes réglementaires lourdes (CRR3, concentration, liquidité), il existe une \textbf{marge d'arbitrage significative}. Le RAROC sectoriel montre que certains secteurs sont plus efficients en crédit qu'en PE (typiquement les secteurs à faible volatilité comme les services), tandis que d'autres justifient le surcoût en capital du PE par un rendement supérieur (typiquement la technologie en phase de croissance).
+
+L'arbitrage optimal n'est pas une bascule brutale d'un portefeuille à l'autre : c'est un \textbf{rééquilibrage à la marge}, secteur par secteur, guidé par le RAROC et contraint par le CET1.
+
+\subsection{Le reverse stress test révèle les fragilités cachées}
+
+Le reverse stress test montre que la \textbf{combinaison} des deux portefeuilles peut être plus fragile que chacun pris isolément, en raison des corrélations sectorielles. Un portefeuille crédit concentré sur l'immobilier commercial, combiné à un portefeuille PE lui aussi exposé à l'immobilier (fonds immobiliers, promoteurs), crée une \textbf{double exposition} dont le reverse stress test révèle le seuil de rupture.
+
+À l'inverse, une allocation diversifiée --- où le crédit et le PE couvrent des secteurs complémentaires --- repousse significativement ce seuil, offrant une marge de man\oe uvre plus grande face aux chocs.
+
+\subsection{La temporalité compte autant que l'amplitude}
+
+Les trajectoires prospectives montrent que l'arbitrage doit intégrer la \textbf{dimension temporelle}. Un scénario adverse suivi d'une reprise favorise le PE (qui se redresse fortement grâce à l'effet de levier) par rapport au crédit (où les provisions Stade~2 mettent du temps à se résorber). Un stress prolongé, à l'inverse, pénalise davantage le PE (destruction de NAV irréversible) que le crédit (où le staging finit par se stabiliser).
+
+L'horizon de gestion du CRO --- pilote-t-il à 1 an ou à 3 ans~? --- conditionne donc la direction de l'arbitrage.
+
+% ============================================================================
+\section{Limites et honnêteté intellectuelle}
+% ============================================================================
+
+\begin{enumerate}[label=\textbf{L\arabic*.}]
+  \item \textbf{Données synthétiques.} Les résultats démontrent la \textit{faisabilité} de l'arbitrage et la nature de l'asymétrie, mais les amplitudes exactes dépendent de la calibration. Un portefeuille réel produirait des chiffres différents --- la méthodologie, elle, reste valide.
+
+  \item \textbf{Liquidité simplifiée.} Le coût et le délai réels de réallocation du PE (marché secondaire, appels de fonds) ne sont pas modélisés dynamiquement. L'arbitrage est présenté comme un rééquilibrage cible, pas comme une stratégie de trading.
+
+  \item \textbf{Horizon statique.} Le portefeuille est analysé à un instant donné. Un modèle dynamique avec origination et run-off affinerait les résultats, en particulier pour l'analyse temporelle de l'arbitrage.
+
+  \item \textbf{Corrélations expertes.} La matrice de covariance macroéconomique repose sur des estimations d'experts, documentées et justifiées, mais qui pourraient être remplacées par des estimations historiques sur données réelles.
+
+  \item \textbf{Pas d'optimisation formelle.} Le projet \textbf{mesure} l'asymétrie et \textbf{identifie} les leviers d'arbitrage, mais n'implémente pas un optimiseur de portefeuille au sens de Markowitz. L'arbitrage est guidé par l'analyse, pas automatisé par un algorithme.
+\end{enumerate}
+
+% ============================================================================
+\section{Conclusion}
+% ============================================================================
+
+\begin{conclusion}
+Ce travail aborde une question pratique à laquelle tout établissement financier détenant simultanément du crédit et du private equity est confronté : \textbf{comment répartir un budget de capital limité entre deux classes d'actifs qui réagissent différemment aux chocs, sous des contraintes réglementaires qui ne permettent pas une optimisation libre~?}
+
+\vspace{0.5em}
+
+Nous montrons que :
+
+\begin{enumerate}
+  \item L'\textbf{asymétrie} entre crédit (réaction rapide, discontinue, via le staging IFRS~9) et PE (réaction progressive, amplifiée par le levier, sous IFRS~13) est \textbf{structurelle} et ne disparaît sous aucun scénario.
+
+  \item Cette asymétrie crée un \textbf{espace d'arbitrage réel}, même sous les contraintes lourdes de CRR3 (pondérations PE jusqu'à 400\%), de concentration (HHI) et de liquidité (décote DLOM).
+
+  \item L'arbitrage optimal est un \textbf{rééquilibrage sectoriel à la marge}, guidé par le RAROC comparé crédit/PE et contraint par le ratio CET1. Il n'est ni une bascule totale, ni un statu quo.
+
+  \item Le \textbf{reverse stress test} est l'outil le plus puissant pour évaluer la robustesse d'une allocation donnée : il identifie le scénario qui briserait le ratio de solvabilité et mesure la distance qui nous en sépare.
+
+  \item La \textbf{dimension temporelle} de l'arbitrage est aussi importante que l'amplitude : selon l'horizon du gestionnaire, la direction optimale peut s'inverser.
+\end{enumerate}
+
+\vspace{0.5em}
+
+En construisant un outil intégré --- du générateur de données synthétiques au tableau de bord interactif du CRO, en passant par trois familles de modèles et un analyste IA à cinq couches --- nous démontrons que \textbf{la data science appliquée à la finance réglementaire peut transformer une contrainte} (la coexistence de deux cadres normatifs incompatibles) \textbf{en un levier de gestion} (l'arbitrage informé entre deux profils de risque complémentaires).
+\end{conclusion}
+
+% ============================================================================
+\vfill
+\begin{center}
+\rule{0.4\textwidth}{0.4pt}\\[0.5em]
+{\small\textit{Document rédigé dans le cadre du projet IFRS~9 Risk Cockpit.}}
+\end{center}
+
+\end{document}

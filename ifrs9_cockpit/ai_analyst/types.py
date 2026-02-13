@@ -30,14 +30,14 @@ class Recommendation:
     """Recommandation explicable du CRO virtuel (FR31).
 
     Porte la chaine complete de raisonnement :
-        regime -> declencheur -> euler -> facteur_macro -> risk_appetite ->
-        distance_rst -> confiance -> alternatives.
+        regime -> declencheur -> allocation proportionnelle -> facteur_macro ->
+        risk_appetite -> distance_rst -> confiance -> alternatives.
 
     Attributes:
         action: Action recommandee.
         regime: Regime detecte.
         trigger: Declencheur principal.
-        euler_driver: Cellule Euler dominante.
+        proportional_driver: Cellule d'allocation proportionnelle dominante.
         macro_factor: Variable macro dominante.
         risk_appetite_status: Statut feux tricolores (vert/ambre/rouge).
         rst_distance: Distance au scenario de rupture (sigma).
@@ -48,12 +48,17 @@ class Recommendation:
     action: str
     regime: str
     trigger: str
-    euler_driver: str
+    proportional_driver: str
     macro_factor: str
     risk_appetite_status: str
     rst_distance: float
     confidence: str
     alternatives: List[str] = field(default_factory=list)
+
+    @property
+    def euler_driver(self) -> str:
+        """Backward-compat alias (RJ audit: Euler → Proportional)."""
+        return self.proportional_driver
 
 
 @dataclass
@@ -65,7 +70,7 @@ class AnalyticsState:
     Attributes:
         asymmetry_matrix: Matrice d'asymetrie 5 secteurs (Couche 1).
         marginal_contributions: Contributions marginales par cellule (Couche 1).
-        euler_contributions: Decomposition Euler 10 cellules (Couche 2).
+        proportional_contributions: Allocation proportionnelle 10 cellules (Couche 2).
         factor_attribution: Attribution factorielle 5 vars x 2 canaux (Couche 2).
         tipping_points: Seuils de basculement par secteur (Couche 3).
         rst_result: Scenario de rupture minimal (Couche 3).
@@ -83,8 +88,8 @@ class AnalyticsState:
     asymmetry_matrix: Optional[pd.DataFrame] = None
     marginal_contributions: Optional[pd.DataFrame] = None
 
-    # Couche 2 — Decomposition Euler
-    euler_contributions: Optional[pd.DataFrame] = None
+    # Couche 2 — Allocation proportionnelle
+    proportional_contributions: Optional[pd.DataFrame] = None
     factor_attribution: Optional[pd.DataFrame] = None
 
     # Couche 3 — Seuils & RST
@@ -104,3 +109,12 @@ class AnalyticsState:
     recommendations: List[Recommendation] = field(default_factory=list)
     narrative: str = ""
     pass_number: int = 1
+
+    # Backward-compat aliases (RJ audit: Euler → Proportional)
+    @property
+    def euler_contributions(self) -> Optional[pd.DataFrame]:
+        return self.proportional_contributions
+
+    @euler_contributions.setter
+    def euler_contributions(self, value: Optional[pd.DataFrame]) -> None:
+        self.proportional_contributions = value

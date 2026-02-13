@@ -1,0 +1,20 @@
+[theme]
+base = "dark"
+primaryColor = "#3B82F6"
+backgroundColor = "#0C1222"
+secondaryBackgroundColor = "#1E293B"
+textColor = "#F8FAFC"
+font = "sans serif"
+
+[server]
+address = "localhost"
+runOnSave = false
+
+[client]
+toolbarMode = "minimal"
+
+[runner]
+fastReruns = false
+
+[browser]
+gatherUsageStats = false

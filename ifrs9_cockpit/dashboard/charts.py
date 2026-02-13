@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple
 from ifrs9_cockpit.config import DASHBOARD_CONFIG
 
 
-# Palette cohérente avec le CSS
+# Palette cohérente avec le CSS — WCAG AAA
 _PRIMARY = DASHBOARD_CONFIG.theme_primary
 _SECONDARY = DASHBOARD_CONFIG.theme_secondary
 _ACCENT = DASHBOARD_CONFIG.theme_accent
@@ -23,7 +23,11 @@ _BG = DASHBOARD_CONFIG.theme_bg_dark
 _CARD = DASHBOARD_CONFIG.theme_bg_card
 _TEXT = DASHBOARD_CONFIG.theme_text
 _MUTED = DASHBOARD_CONFIG.theme_text_muted
-_COLORS = [_PRIMARY, _ACCENT, "#F59E0B", "#EF4444", _SECONDARY, "#06B6D4"]
+_SUCCESS = DASHBOARD_CONFIG.color_success
+_WARNING = DASHBOARD_CONFIG.color_warning
+_DANGER = DASHBOARD_CONFIG.color_danger
+_INFO = DASHBOARD_CONFIG.color_info
+_COLORS = [_PRIMARY, _ACCENT, _WARNING, _DANGER, _SECONDARY, _INFO]
 
 # Mapping noms techniques → labels lisibles (français)
 _FEATURE_LABELS: Dict[str, str] = {
@@ -179,7 +183,7 @@ def plot_stage_distribution(
     Returns:
         Figure Plotly avec double barres.
     """
-    colors = [_ACCENT, "#F59E0B", "#EF4444"]
+    colors = [_ACCENT, _WARNING, _DANGER]
 
     fig = make_subplots(
         rows=1, cols=2,
@@ -234,7 +238,7 @@ def plot_ecl_by_segment(result_df: pd.DataFrame) -> go.Figure:
 
     scenario_colors = {
         "ecl_base": (_PRIMARY, "Base (50%)"),
-        "ecl_adverse": ("#EF4444", "Adverse (25%)"),
+        "ecl_adverse": (_DANGER, "Adverse (25%)"),
         "ecl_favorable": (_ACCENT, "Favorable (25%)"),
     }
 
@@ -281,7 +285,7 @@ def plot_transition_matrix(matrix_df: pd.DataFrame) -> go.Figure:
         colorscale=[
             [0, _CARD],
             [0.5, _PRIMARY],
-            [1, "#EF4444"],
+            [1, _DANGER],
         ],
         showscale=False,
     ))
@@ -319,7 +323,7 @@ def plot_waterfall_ecl(waterfall_df: pd.DataFrame) -> go.Figure:
         if row["component"] in ("ECL Ouverture", "ECL Clôture"):
             colors.append(_PRIMARY)
         elif row["amount"] >= 0:
-            colors.append("#EF4444")
+            colors.append(_DANGER)
         else:
             colors.append(_ACCENT)
 
@@ -330,7 +334,7 @@ def plot_waterfall_ecl(waterfall_df: pd.DataFrame) -> go.Figure:
         x=waterfall_df["component"],
         y=waterfall_df["amount"],
         connector=dict(line=dict(color=_MUTED, width=1)),
-        increasing=dict(marker_color="#EF4444"),
+        increasing=dict(marker_color=_DANGER),
         decreasing=dict(marker_color=_ACCENT),
         totals=dict(marker_color=_PRIMARY),
         textposition="outside",
@@ -406,10 +410,10 @@ def plot_iv_table(iv_df: pd.DataFrame) -> go.Figure:
     # Couleur selon la force
     color_map = {
         "Non predictif": _MUTED,
-        "Faible": "#06B6D4",
+        "Faible": _INFO,
         "Moyen": _ACCENT,
         "Fort": _PRIMARY,
-        "Suspect": "#F59E0B",
+        "Suspect": _WARNING,
     }
     colors = [color_map.get(s, _MUTED) for s in df["strength"]]
 
@@ -554,11 +558,12 @@ def plot_shap_beeswarm(
         rng = np.random.default_rng(42)
         sample_idx = rng.choice(len(feat_shap), n_sample, replace=False)
 
-        # Jitter sur y
-        jitter = rng.normal(0, 0.12, n_sample)
+        # Jitter sur y (increased from 0.12 for better visibility)
+        jitter = rng.normal(0, 0.20, n_sample)
 
+        # Use RdBu_r inspired palette for CVD accessibility
         colors = [
-            f"rgb({int(255 * v)}, {int(80 * (1 - v))}, {int(255 * (1 - v))})"
+            f"rgb({int(59 + 189 * v)}, {int(130 - 50 * abs(v - 0.5))}, {int(246 - 175 * v)})"
             for v in normalized[sample_idx]
         ]
 
@@ -588,16 +593,21 @@ def plot_calibration_curve(
     y_true: np.ndarray,
     predictions: Dict[str, np.ndarray],
     n_bins: int = 10,
+    min_bin_count: int = 15,
 ) -> go.Figure:
     """Courbe de calibration (reliability diagram) pour les modèles PD.
 
     Compare la PD prédite à la fréquence de défaut observée par décile.
     Un modèle bien calibré suit la diagonale.
 
+    Utilise des bins à population égale (quantiles) pour éviter les artefacts
+    dans les bins à haute PD avec peu d'observations.
+
     Args:
         y_true: Labels binaires (0/1).
         predictions: Dict {model_name: y_pred_proba}.
-        n_bins: Nombre de bins.
+        n_bins: Nombre de bins (quantiles à population égale).
+        min_bin_count: Nombre min d'observations par bin pour l'afficher.
 
     Returns:
         Figure Plotly.
@@ -614,15 +624,21 @@ def plot_calibration_curve(
     ))
 
     for i, (name, y_pred) in enumerate(predictions.items()):
-        bin_edges = np.linspace(0, 1, n_bins + 1)
+        # Bins a largeur egale dans le range reel des predictions
+        # (pas [0,1] qui laisse trop de bins vides en haute PD)
+        pred_max = float(np.percentile(y_pred, 99.5))
+        bin_edges = np.linspace(0, max(pred_max, 0.05), n_bins + 1)
         bin_centers = []
         observed_rates = []
 
         for j in range(n_bins):
-            mask = (y_pred >= bin_edges[j]) & (y_pred < bin_edges[j + 1])
-            if mask.sum() > 0:
-                bin_centers.append(y_pred[mask].mean())
-                observed_rates.append(y_true[mask].mean())
+            if j < n_bins - 1:
+                mask = (y_pred >= bin_edges[j]) & (y_pred < bin_edges[j + 1])
+            else:
+                mask = y_pred >= bin_edges[j]
+            if mask.sum() >= min_bin_count:
+                bin_centers.append(float(y_pred[mask].mean()))
+                observed_rates.append(float(y_true[mask].mean()))
 
         fig.add_trace(go.Scatter(
             x=bin_centers,
@@ -633,11 +649,14 @@ def plot_calibration_curve(
             marker=dict(size=6),
         ))
 
+    # Adapter l'axe au range effectif des donnees
+    all_preds = np.concatenate(list(predictions.values()))
+    x_max = min(1.0, max(0.3, float(np.percentile(all_preds, 99.5)) * 1.3))
     layout = _base_layout("Courbe de Calibration (Reliability Diagram)", height=420)
     layout["xaxis"]["title"] = "PD Prédite (moyenne par bin)"
     layout["yaxis"]["title"] = "Taux de Défaut Observé"
-    layout["xaxis"]["range"] = [0, max(0.3, 1)]
-    layout["yaxis"]["range"] = [0, max(0.3, 1)]
+    layout["xaxis"]["range"] = [0, x_max]
+    layout["yaxis"]["range"] = [0, x_max]
     fig.update_layout(**layout)
 
     return fig
@@ -676,7 +695,7 @@ def plot_hhi_gauge(hhi_by_segment: float, hhi_by_loan: float) -> go.Figure:
                     dict(range=[0.25, 1], color="rgba(239,68,68,0.2)"),
                 ],
                 threshold=dict(
-                    line=dict(color="#EF4444", width=2),
+                    line=dict(color=_DANGER, width=2),
                     thickness=0.8,
                     value=0.25,
                 ),
@@ -704,7 +723,7 @@ def plot_backtesting_auc(monthly_metrics: pd.DataFrame) -> go.Figure:
     metric_styles = {
         "auc": (_PRIMARY, "AUC"),
         "gini": (_ACCENT, "Gini"),
-        "ks": ("#F59E0B", "KS"),
+        "ks": (_WARNING, "KS"),
     }
 
     for metric, (color, label) in metric_styles.items():
@@ -752,7 +771,7 @@ def plot_pe_nav_by_sector(result_pe: pd.DataFrame) -> go.Figure:
     ))
     fig.add_trace(go.Bar(
         y=seg["sector"], x=seg["expected_loss_pe"], name="Expected Loss PE",
-        orientation="h", marker_color="#EF4444", opacity=0.85,
+        orientation="h", marker_color=_DANGER, opacity=0.85,
     ))
 
     layout = _base_layout("NAV & Pertes PE par Secteur", height=380)
@@ -774,7 +793,7 @@ def plot_pe_risk_categories(result_pe: pd.DataFrame) -> go.Figure:
     cats = result_pe["risk_category"].value_counts().reindex(
         ["Performing", "Watchlist", "Distressed"], fill_value=0,
     )
-    colors = [_ACCENT, "#F59E0B", "#EF4444"]
+    colors = [_ACCENT, _WARNING, _DANGER]
 
     fig = go.Figure(go.Pie(
         labels=cats.index,
@@ -813,8 +832,8 @@ def plot_pe_moic_drawdown(result_pe: pd.DataFrame) -> go.Figure:
 
     fig.add_trace(go.Scatter(
         y=seg["sector"], x=seg["drawdown_mean"], name="Drawdown moyen",
-        mode="markers+lines", marker=dict(size=10, color="#EF4444"),
-        line=dict(color="#EF4444", width=2),
+        mode="markers+lines", marker=dict(size=10, color=_DANGER),
+        line=dict(color=_DANGER, width=2),
     ), secondary_y=True)
 
     layout = _base_layout("MOIC & Drawdown par Secteur", height=380)
@@ -855,7 +874,7 @@ def plot_asymmetry_heatmap(asym_df: pd.DataFrame) -> go.Figure:
         colorscale=[
             [0, _ACCENT],
             [0.5, _CARD],
-            [1, "#EF4444"],
+            [1, _DANGER],
         ],
         showscale=True,
         colorbar=dict(tickfont=dict(color=_MUTED)),
@@ -897,6 +916,13 @@ def plot_raroc_comparison(raroc_df: pd.DataFrame) -> go.Figure:
     layout["yaxis"]["title"] = "RAROC"
     layout["yaxis"]["tickformat"] = ".1%"
     fig.update_layout(**layout)
+    # Target reference line (Risk Appetite green threshold)
+    fig.add_hline(
+        y=0.04, line_dash="dash", line_color=_SUCCESS, line_width=1.5,
+        annotation_text="Cible RAROC (4%)",
+        annotation_font_color=_SUCCESS,
+        annotation_font_size=10,
+    )
     return fig
 
 
@@ -913,7 +939,7 @@ def plot_crr3_sensitivity(crr3_df: pd.DataFrame) -> go.Figure:
 
     colors = []
     for _, row in crr3_df.iterrows():
-        colors.append(_ACCENT if row.get("feasible", True) else "#EF4444")
+        colors.append(_ACCENT if row.get("feasible", True) else _DANGER)
 
     fig.add_trace(go.Bar(
         x=crr3_df["rw_pe"].astype(str) + "%",
@@ -926,9 +952,9 @@ def plot_crr3_sensitivity(crr3_df: pd.DataFrame) -> go.Figure:
 
     # Seuil CET1 minimum (10.5% Pillar 1+2)
     fig.add_hline(
-        y=0.105, line_dash="dash", line_color="#EF4444",
+        y=0.105, line_dash="dash", line_color=_DANGER,
         annotation_text="CET1 min (10.5%)",
-        annotation_font_color="#EF4444",
+        annotation_font_color=_DANGER,
     )
 
     layout = _base_layout("Sensibilite CRR3 — CET1 par Risk Weight PE", height=380)
@@ -955,7 +981,8 @@ def plot_risk_appetite_matrix(ra_df: pd.DataFrame) -> go.Figure:
         return fig
 
     signal_map = {"vert": 0, "ambre": 1, "rouge": 2}
-    signal_labels = {"vert": "Vert", "ambre": "Ambre", "rouge": "Rouge"}
+    # CVD-safe: symbols + text for colorblind accessibility
+    signal_labels = {"vert": "\u2713 Vert", "ambre": "\u26a0 Ambre", "rouge": "\u2717 Rouge"}
 
     # Pivoter pour avoir secteurs en lignes, canaux en colonnes
     if "canal" in ra_df.columns and "sector" in ra_df.columns:
@@ -974,9 +1001,9 @@ def plot_risk_appetite_matrix(ra_df: pd.DataFrame) -> go.Figure:
             texttemplate="%{text}",
             textfont=dict(size=14, color=_TEXT),
             colorscale=[
-                [0, "#06D6A0"],
-                [0.5, "#F59E0B"],
-                [1, "#EF4444"],
+                [0, _SUCCESS],
+                [0.5, _WARNING],
+                [1, _DANGER],
             ],
             showscale=False,
             zmin=0, zmax=2,
@@ -988,7 +1015,7 @@ def plot_risk_appetite_matrix(ra_df: pd.DataFrame) -> go.Figure:
         fig = go.Figure(go.Heatmap(
             z=z, text=text, texttemplate="%{text}",
             textfont=dict(size=14, color=_TEXT),
-            colorscale=[[0, "#06D6A0"], [0.5, "#F59E0B"], [1, "#EF4444"]],
+            colorscale=[[0, _SUCCESS], [0.5, _WARNING], [1, _DANGER]],
             showscale=False, zmin=0, zmax=2,
         ))
 
@@ -1033,7 +1060,7 @@ def plot_shap_force_individual(
 
     names = [f"{feature_names[i]} = {feature_values[i]:.2f}" for i in indices]
     values = [shap_values[i] for i in indices]
-    colors = [_ACCENT if v < 0 else "#EF4444" for v in values]
+    colors = [_ACCENT if v < 0 else _DANGER for v in values]
 
     fig = go.Figure(go.Bar(
         y=names,
@@ -1058,6 +1085,62 @@ def plot_shap_force_individual(
     return fig
 
 
+def plot_score_distribution(
+    scores: np.ndarray,
+    y_true: np.ndarray,
+    scorecard_params: Optional[Dict[str, float]] = None,
+) -> go.Figure:
+    """Histogramme de la distribution des scores scorecard (LR_WoE).
+
+    Affiche la distribution des scores pour les bons et mauvais dossiers
+    avec les parametres du scoring.
+
+    Args:
+        scores: Array de scores.
+        y_true: Array de labels binaires (0/1).
+        scorecard_params: Parametres scorecard (pdo, target_score, etc.).
+
+    Returns:
+        Figure Plotly.
+    """
+    fig = go.Figure()
+
+    # Bons dossiers (default=0)
+    fig.add_trace(go.Histogram(
+        x=scores[y_true == 0],
+        name="Non-défaut",
+        marker_color=_PRIMARY,
+        opacity=0.7,
+        nbinsx=40,
+    ))
+
+    # Mauvais dossiers (default=1)
+    fig.add_trace(go.Histogram(
+        x=scores[y_true == 1],
+        name="Défaut",
+        marker_color=_DANGER,
+        opacity=0.7,
+        nbinsx=40,
+    ))
+
+    title = "Distribution des Scores Scorecard (LR_WoE)"
+    if scorecard_params:
+        title += (
+            f"<br><span style='font-size:11px;color:{_MUTED}'>"
+            f"PDO={scorecard_params.get('pdo', 20):.0f} | "
+            f"Target={scorecard_params.get('target_score', 600):.0f} pts "
+            f"@ odds {scorecard_params.get('target_odds', 50):.0f}:1</span>"
+        )
+
+    layout = _base_layout(title, height=400)
+    layout["barmode"] = "overlay"
+    layout["xaxis"]["title"] = "Score"
+    layout["yaxis"]["title"] = "Nombre d'entreprises"
+    fig.update_layout(**layout)
+
+    return fig
+
+
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     """Convertit une couleur hex en tuple RGBA string.
 
@@ -1071,3 +1154,154 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     hex_color = hex_color.lstrip("#")
     r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
     return f"({r}, {g}, {b}, {alpha})"
+
+
+# ──────────────────────────────────────────────
+# NOUVEAUX CHARTS — UX Redesign Phase 2
+# ──────────────────────────────────────────────
+
+
+def plot_trajectories_chart(trajectories_df: pd.DataFrame) -> go.Figure:
+    """Graphique en lignes des trajectoires macro prospectives.
+
+    Args:
+        trajectories_df: DataFrame avec colonnes horizon + variables macro.
+
+    Returns:
+        Figure Plotly multi-line.
+    """
+    fig = go.Figure()
+
+    # Identifier les colonnes de variables macro (exclure horizon, sector, etc.)
+    meta_cols = {"horizon", "sector", "period", "t"}
+    var_cols = [c for c in trajectories_df.columns if c not in meta_cols]
+
+    # Axe X : horizon ou index
+    x_col = "horizon" if "horizon" in trajectories_df.columns else trajectories_df.index
+
+    colors = list(_COLORS) + [_WARNING, _INFO, _DANGER]
+    for i, col in enumerate(var_cols):
+        color = colors[i % len(colors)]
+        fig.add_trace(go.Scatter(
+            x=trajectories_df[x_col] if isinstance(x_col, str) else x_col,
+            y=trajectories_df[col],
+            mode="lines+markers",
+            name=col.replace("_", " ").title(),
+            line=dict(color=color, width=2),
+            marker=dict(size=5, color=color),
+        ))
+
+    layout = _base_layout("Trajectoires Macro Prospectives (Ornstein-Uhlenbeck)", height=400)
+    layout["xaxis"]["title"] = "Horizon (mois)"
+    layout["yaxis"]["title"] = "Valeur"
+    layout["showlegend"] = True
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_stage_sankey(
+    stages_base: np.ndarray,
+    stages_stressed: np.ndarray,
+) -> go.Figure:
+    """Diagramme Sankey des migrations de stage (Base -> Stress).
+
+    Args:
+        stages_base: Array des stages avant stress.
+        stages_stressed: Array des stages apres stress.
+
+    Returns:
+        Figure Plotly Sankey.
+    """
+    from ifrs9_cockpit.config import STAGE_COLORS
+
+    labels = [
+        "Stage 1 (Base)", "Stage 2 (Base)", "Stage 3 (Base)",
+        "Stage 1 (Stress)", "Stage 2 (Stress)", "Stage 3 (Stress)",
+    ]
+
+    # Couleurs des noeuds
+    node_colors = [
+        STAGE_COLORS[1], STAGE_COLORS[2], STAGE_COLORS[3],
+        STAGE_COLORS[1], STAGE_COLORS[2], STAGE_COLORS[3],
+    ]
+
+    # Calculer les flux
+    sources, targets, values = [], [], []
+    for s_from in [1, 2, 3]:
+        for s_to in [1, 2, 3]:
+            count = int(((stages_base == s_from) & (stages_stressed == s_to)).sum())
+            if count > 0:
+                sources.append(s_from - 1)  # index 0-2 = base
+                targets.append(s_to + 2)    # index 3-5 = stress
+                values.append(count)
+
+    # Couleurs des liens (transparentes, basees sur la source)
+    link_colors = [
+        f"rgba{_hex_to_rgba(STAGE_COLORS[s + 1], 0.3)}"
+        for s in sources
+    ]
+
+    fig = go.Figure(go.Sankey(
+        node=dict(
+            pad=20,
+            thickness=25,
+            label=labels,
+            color=node_colors,
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values,
+            color=link_colors,
+        ),
+    ))
+
+    layout = _base_layout("Migrations de Stage (Base vs Stress)", height=400)
+    fig.update_layout(**layout)
+    return fig
+
+
+def plot_pe_risk_stacked_bar(result_pe: pd.DataFrame) -> go.Figure:
+    """Barre horizontale empilee pour categories de risque PE.
+
+    Remplace le pie chart pour meilleure lisibilite.
+
+    Args:
+        result_pe: DataFrame PE avec colonne risk_category.
+
+    Returns:
+        Figure Plotly horizontal stacked bar.
+    """
+    from ifrs9_cockpit.config import PE_CATEGORY_COLORS
+
+    cats = result_pe["risk_category"].value_counts()
+    total = cats.sum()
+
+    fig = go.Figure()
+    cat_order = ["Performing", "Watchlist", "Distressed"]
+    patterns = ["", "/", "x"]  # CVD-safe patterns
+
+    for i, cat in enumerate(cat_order):
+        count = cats.get(cat, 0)
+        pct = count / total if total > 0 else 0
+        fig.add_trace(go.Bar(
+            y=["Portefeuille PE"],
+            x=[pct],
+            name=f"{cat} ({count})",
+            orientation="h",
+            marker=dict(
+                color=PE_CATEGORY_COLORS.get(cat, _MUTED),
+                pattern_shape=patterns[i],
+            ),
+            text=f"{pct:.0%}",
+            textposition="inside",
+            textfont=dict(color="white", size=12),
+            hovertemplate=f"<b>{cat}</b><br>Count: {count}<br>Part: {pct:.1%}<extra></extra>",
+        ))
+
+    layout = _base_layout("Classification Risque PE", height=180)
+    layout["barmode"] = "stack"
+    layout["showlegend"] = True
+    layout["legend"] = dict(orientation="h", y=-0.3)
+    fig.update_layout(**layout)
+    return fig

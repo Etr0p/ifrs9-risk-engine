@@ -126,17 +126,21 @@ class TestStory61SidebarSlidersScenarios:
         assert hasattr(SCENARIO_BASE, "inflation_rate")
 
     def test_slider_conversion_unemployment_bipolar(self) -> None:
-        """Conversion chomage bipolaire : 0 = base, negatif = hausse chomage."""
-        # Logique : unemployment_rate = SCENARIO_BASE.unemployment_rate - bipolar
-        # bipolar = -3 => unemployment = 7.5 - (-3) = 10.5 (hausse)
-        # bipolar = +2 => unemployment = 7.5 - 2 = 5.5 (baisse)
+        """Conversion chomage bipolaire : les deux extremes augmentent le chomage.
+
+        Logique : unemployment_rate = SCENARIO_BASE.unemployment_rate + abs(bipolar)
+        bipolar = -3 (crise eco) => unemployment = 7.5 + 3 = 10.5 (hausse)
+        bipolar = +2 (rupture techno) => unemployment = 7.5 + 2 = 9.5 (hausse)
+        bipolar = 0 => unemployment = 7.5 (baseline)
+        """
         base = SCENARIO_BASE.unemployment_rate
         bipolar_neg = -3.0
-        result = base - bipolar_neg
-        assert result > base, "Bipolar negatif doit augmenter le chomage"
+        result_neg = base + abs(bipolar_neg)
+        assert result_neg > base, "Bipolar negatif (crise) doit augmenter le chomage"
         bipolar_pos = 2.0
-        result_pos = base - bipolar_pos
-        assert result_pos < base, "Bipolar positif doit baisser le chomage"
+        result_pos = base + abs(bipolar_pos)
+        assert result_pos > base, "Bipolar positif (techno) doit aussi augmenter le chomage"
+        assert base + abs(0.0) == base, "Bipolar 0 = baseline"
 
     def test_slider_conversion_interest_rate_bp(self) -> None:
         """Conversion taux BCE : bp/100 ajoute a la base."""
@@ -190,8 +194,8 @@ class TestStory64DesignSystemSteelBlue:
         assert DASHBOARD_CONFIG.theme_secondary == "#1E40AF"
 
     def test_theme_accent_emerald(self) -> None:
-        """Couleur accent = Emerald #10B981."""
-        assert DASHBOARD_CONFIG.theme_accent == "#10B981"
+        """Couleur accent = Emerald 400 #34D399 (WCAG AAA 9.6:1)."""
+        assert DASHBOARD_CONFIG.theme_accent == "#34D399"
 
     def test_theme_bg_dark(self) -> None:
         """Fond sombre = #0C1222."""
@@ -206,15 +210,15 @@ class TestStory64DesignSystemSteelBlue:
         assert DASHBOARD_CONFIG.theme_text == "#F8FAFC"
 
     def test_theme_text_muted(self) -> None:
-        """Texte secondaire = #94A3B8 (Slate 400)."""
-        assert DASHBOARD_CONFIG.theme_text_muted == "#94A3B8"
+        """Texte secondaire = #A1B2C8 (Slate clair WCAG AAA 7.2:1)."""
+        assert DASHBOARD_CONFIG.theme_text_muted == "#A1B2C8"
 
     def test_semantic_colors(self) -> None:
-        """Couleurs semantiques : success, warning, danger, info."""
-        assert DASHBOARD_CONFIG.color_success == "#10B981"
-        assert DASHBOARD_CONFIG.color_warning == "#F59E0B"
-        assert DASHBOARD_CONFIG.color_danger == "#EF4444"
-        assert DASHBOARD_CONFIG.color_info == "#06B6D4"
+        """Couleurs semantiques WCAG AAA : success, warning, danger, info."""
+        assert DASHBOARD_CONFIG.color_success == "#34D399"
+        assert DASHBOARD_CONFIG.color_warning == "#FBBF24"
+        assert DASHBOARD_CONFIG.color_danger == "#F87171"
+        assert DASHBOARD_CONFIG.color_info == "#22D3EE"
 
     def test_chart_colors_tuple_length(self) -> None:
         """CHART_COLORS contient 6 couleurs hex."""
@@ -230,9 +234,9 @@ class TestStory64DesignSystemSteelBlue:
     def test_stage_colors_mapping(self) -> None:
         """STAGE_COLORS couvre stages 1, 2, 3 avec couleurs semantiques."""
         assert set(STAGE_COLORS.keys()) == {1, 2, 3}
-        assert STAGE_COLORS[1] == "#10B981"  # Emerald (performing)
-        assert STAGE_COLORS[2] == "#F59E0B"  # Amber (watchlist)
-        assert STAGE_COLORS[3] == "#EF4444"  # Red (default)
+        assert STAGE_COLORS[1] == "#34D399"  # Emerald 400 WCAG AAA (performing)
+        assert STAGE_COLORS[2] == "#FBBF24"  # Amber 400 WCAG AAA (watchlist)
+        assert STAGE_COLORS[3] == "#F87171"  # Red 400 WCAG AAA (default)
 
     def test_page_config_values(self) -> None:
         """Page config : titre, icone, layout wide."""
@@ -254,26 +258,25 @@ class TestStory64DesignSystemSteelBlue:
 
 
 # ──────────────────────────────────────────────
-# STORY 6-4 : 8 onglets
+# STORY 6-4 : 7 onglets (CRO-first, Staging fusionne dans Risque Credit)
 # ──────────────────────────────────────────────
 
 
-class TestStory64EightTabs:
-    """Tests pour la structure a 8 onglets du dashboard."""
+class TestStory64Tabs:
+    """Tests pour la structure a 7 onglets du dashboard."""
 
     TAB_NAMES = [
+        "Synthese CRO",
+        "Risque Credit",
+        "Private Equity",
+        "Optimisation & Bilan",
         "Performance Modeles",
-        "Analyse ECL",
-        "Analyse PE",
-        "Staging & Transitions",
-        "Asymetries & Optimisation",
         "Explainabilite",
         "Donnees & Export",
-        "Analyse CRO",
     ]
 
-    def test_app_defines_8_tabs(self) -> None:
-        """app.py definit exactement 8 noms d'onglets via st.tabs()."""
+    def test_app_defines_7_tabs(self) -> None:
+        """app.py definit exactement 7 noms d'onglets via st.tabs()."""
         import ast
         from pathlib import Path
 
@@ -287,7 +290,7 @@ class TestStory64EightTabs:
         tabs_call = source[idx_start:idx_end]
         # Compter les strings entre guillemets
         tab_count = tabs_call.count('"') // 2
-        assert tab_count == 8, f"Attendu 8 onglets, trouve {tab_count}"
+        assert tab_count == 7, f"Attendu 7 onglets, trouve {tab_count}"
 
     def test_tab_names_present_in_source(self) -> None:
         """Chaque nom d'onglet est present dans le code source de app.py."""
@@ -644,7 +647,7 @@ class TestComponentsModule:
             action="Reduire exposition",
             regime="crise",
             trigger="ECL > seuil",
-            euler_driver="Credit_Technologie",
+            proportional_driver="Credit_Technologie",
             macro_factor="unemployment_rate",
             risk_appetite_status="rouge",
             rst_distance=0.5,

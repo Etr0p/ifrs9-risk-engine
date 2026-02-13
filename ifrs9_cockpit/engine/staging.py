@@ -23,36 +23,50 @@ from ifrs9_cockpit.config import IFRS9_CONFIG, SICR_CONFIG, SCENARIO_BASE
 
 
 def compute_macro_z(macro_params: Dict[str, float]) -> float:
-    """Calcule le Z-score macro composite pour le SICR.
+    """Calcule le Z-score macro composite normalise pour le SICR.
 
     Le Z-score mesure la deviation des conditions macro courantes
     par rapport au scenario de base. Positif = conditions adverses.
+
+    Chaque delta macro est normalise par la plage typique de la variable
+    (ecart adverse - base) pour eviter que les variables a grande echelle
+    (HPI, chomage) ne dominent le score.
 
     Args:
         macro_params: Dict avec cles unemployment_rate, gdp_growth,
             interest_rate, hpi_growth, inflation_rate.
 
     Returns:
-        Z-score macro composite (scalaire).
+        Z-score macro composite (scalaire), normalise, ~[-1, +1] en conditions normales.
     """
     base = SCENARIO_BASE
+    # Plages typiques adverse-base pour normalisation (depuis SCENARIO_ADVERSE)
+    # Evite que HPI (range ~30pp) domine vs taux (range ~2pp)
+    _NORM = {
+        "unemployment_rate": 3.0,   # 10.5 - 7.5
+        "gdp_growth": 2.7,          # 1.2 - (-1.5)
+        "interest_rate": 1.5,        # 5.0 - 3.5
+        "hpi_growth": 10.0,          # 2.0 - (-8.0)
+        "inflation_rate": 3.0,       # 5.5 - 2.5
+    }
     z = 0.0
     # Chomage : hausse = adverse
     z += (macro_params.get("unemployment_rate", base.unemployment_rate)
-          - base.unemployment_rate)
+          - base.unemployment_rate) / _NORM["unemployment_rate"]
     # PIB : baisse = adverse
     z += (base.gdp_growth
-          - macro_params.get("gdp_growth", base.gdp_growth))
+          - macro_params.get("gdp_growth", base.gdp_growth)) / _NORM["gdp_growth"]
     # Taux : hausse = adverse
     z += (macro_params.get("interest_rate", base.interest_rate)
-          - base.interest_rate)
+          - base.interest_rate) / _NORM["interest_rate"]
     # HPI : baisse = adverse
     z += (base.hpi_growth
-          - macro_params.get("hpi_growth", base.hpi_growth))
+          - macro_params.get("hpi_growth", base.hpi_growth)) / _NORM["hpi_growth"]
     # Inflation : hausse = adverse
     z += (macro_params.get("inflation_rate", base.inflation_rate)
-          - base.inflation_rate)
-    return z
+          - base.inflation_rate) / _NORM["inflation_rate"]
+    # Moyenne des 5 composantes pour un Z-score unitaire
+    return z / 5.0
 
 
 def compute_sicr_score(
@@ -78,8 +92,12 @@ def compute_sicr_score(
     Returns:
         Array de scores SICR.
     """
-    # Ratio PD relatif
-    pd_ratio = pd_current / np.maximum(pd_origination, 1e-6) - 1
+    # Ratio PD relatif (capped a 5.0 pour eviter une sensibilite perverse
+    # sur les credits a PD origination tres basse, e.g. 0.1%→0.5% = ratio 4)
+    pd_ratio = np.clip(
+        pd_current / np.maximum(pd_origination, 1e-6) - 1,
+        0.0, 5.0,
+    )
     # Delta PD absolu
     pd_delta = np.maximum(0, pd_current - pd_origination)
     # DPD normalise

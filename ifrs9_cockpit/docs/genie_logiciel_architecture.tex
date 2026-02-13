@@ -1,0 +1,1526 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc, fit, backgrounds}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- G\'enie Logiciel et Architecture}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── CODE LISTINGS ───────────────────────────────────────
+\usepackage{listings}
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{lightgray},
+    frame=single,
+    rulecolor=\color{steelblue!50},
+    keywordstyle=\color{darkblue}\bfseries,
+    commentstyle=\color{gray},
+    stringstyle=\color{accentgreen!70!black},
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4,
+}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+% ─── PAGE DE TITRE ────────────────────────────────────────
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+
+{\Huge\bfseries\color{darkblue} G\'enie Logiciel\\[0.3cm]
+et Architecture}
+
+\vspace{1cm}
+
+{\LARGE\color{steelblue} Choix Technologiques, Patterns et Organisation}
+
+\vspace{2cm}
+
+{\large\color{gray}
+IFRS 9 Risk Cockpit\\[0.5cm]
+Python 3.13 $\cdot$ FastAPI $\cdot$ Streamlit $\cdot$ PyTorch-TabNet $\cdot$ Docker
+}
+
+\vspace{2cm}
+
+\begin{tikzpicture}
+\node[draw=steelblue, rounded corners=8pt, minimum width=2.5cm, minimum height=1.2cm, fill=steelblue!10] (cfg) {\textbf{Config-Driven}};
+\node[draw=steelblue, rounded corners=8pt, minimum width=2.5cm, minimum height=1.2cm, fill=steelblue!10, right=0.6cm of cfg] (api) {\textbf{API-First}};
+\node[draw=steelblue, rounded corners=8pt, minimum width=2.5cm, minimum height=1.2cm, fill=steelblue!10, right=0.6cm of api] (ts) {\textbf{Train / Serve}};
+\node[draw=steelblue, rounded corners=8pt, minimum width=2.5cm, minimum height=1.2cm, fill=steelblue!10, right=0.6cm of ts] (docker) {\textbf{Docker}};
+\node[draw=steelblue, rounded corners=8pt, minimum width=2.5cm, minimum height=1.2cm, fill=steelblue!10, right=0.6cm of docker] (test) {\textbf{574+ Tests}};
+
+\node[below=0.3cm of cfg, text=gray, font=\small] {Immutabilit\'e};
+\node[below=0.3cm of api, text=gray, font=\small] {FastAPI};
+\node[below=0.3cm of ts, text=gray, font=\small] {Offline / Online};
+\node[below=0.3cm of docker, text=gray, font=\small] {Multi-stage};
+\node[below=0.3cm of test, text=gray, font=\small] {Pandera};
+\end{tikzpicture}
+
+\vfill
+
+{\large\today}
+
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+
+% ══════════════════════════════════════════════════════════
+\section{Introduction}
+% ══════════════════════════════════════════════════════════
+
+Ce document pr\'esente les choix de g\'enie logiciel et l'architecture du projet IFRS~9 Risk Cockpit. L'objectif est double~: expliquer \textbf{pourquoi} chaque technologie a \'et\'e retenue, et \textbf{comment} les diff\'erents modules s'articulent pour former un pipeline coh\'erent.
+
+Le projet r\'epond \`a un cahier des charges exigeant~:
+\begin{itemize}[noitemsep]
+    \item \textbf{Performance}~: recalcul du portefeuille en moins de 2 secondes
+    \item \textbf{Reproductibilit\'e}~: r\'esultats identiques entre deux ex\'ecutions (seeds fix\'ees)
+    \item \textbf{Maintenabilit\'e}~: aucun \textit{magic number} dans le code, tout est configurable
+    \item \textbf{Fiabilit\'e}~: 574+ tests automatis\'es, pipeline valid\'e de bout en bout
+    \item \textbf{Interactivit\'e}~: dashboard en temps r\'eel avec stress test macro
+\end{itemize}
+
+\begin{interpretbox}[Philosophie g\'en\'erale]
+Le projet suit le principe \textbf{``configuration as code''}~: la configuration est la source unique de v\'erit\'e. Les modules de calcul lisent les param\`etres depuis \texttt{config.py} et ne contiennent jamais de constantes en dur. Ce choix facilite l'audit, la reproductibilit\'e et l'\'evolution du syst\`eme.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Choix Technologiques}
+\label{sec:techno}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Vue d'ensemble}
+
+\begin{center}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Technologie} & \textbf{Version} & \textbf{R\^ole dans le projet} \\
+\midrule
+Python & 3.13 & Langage principal (\'ecosyst\`eme data science) \\
+pandas / NumPy & -- & Manipulation de donn\'ees, calcul vectoris\'e \\
+scikit-learn & $\geq$1.8 & LR, calibration isotonique, m\'etriques \\
+PyTorch & $\geq$2.0 & Backend GPU pour TabNet \\
+pytorch-tabnet & -- & Deep learning tabulaire (masques d'attention) \\
+XGBoost & $\geq$2.0 & Gradient boosting, support CUDA \\
+Streamlit & $\geq$1.30 & Dashboard interactif, hot reload, widgets \\
+\textbf{FastAPI} & $\geq$0.100 & \textbf{API REST d\'ecoupl\'ee (backend engine)} \\
+\textbf{Pydantic} & v2 & \textbf{Validation requ\^etes/r\'eponses API} \\
+\textbf{Pandera} & $\geq$0.18 & \textbf{Sch\'emas d\'eclaratifs DataFrame (contrats)} \\
+\textbf{structlog} & $\geq$24.0 & \textbf{Logging structur\'e (observabilit\'e)} \\
+\textbf{Docker} & $\geq$24.0 & \textbf{Containerisation multi-stage (GPU/CPU)} \\
+Plotly & -- & Graphiques interactifs (ROC, waterfall, heatmap) \\
+SHAP & -- & Explicabilit\'e (KernelExplainer, TreeExplainer) \\
+pytest & -- & Framework de tests (574+ tests) \\
+joblib & -- & S\'erialisation des mod\`eles entra\^in\'es \\
+openpyxl & -- & Export Excel multi-feuilles \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Python 3.13}
+
+Python s'impose naturellement pour un projet de risque quantitatif~: son \'ecosyst\`eme data science (pandas, NumPy, scikit-learn) est le plus riche du march\'e. La version 3.13 apporte des am\'eliorations de performance et un meilleur support du typage statique.
+
+\begin{definitionbox}[Pourquoi pas R, Julia ou C++~?]
+\begin{itemize}[noitemsep]
+    \item \textbf{R}~: excellent pour la statistique pure, mais faible pour le d\'eploiement d'applications interactives.
+    \item \textbf{Julia}~: rapide, mais \'ecosyst\`eme encore immature pour le ML tabulaire.
+    \item \textbf{C++}~: performant, mais temps de d\'eveloppement d\'eraisonnable pour un prototype.
+\end{itemize}
+Python offre le meilleur compromis entre vitesse de d\'eveloppement, richesse des biblioth\`eques et facilit\'e de d\'eploiement.
+\end{definitionbox}
+
+\subsection{Streamlit}
+
+Streamlit transforme un script Python en application web interactive sans \'ecrire une seule ligne de HTML, CSS ou JavaScript~:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Hot reload}~: chaque modification du code est visible imm\'ediatement dans le navigateur
+    \item \textbf{Widgets natifs}~: sliders, selectbox, multiselect pour les param\`etres macro
+    \item \textbf{Caching int\'egr\'e}~: \texttt{@st.cache\_data} et \texttt{@st.cache\_resource} pour \'eviter les recalculs inutiles
+    \item \textbf{Fragments}~: \texttt{@st.fragment} isole un bloc de l'interface pour ne recharger que cette partie
+\end{itemize}
+
+\begin{warningbox}[Limites de Streamlit et mitigation API-First]
+Streamlit n'est pas con\c{c}u pour le multi-utilisateur en production (pas de gestion de sessions robuste). Pour y rem\'edier, le moteur de calcul est d\'esormais expos\'e via \textbf{FastAPI} (\texttt{api.py}), permettant \`a tout client (React, Excel VBA, script Python) d'int\'egrer le pipeline IFRS~9 via des appels HTTP. Le dashboard Streamlit reste l'interface par d\'efaut pour l'analyse interactive.
+\end{warningbox}
+
+\subsection{PyTorch + pytorch-tabnet}
+
+TabNet (Google Research, 2019) n\'ecessite PyTorch comme backend. L'avantage de PyTorch par rapport \`a TensorFlow~:
+\begin{itemize}[noitemsep]
+    \item Ex\'ecution dynamique (\textit{eager mode})~: plus facile \`a d\'eboguer
+    \item D\'etection automatique du GPU~: \texttt{torch.cuda.is\_available()} active le CUDA sans configuration
+    \item Communaut\'e acad\'emique dominante
+\end{itemize}
+
+\subsection{XGBoost}
+
+XGBoost est le standard de l'industrie pour les donn\'ees tabulaires. Son support CUDA (\texttt{device="cuda"}) permet un entra\^inement GPU natif. L'auto-d\'etection est transparente~: si un GPU est disponible, il est utilis\'e ; sinon, le CPU prend le relais sans modification du code.
+
+\subsection{scikit-learn}
+
+scikit-learn fournit les briques fondamentales du pipeline~:
+\begin{itemize}[noitemsep]
+    \item \textbf{LogisticRegression}~: mod\`ele LR\_WoE avec \texttt{class\_weight="balanced"}
+    \item \textbf{IsotonicRegression}~: calibration des probabilit\'es (XGBoost) et monotonicit\'e PAV (WoE)
+    \item \textbf{M\'etriques}~: \texttt{roc\_auc\_score}, \texttt{brier\_score\_loss}, \texttt{classification\_report}
+    \item \textbf{API compatible}~: le wrapper TabNet impl\'emente \texttt{BaseEstimator} et \texttt{ClassifierMixin} pour s'int\'egrer dans les pipelines sklearn
+\end{itemize}
+
+\subsection{pytest}
+
+Le framework pytest est utilis\'e avec 574+ tests couvrant l'ensemble du pipeline~:
+\begin{itemize}[noitemsep]
+    \item Tests unitaires (fonctions individuelles)
+    \item Tests d'int\'egration (pipeline bout en bout)
+    \item Tests d'invariants financiers (contraintes m\'etier)
+    \item Ex\'ecution standalone possible~: \texttt{python -m ifrs9\_cockpit.tests.test\_invariants}
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Architecture Config-Driven}
+\label{sec:config}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Principe}
+
+Le fichier \texttt{config.py} est la \textbf{source unique de v\'erit\'e} du projet. Il contient environ 1\,140 lignes et centralise l'int\'egralit\'e des param\`etres~: hyperparams\`etres des mod\`eles, seuils r\'eglementaires, sc\'enarios macro, palette graphique, etc. Aucun autre fichier ne contient de constante en dur.
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=5pt, minimum width=3cm, minimum height=0.9cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    cfgbox/.style={draw=darkblue, rounded corners=5pt, minimum width=4.5cm, minimum height=1.2cm, fill=darkblue!10, font=\normalsize\bfseries, text=darkblue, align=center},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+\node[cfgbox] (cfg) at (6,0) {config.py\\{\small 1\,140 lignes}};
+
+\node[box] (pd) at (0,-2.5) {pd\_model.py};
+\node[box] (lgd) at (3,-2.5) {lgd\_model.py};
+\node[box] (ecl) at (6,-2.5) {ecl\_calculator.py};
+\node[box] (comp) at (9,-2.5) {comparator.py};
+\node[box] (app) at (12,-2.5) {app.py};
+
+\node[box] (stag) at (1.5,-4.5) {staging.py};
+\node[box] (pe) at (4.5,-4.5) {pe\_calculator.py};
+\node[box] (gen) at (7.5,-4.5) {generator.py};
+\node[box] (cro) at (10.5,-4.5) {orchestrator.py};
+
+\draw[arrow] (cfg) -- (pd);
+\draw[arrow] (cfg) -- (lgd);
+\draw[arrow] (cfg) -- (ecl);
+\draw[arrow] (cfg) -- (comp);
+\draw[arrow] (cfg) -- (app);
+\draw[arrow] (cfg) -- (stag);
+\draw[arrow] (cfg) -- (pe);
+\draw[arrow] (cfg) -- (gen);
+\draw[arrow] (cfg) -- (cro);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Immutabilit\'e par \texttt{@dataclass(frozen=True)}}
+
+Chaque bloc de configuration est une \texttt{dataclass} gel\'ee~: une fois cr\'e\'ee, ses attributs ne peuvent plus \^etre modifi\'es. Cela garantit que la configuration ne change pas en cours d'ex\'ecution.
+
+\begin{formulebox}[Patron \texttt{frozen dataclass}]
+\begin{lstlisting}[language=Python]
+@dataclass(frozen=True)
+class PDModelConfig:
+    tabnet_n_d: int = 64
+    tabnet_n_a: int = 64
+    tabnet_n_steps: int = 5
+    xgb_n_estimators: int = 200
+    ...
+
+PD_CONFIG = PDModelConfig()  # instance unique, immutable
+\end{lstlisting}
+Toute tentative de modification l\`eve une \texttt{FrozenInstanceError}~:
+\begin{lstlisting}[language=Python]
+PD_CONFIG.tabnet_n_d = 128  # FrozenInstanceError!
+\end{lstlisting}
+\end{formulebox}
+
+\subsection{Catalogue des configurations}
+
+Le fichier \texttt{config.py} d\'efinit 12 blocs de configuration~:
+
+\begin{center}
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Classe / Constante} & \textbf{Type} & \textbf{Contenu} \\
+\midrule
+\texttt{SectorConfig} & \texttt{dataclass} & 5 secteurs avec 10 sensibilit\'es macro chacun \\
+\texttt{PDModelConfig} & \texttt{dataclass} & Hyperparamètres LR, TabNet, XGBoost \\
+\texttt{LGDConfig} & \texttt{dataclass} & LGD TTC, downturn add-on, cure rate \\
+\texttt{EADConfig} & \texttt{dataclass} & CCF revolving/term, stress tirage \\
+\texttt{IFRS9Config} & \texttt{dataclass} & Seuils SICR, Stage~3, discount rate \\
+\texttt{SICRConfig} & \texttt{dataclass} & Poids multi-facteurs SICR \\
+\texttt{BaselConfig} & \texttt{dataclass} & CET1, RWA budget, CRR3, RAROC \\
+\texttt{RiskAppetiteConfig} & \texttt{dataclass} & Seuils tricolores (vert / ambre / rouge) \\
+\texttt{DashboardConfig} & \texttt{dataclass} & Palette Steel Blue, slider ranges \\
+\texttt{PREDEFINED\_SCENARIOS} & \texttt{Dict} & 5 sc\'enarios macro pr\'ed\'efinis \\
+\texttt{MACRO\_INCOHERENCE\_RULES} & \texttt{Tuple} & 4 r\`egles de coh\'erence macro \\
+\texttt{CLIPPING\_BOUNDS} & \texttt{Dict} & Bornes outliers par variable \\
+\midrule
+\multicolumn{3}{c}{\textit{Nouveaux modules (audit production)}} \\
+\midrule
+\texttt{CreditInputSchema} & Pandera & Sch\'ema d'entr\'ee credit (12 colonnes valid\'ees) \\
+\texttt{PEInputSchema} & Pandera & Sch\'ema d'entr\'ee PE (9 colonnes valid\'ees) \\
+\texttt{CreditResultSchema} & Pandera & Sch\'ema de sortie ECL (7 colonnes, bornes) \\
+\texttt{PEResultSchema} & Pandera & Sch\'ema de sortie PE (7 colonnes, bornes) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Validation automatique \`a l'import}
+
+La fonction \texttt{validate\_config()} est appel\'ee automatiquement lors de l'\texttt{import} du module. Elle v\'erifie~:
+
+\begin{enumerate}[noitemsep]
+    \item Les proportions des secteurs somment \`a 1.0
+    \item Les pond\'erations des sc\'enarios ECL somment \`a 1.0
+    \item Le RW PE par d\'efaut est pr\'esent dans les options CRR3
+    \item Les fourchettes de multiples et de marges EBITDA sont coh\'erentes
+    \item Les poids SICR somment \`a 1.0
+    \item Les 5 noms de secteurs attendus sont pr\'esents
+    \item Les 5 sc\'enarios pr\'ed\'efinis existent
+\end{enumerate}
+
+\begin{interpretbox}[Avantage pour l'audit]
+Toute incoh\'erence de configuration est d\'etect\'ee \textbf{avant} le lancement du dashboard. Un auditeur peut v\'erifier tous les param\`etres dans un seul fichier de 1\,140 lignes, sans chercher dans le code.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Structure du Projet}
+\label{sec:structure}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Arborescence des modules}
+
+\begin{center}
+\begin{tikzpicture}[
+    folder/.style={draw=steelblue, rounded corners=3pt, minimum width=4.2cm, minimum height=0.7cm, fill=steelblue!8, font=\small\ttfamily, text=darkblue, anchor=west},
+    file/.style={draw=steelblue!50, rounded corners=2pt, minimum width=3.8cm, minimum height=0.55cm, fill=steelblue!3, font=\footnotesize\ttfamily, text=darkblue, anchor=west},
+    level 1/.style={sibling distance=2.5cm}
+]
+
+% Root
+\node[folder, fill=darkblue!10, draw=darkblue, font=\small\ttfamily\bfseries] (root) at (0, 0) {ifrs9\_cockpit/};
+
+% Level 1 - left column
+\node[file] (config) at (0.5, -0.9) {config.py};
+\node[file] (app) at (0.5, -1.6) {app.py};
+\node[file] (api) at (0.5, -2.3) {api.py};
+\node[file] (schemas) at (0.5, -3.0) {schemas.py};
+
+% data/
+\node[folder] (data) at (0.5, -3.9) {data/};
+\node[file] (gen) at (1.0, -4.6) {generator.py};
+
+% models/
+\node[folder] (models) at (0.5, -5.5) {models/};
+\node[file] (pdm) at (1.0, -6.2) {pd\_model.py};
+\node[file] (lgdm) at (1.0, -6.8) {lgd\_model.py};
+\node[file] (eadm) at (1.0, -7.4) {ead\_model.py};
+\node[file] (pem) at (1.0, -8.0) {pe\_model.py};
+\node[file] (woem) at (1.0, -8.6) {woe.py};
+
+% Right column
+% engine/
+\node[folder] (engine) at (7, -0.9) {engine/};
+\node[file] (stag) at (7.5, -1.6) {staging.py};
+\node[file] (eclc) at (7.5, -2.2) {ecl\_calculator.py};
+\node[file] (pec) at (7.5, -2.8) {pe\_calculator.py};
+\node[file] (comp) at (7.5, -3.4) {comparator.py};
+
+% ai_analyst/
+\node[folder] (ai) at (7, -4.3) {ai\_analyst/};
+\node[file] (orch) at (7.5, -5.0) {orchestrator.py};
+\node[file] (l1) at (7.5, -5.6) {layer1..5 (5 couches)};
+
+% dashboard/
+\node[folder] (dash) at (7, -6.5) {dashboard/};
+\node[file] (charts) at (7.5, -7.2) {charts.py, components.py};
+
+% training/
+\node[folder] (train) at (7, -8.1) {training/};
+\node[file] (tpy) at (7.5, -8.8) {train.py};
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{R\'epartition par responsabilit\'e}
+
+\begin{center}
+\begin{tabular}{lp{4cm}p{6cm}}
+\toprule
+\textbf{R\'epertoire} & \textbf{Responsabilit\'e} & \textbf{Fichiers cl\'es} \\
+\midrule
+\texttt{config.py} & Configuration centrale & 12 dataclasses, validation \`a l'import \\
+\texttt{api.py} & API REST FastAPI & Endpoints /compute, /models, /health \\
+\texttt{schemas.py} & Contrats Pandera & 4 sch\'emas d\'eclaratifs (entr\'ee/sortie) \\
+\texttt{data/} & G\'en\'eration de donn\'ees & DGP v4.5, 5 effets non-lin\'eaires \\
+\texttt{models/} & Mod\'elisation & PD (3 familles), LGD, EAD, PE, WoE \\
+\texttt{engine/} & Moteur IFRS~9 & Staging, ECL, PE, comparateur \\
+\texttt{ai\_analyst/} & Analyse CRO & Orchestrateur, 5 couches analytiques \\
+\texttt{dashboard/} & Interface graphique & Charts Plotly, composants Streamlit \\
+\texttt{training/} & Entra\^inement offline & Script CLI, s\'erialisation joblib \\
+\texttt{export/} & Export & Audit trail \LaTeX, Excel 8 feuilles \\
+\texttt{tests/} & Tests & 11 fichiers, 574+ tests pytest \\
+\texttt{utils/} & Utilitaires & Helpers, logging structur\'e (structlog) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Flux de donn\'ees global}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=2.8cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    data/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=2.5cm, minimum height=0.8cm, fill=accentgreen!8, font=\small, align=center},
+    out/.style={draw=accentorange, rounded corners=4pt, minimum width=2.5cm, minimum height=0.8cm, fill=accentorange!8, font=\small, align=center},
+    arrow/.style={-Stealth, thick, steelblue!70},
+    darrow/.style={-Stealth, thick, accentgreen!70}
+]
+
+% Row 1: data generation
+\node[data] (dgp) at (0, 0) {config.py\\(\textit{seeds, secteurs})};
+\node[box] (gen) at (4, 0) {generator.py};
+\node[data] (df3) at (8.5, 0) {3-tuple\\(credit, PE, hist)};
+
+% Row 2: models
+\node[box] (pdmod) at (0, -2.5) {pd\_model.py\\(3 familles)};
+\node[box] (lgdmod) at (4, -2.5) {lgd\_model.py};
+\node[box] (eadmod) at (8, -2.5) {ead\_model.py};
+
+% Row 3: engine
+\node[box] (staging) at (0, -5) {staging.py\\(SICR)};
+\node[box] (ecl) at (4, -5) {ecl\_calculator\\(ECL)};
+\node[box] (pecalc) at (8, -5) {pe\_calculator\\(NAV, P(distress))};
+\node[box] (compare) at (12, -5) {comparator\\(RAROC, HHI)};
+
+% Row 4: output
+\node[out] (dash) at (4, -7.5) {Dashboard\\8 onglets};
+\node[out] (cro) at (8, -7.5) {AI Analyst\\5 couches};
+\node[out] (export) at (12, -7.5) {Export\\Excel / \LaTeX};
+
+% Arrows
+\draw[arrow] (dgp) -- (gen);
+\draw[arrow] (gen) -- (df3);
+\draw[darrow] (df3) -- ++(0,-0.7) -| (pdmod);
+\draw[darrow] (df3) -- ++(0,-0.7) -| (lgdmod);
+\draw[darrow] (df3) -- ++(0,-0.7) -| (eadmod);
+
+\draw[arrow] (pdmod) -- (staging);
+\draw[arrow] (lgdmod) -- (ecl);
+\draw[arrow] (eadmod) -- (ecl);
+\draw[arrow] (staging) -- (ecl);
+\draw[arrow] (ecl) -- (compare);
+\draw[arrow] (pecalc) -- (compare);
+
+\draw[arrow] (compare) -- ++(0,-0.7) -| (dash);
+\draw[arrow] (compare) -- ++(0,-0.7) -| (cro);
+\draw[arrow] (compare) -- (export);
+
+\end{tikzpicture}
+\end{center}
+
+\begin{interpretbox}[Contrat de donn\'ees entre modules]
+Chaque module d\'efinit ses colonnes requises en entr\'ee (\texttt{REQUIRED\_CREDIT\_COLS}, \texttt{REQUIRED\_PE\_COLS}) et en sortie (\texttt{REQUIRED\_CREDIT\_RESULT\_COLS}, \texttt{REQUIRED\_PE\_RESULT\_COLS}). Ce contrat est v\'erifi\'e dans \texttt{config.py} et dans les tests d'int\'egration.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Pattern Train / Serve}
+\label{sec:trainserve}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Probl\'ematique}
+
+Entra\^iner 3 mod\`eles PD sur 1,5 million de lignes prend environ 5 minutes (GPU). C'est inacceptable pour un dashboard interactif o\`u l'utilisateur s'attend \`a un temps de r\'eponse inf\'erieur \`a 2 secondes. La solution~: s\'eparer l'entra\^inement (offline) de l'inf\'erence (online).
+
+\subsection{Phase offline~: entra\^inement}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=3.5cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    data/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentgreen!8, font=\small},
+    file/.style={draw=accentorange, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentorange!8, font=\small},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+
+\node[data] (dgp) at (0,0) {DGP v4.5\\seed = 42};
+\node[box] (gen) at (4,0) {G\'en\'eration\\1.5M lignes};
+\node[box] (valid) at (8,0) {Validation\\contrat};
+\node[box] (train) at (12,0) {Entra\^inement\\3 mod\`eles};
+\node[file] (save) at (12,-2) {pd\_suite\\.joblib};
+
+\draw[arrow] (dgp) -- (gen);
+\draw[arrow] (gen) -- (valid);
+\draw[arrow] (valid) -- (train);
+\draw[arrow] (train) -- (save);
+
+\node[below=0.2cm of gen, font=\tiny, text=gray] {$\sim$50s};
+\node[below=0.2cm of valid, font=\tiny, text=gray] {$< 1$s};
+\node[below=0.2cm of train, font=\tiny, text=gray] {$\sim$5 min (GPU)};
+\node[right=0.2cm of save, font=\tiny, text=gray] {$\sim$50 MB};
+
+\end{tikzpicture}
+\end{center}
+
+La commande d'entra\^inement~:
+\begin{lstlisting}[language=bash]
+# Entrainement complet (1.5M lignes synthetiques)
+python -m ifrs9_cockpit.training.train
+
+# Avec CSV utilisateur
+python -m ifrs9_cockpit.training.train --data portefeuille.csv
+
+# Taille custom
+python -m ifrs9_cockpit.training.train --n-clients 500000
+
+# Chemin de sortie custom
+python -m ifrs9_cockpit.training.train --output mon_modele.joblib
+\end{lstlisting}
+
+\subsection{Phase online~: service}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=3.5cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    data/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentgreen!8, font=\small},
+    file/.style={draw=accentorange, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentorange!8, font=\small},
+    arrow/.style={-Stealth, thick, steelblue!70},
+    decision/.style={draw=steelblue, diamond, minimum width=2cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, inner sep=1pt}
+]
+
+\node[decision] (check) at (0,0) {joblib\\existe~?};
+\node[file] (model) at (4,1) {Charger\\pd\_suite.joblib};
+\node[box] (fallback) at (4,-1) {Entra\^inement\\rapide (30K)};
+\node[data] (port) at (8,0) {Portfolio\\30K (seed=123)};
+\node[box] (pred) at (12,0) {Pr\'ediction\\PD};
+
+\draw[arrow] (check) -- node[above, font=\tiny] {Oui} (model);
+\draw[arrow] (check) -- node[below, font=\tiny] {Non} (fallback);
+\draw[arrow] (model) -| (pred);
+\draw[arrow] (fallback) -| (pred);
+\draw[arrow] (port) -- (pred);
+
+\node[below=0.2cm of model, font=\tiny, text=gray] {$\sim$1s};
+\node[below=0.2cm of fallback, font=\tiny, text=gray] {$\sim$3.5s};
+\node[below=0.2cm of pred, font=\tiny, text=gray] {$< 1$s};
+
+\end{tikzpicture}
+\end{center}
+
+Le dashboard d\'etecte automatiquement le fichier \texttt{training/models/pd\_suite.joblib}. S'il existe, les mod\`eles pr\'e-entra\^in\'es sont charg\'es en $\sim$1 seconde. Sinon, un entra\^inement rapide sur les 30\,000 lignes du portfolio est effectu\'e en $\sim$3.5 secondes.
+
+\subsection{S\'eparation des seeds}
+
+\begin{warningbox}[Seeds distinctes obligatoires]
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Contexte} & \textbf{Seed} & \textbf{N lignes} \\
+\midrule
+Entra\^inement offline & 42 & 1\,500\,000 \\
+Portfolio dashboard & 123 & 30\,000 \\
+LGD dispersion & seed + 1 & -- \\
+PE noise & seed + 7 & -- \\
+\bottomrule
+\end{tabular}
+\end{center}
+Les seeds d'entra\^inement et de portfolio sont \textbf{toujours diff\'erentes} pour \'eviter la circularit\'e~: le mod\`ele ne doit jamais \^etre \'evalu\'e sur ses donn\'ees d'entra\^inement. Les sous-seeds (LGD, PE) garantissent le d\'eterminisme entre sc\'enarios.
+\end{warningbox}
+
+\subsection{S\'erialisation~: \texttt{PDModelSuite}}
+
+La classe \texttt{PDModelSuite} encapsule les 3 mod\`eles et fournit une interface unifi\'ee~:
+
+\begin{formulebox}[API PDModelSuite]
+\begin{lstlisting}[language=Python]
+suite = PDModelSuite()
+
+# Entrainement
+suite.fit(X_train, y_train, X_test, y_test)
+
+# Sauvegarde (joblib)
+suite.save("training/models/pd_suite.joblib")
+
+# Chargement
+suite = PDModelSuite.load("training/models/pd_suite.joblib")
+
+# Prediction
+results = suite.predict(X_new)  # dict par modele
+scores = suite.predict_scores(X_new)  # scorecard LR_WoE
+\end{lstlisting}
+\end{formulebox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Pipeline de Donn\'ees et Contrat}
+\label{sec:pipeline}
+% ══════════════════════════════════════════════════════════
+
+\subsection{G\'en\'erateur de donn\'ees (\texttt{generate\_dataset})}
+
+Le g\'en\'erateur produit un \textbf{3-tuple}~:
+
+\begin{definitionbox}[Contrat de sortie du g\'en\'erateur]
+\begin{lstlisting}[language=Python]
+df_credit, df_pe, df_history = generate_dataset(
+    n_clients=30_000, seed=123
+)
+\end{lstlisting}
+\begin{itemize}[noitemsep]
+    \item \texttt{df\_credit}~: DataFrame credit (30K lignes, 15+ colonnes)
+    \item \texttt{df\_pe}~: DataFrame private equity (positions PE par secteur)
+    \item \texttt{df\_history}~: DataFrame historique macro (12 mois)
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Enums strictes}
+
+Les valeurs cat\'egorielles sont valid\'ees contre des ensembles ferm\'es (\texttt{frozenset}). Toute valeur inconnue d\'eclenche une erreur imm\'ediate~:
+
+\begin{center}
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Enum} & \textbf{Valeurs autoris\'ees} \\
+\midrule
+\texttt{ALLOWED\_SECTORS} & Technologie, Industrie, Sant\'e, Immobilier, Services \\
+\texttt{ALLOWED\_LOAN\_TYPES} & Revolving, Term \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Clipping des outliers}
+
+Avant tout entra\^inement, les variables num\'eriques sont born\'ees pour \'eliminer les valeurs aberrantes~:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Variable} & \textbf{Min} & \textbf{Max} \\
+\midrule
+\texttt{debt\_ratio} & 0.0 & 1.5 \\
+\texttt{credit\_score} & 300 & 850 \\
+\texttt{utilization\_rate} & 0.0 & 1.2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le clipping est appliqu\'e par la fonction \texttt{\_clip\_and\_engineer()} dans \texttt{pd\_model.py}. Les bornes sont d\'efinies dans \texttt{CLIPPING\_BOUNDS} de \texttt{config.py}.
+
+\subsection{Features engin\'eer\'ees}
+
+Deux features sont calcul\'ees \`a la vol\'ee \`a partir des variables brutes~:
+
+\begin{formulebox}[Features engin\'eer\'ees]
+\begin{align}
+    \texttt{loan\_to\_revenue} &= \frac{\texttt{loan\_amount}}{\texttt{revenue}} \label{eq:ltr} \\[6pt]
+    \texttt{collateral\_coverage} &= \frac{\texttt{collateral}}{\texttt{loan\_amount}} \label{eq:cc}
+\end{align}
+Ces ratios capturent le levier financier (endettement relatif) et la couverture par les garanties. Ils sont calcul\'es automatiquement par le pipeline~; un CSV utilisateur n'a pas besoin de les fournir.
+\end{formulebox}
+
+\subsection{Validation du contrat (\texttt{\_validate\_data\_contract})}
+
+Le script d'entra\^inement v\'erifie 4 conditions avant de lancer le mod\`ele~:
+
+\begin{enumerate}[noitemsep]
+    \item \textbf{Colonnes requises}~: toutes les colonnes de \texttt{REQUIRED\_COLUMNS} sont pr\'esentes
+    \item \textbf{Enums strictes}~: \texttt{sector} $\in$ \texttt{ALLOWED\_SECTORS}, \texttt{loan\_type} $\in$ \texttt{ALLOWED\_LOAN\_TYPES}
+    \item \textbf{Bornes num\'eriques}~: warning si une valeur d\'epasse les bornes (le clipping corrige)
+    \item \textbf{NaN}~: warning si plus de 5\% d'une colonne est manquant
+\end{enumerate}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=3.5cm, minimum height=0.9cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    check/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=3.5cm, minimum height=0.9cm, fill=accentgreen!8, font=\small, align=center},
+    err/.style={draw=accentred, rounded corners=4pt, minimum width=3cm, minimum height=0.9cm, fill=accentred!8, font=\small, align=center},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+
+\node[box] (csv) at (0,0) {CSV / DGP\\(donn\'ees brutes)};
+\node[check] (col) at (4.5,0) {V\'erif.\\colonnes};
+\node[check] (enum) at (9,0) {V\'erif.\\enums};
+\node[check] (clip) at (0,-2) {Clipping\\outliers};
+\node[check] (eng) at (4.5,-2) {Features\\engin\'eer\'ees};
+\node[box] (ready) at (9,-2) {DataFrame\\pr\^et};
+
+\draw[arrow] (csv) -- (col);
+\draw[arrow] (col) -- (enum);
+\draw[arrow] (enum) -- ++(0,-0.5) -| (clip);
+\draw[arrow] (clip) -- (eng);
+\draw[arrow] (eng) -- (ready);
+
+\end{tikzpicture}
+\end{center}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Caching Streamlit}
+\label{sec:caching}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Trois niveaux de cache}
+
+Streamlit offre trois m\'ecanismes de cache que nous utilisons de mani\`ere compl\'ementaire~:
+
+\begin{center}
+\begin{tabular}{lp{3.5cm}p{5.5cm}}
+\toprule
+\textbf{D\'ecorateur} & \textbf{Usage} & \textbf{Ce qui est cach\'e} \\
+\midrule
+\texttt{@st.cache\_data} & Donn\'ees immutables & \texttt{generate\_dataset()} --- le 3-tuple (credit, PE, historique) \\
+\texttt{@st.cache\_resource} & Objets lourds & \texttt{PDModelSuite} --- les 3 mod\`eles entra\^in\'es \\
+\texttt{@st.fragment} & Isolation de bloc & Bloc SHAP --- ne recharge que le graphique individuel \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{\texttt{@st.cache\_data}~: donn\'ees}
+
+Ce d\'ecorateur s\'erialise le r\'esultat en m\'emoire. Tant que les arguments ne changent pas (m\^eme seed, m\^eme nombre de clients), la fonction n'est pas r\'e-ex\'ecut\'ee.
+
+\begin{formulebox}[Exemple~: mise en cache des donn\'ees]
+\begin{lstlisting}[language=Python]
+@st.cache_data(show_spinner="Generation des donnees...")
+def load_data() -> tuple:
+    return generate_dataset(n_clients=30_000, seed=123)
+\end{lstlisting}
+Premier appel~: $\sim$2s (g\'en\'eration). Appels suivants~: $< 10$ms (lecture cache).
+\end{formulebox}
+
+\subsection{\texttt{@st.cache\_resource}~: mod\`eles}
+
+Ce d\'ecorateur est con\c{c}u pour les objets non-s\'erialisables (mod\`eles PyTorch, connexions BDD). L'objet est gard\'e en m\'emoire tel quel, sans copie~:
+
+\begin{lstlisting}[language=Python]
+@st.cache_resource
+def load_models(df_credit):
+    suite = PDModelSuite()
+    suite.fit(X_train, y_train, X_test, y_test)
+    return suite
+\end{lstlisting}
+
+\subsection{\texttt{@st.fragment}~: isolation}
+
+Le d\'ecorateur \texttt{@st.fragment} est utilis\'e pour isoler le bloc SHAP (explicabilit\'e individuelle). Quand l'utilisateur s\'electionne un nouveau client dans le menu d\'eroulant, \textbf{seul le graphique SHAP est recalcul\'e}, pas l'ensemble du dashboard~:
+
+\begin{lstlisting}[language=Python]
+@st.fragment
+def shap_individual_block(suite, X_test, idx):
+    client = st.selectbox("Client", range(len(X_test)))
+    shap_values = explainer.shap_values(X_test.iloc[[client]])
+    st.plotly_chart(shap_plot(shap_values))
+\end{lstlisting}
+
+\subsection{Barre de progression}
+
+Le pipeline utilise une barre de progression pour informer l'utilisateur des \'etapes en cours~:
+
+\begin{lstlisting}[language=Python]
+progress = st.progress(0, text="[0/5] Initialisation...")
+# ... etape 1 ...
+progress.progress(20, text="[1/5] Modeles PD...")
+# ... etape 2 ...
+progress.progress(40, text="[2/5] Staging SICR...")
+# ... etc ...
+progress.progress(100, text="[5/5] Termine!")
+progress.empty()  # supprime la barre
+\end{lstlisting}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Strat\'egie de Tests}
+\label{sec:tests}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Vue d'ensemble}
+
+Le projet dispose de \textbf{574+ tests} r\'epartis en 11 fichiers. Ils couvrent l'ensemble du pipeline, de la g\'en\'eration de donn\'ees \`a l'export.
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=5.5cm, minimum height=0.8cm, fill=steelblue!8, font=\small, text=darkblue, align=left, anchor=west},
+    num/.style={draw=darkblue, rounded corners=4pt, minimum width=1.2cm, minimum height=0.8cm, fill=darkblue!10, font=\small\bfseries, text=darkblue, align=center}
+]
+
+\node[box] (t1) at (0, 0) {test\_config.py};
+\node[num, right=0.3cm of t1] {Config};
+
+\node[box] (t2) at (0, -1) {test\_generator.py};
+\node[num, right=0.3cm of t2] {DGP};
+
+\node[box] (t3) at (0, -2) {test\_pd\_model.py};
+\node[num, right=0.3cm of t3] {3 mod\`eles PD};
+
+\node[box] (t4) at (0, -3) {test\_lgd\_ead.py};
+\node[num, right=0.3cm of t4] {LGD, EAD};
+
+\node[box] (t5) at (0, -4) {test\_staging\_ecl.py};
+\node[num, right=0.3cm of t5] {Pipeline ECL};
+
+\node[box] (t6) at (0, -5) {test\_pe.py};
+\node[num, right=0.3cm of t6] {PE calculator};
+
+\node[box] (t7) at (7, 0) {test\_comparator.py};
+\node[num, right=0.3cm of t7] {RAROC, HHI};
+
+\node[box] (t8) at (7, -1) {test\_cro\_analytics.py};
+\node[num, right=0.3cm of t8] {5 couches CRO};
+
+\node[box] (t9) at (7, -2) {test\_dashboard.py};
+\node[num, right=0.3cm of t9] {Charts, UI};
+
+\node[box] (t10) at (7, -3) {test\_metrics.py};
+\node[num, right=0.3cm of t10] {M\'etriques};
+
+\node[box] (t11) at (7, -4) {test\_invariants.py};
+\node[num, right=0.3cm of t11] {Invariants};
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Tests d'invariants financiers}
+
+Le fichier \texttt{test\_invariants.py} v\'erifie les contraintes m\'etier fondamentales. Ces tests ne d\'ependent d'aucun r\'esultat attendu \textit{a priori}~: ils v\'erifient des propri\'et\'es qui doivent \^etre toujours vraies.
+
+\begin{definitionbox}[Exemples d'invariants]
+\begin{itemize}[noitemsep]
+    \item $\forall\; i,\; \texttt{debt\_ratio}_i \geq 0$ (pas de dette n\'egative)
+    \item $\forall\; i,\; \text{PD}_i \in [0, 1]$ (probabilit\'e valide)
+    \item $\forall\; i,\; \text{ECL}_i \geq 0$ (pas de provision n\'egative)
+    \item $\forall\; i,\; \text{LGD}_i \in [0, 1]$ (perte born\'ee)
+    \item $\forall\; i,\; \text{Stage}_i \in \{1, 2, 3\}$ (stages IFRS~9 valides)
+    \item $\sum_{\text{secteurs}} \text{proportion}_s = 1$ (portefeuille complet)
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Tests de pipeline bout en bout}
+
+Le fichier \texttt{test\_staging\_ecl.py} ex\'ecute le pipeline complet (g\'en\'eration $\to$ mod\`eles $\to$ staging $\to$ ECL) et v\'erifie la coh\'erence des r\'esultats~:
+
+\begin{itemize}[noitemsep]
+    \item Les ECL de Stage~2 sont sup\'erieures aux ECL de Stage~1 (horizon lifetime vs.~12 mois)
+    \item La distribution des stages respecte les proportions attendues ($\sim$85\% Stage~1, $\sim$10\% Stage~2, $\sim$5\% Stage~3)
+    \item Le total ECL est strictement positif
+\end{itemize}
+
+\subsection{Tests des mod\`eles PD}
+
+Le fichier \texttt{test\_pd\_model.py} v\'erifie pour chacun des 3 mod\`eles~:
+
+\begin{center}
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Test} & \textbf{V\'erification} \\
+\midrule
+AUC & AUC $> 0.70$ sur le jeu de test (seuil r\'eglementaire) \\
+Calibration & Brier score $< 0.10$ (probabilit\'es bien calibr\'ees) \\
+Monotonicit\'e WoE & WoE strictement monotone par variable (LR\_WoE) \\
+Beta sign & Tous les $\beta_j \leq 0$ (LR\_WoE) \\
+Feature importance & Importance disponible pour chaque mod\`ele \\
+Save / Load & S\'erialisation aller-retour sans perte \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Tests du comparateur}
+
+Le fichier \texttt{test\_comparator.py} v\'erifie les calculs prudentiels~:
+
+\begin{itemize}[noitemsep]
+    \item RAROC~: Net Income / Capital $> 0$ en sc\'enario base
+    \item HHI~: indice de concentration Herfindahl-Hirschman $\in [0, 10000]$
+    \item CRR3~: Risk Weight PE composite conforme \`a la grille (190\%, 250\%, 400\%)
+    \item Texas ratio~: calcul\'e uniquement sur Stage~3
+    \item Softmax adaptatif~: \'echelle $= \text{clip}(1/\text{var}(\text{RAROC}), 2, 50)$
+\end{itemize}
+
+\subsection{Ex\'ecution}
+
+\begin{lstlisting}[language=bash]
+# Tous les tests
+pytest ifrs9_cockpit/tests/ -v
+
+# Un fichier specifique
+pytest ifrs9_cockpit/tests/test_pd_model.py -v
+
+# Tests standalone (sans pytest)
+python -m ifrs9_cockpit.tests.test_invariants
+\end{lstlisting}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Performance et Optimisations}
+\label{sec:perf}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Benchmarks}
+
+\begin{center}
+\begin{tabular}{lrp{5cm}}
+\toprule
+\textbf{Op\'eration} & \textbf{Temps} & \textbf{Commentaire} \\
+\midrule
+G\'en\'eration 30K lignes & $\sim$0.5s & Seed 123, DGP v4.5 \\
+Entra\^inement 3 mod\`eles (30K) & $\sim$3.5s & Cach\'e apr\`es 1\ier{} appel \\
+Entra\^inement 3 mod\`eles (1.5M) & $\sim$5 min & GPU (RTX 5070 Ti) \\
+Chargement joblib & $\sim$1s & Fichier $\sim$50 MB \\
+Pipeline ECL complet & $\sim$1.1s & Staging + ECL + PE + comparateur \\
+Recalcul stress test & $\sim$1.1s & Changement de slider \\
+Export Excel 8 feuilles & $\sim$2s & openpyxl \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{GPU auto-d\'etection}
+
+L'utilisation du GPU est transparente~: le code d\'etecte automatiquement la disponibilit\'e de CUDA via \texttt{torch.cuda.is\_available()}~:
+
+\begin{lstlisting}[language=Python]
+# TabNet : PyTorch detecte automatiquement le GPU
+# XGBoost : device="cuda" si disponible
+device = "cuda" if torch.cuda.is_available() else "cpu"
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Hardware} & \textbf{Entra\^inement 1.5M} & \textbf{Acc\'el\'eration} \\
+\midrule
+CPU (Intel i9) & $\sim$15 min & 1$\times$ \\
+GPU (RTX 5070 Ti) & $\sim$5 min & 3$\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Early stopping}
+
+TabNet utilise l'\textit{early stopping} pour \'eviter le sur-apprentissage et r\'eduire le temps d'entra\^inement~:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Patience}~: 20 \'epoques sans am\'elioration $\Rightarrow$ arr\^et
+    \item \textbf{Max \'epoques}~: 200 (rarement atteint)
+    \item \textbf{R\'esultat typique}~: arr\^et \`a l'\'epoque 40, meilleur mod\`ele \`a l'\'epoque 20
+    \item \textbf{\'Economie}~: seules 20--40 \'epoques sur 200 sont calcul\'ees ($\sim$80\% d'\'economie)
+\end{itemize}
+
+\subsection{Strat\'egie de mise en cache}
+
+Le diagramme suivant montre les diff\'erents niveaux de cache~:
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=4cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    fast/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=2cm, minimum height=0.7cm, fill=accentgreen!8, font=\footnotesize, align=center},
+    slow/.style={draw=accentorange, rounded corners=4pt, minimum width=2cm, minimum height=0.7cm, fill=accentorange!8, font=\footnotesize, align=center}
+]
+
+\node[box] (disk) at (0,0) {Disque\\pd\_suite.joblib};
+\node[fast, right=0.5cm of disk] {$\sim$1s};
+
+\node[box] (resource) at (0,-1.8) {M\'emoire\\@st.cache\_resource};
+\node[fast, right=0.5cm of resource] {$< 10$ms};
+
+\node[box] (data) at (0,-3.6) {M\'emoire\\@st.cache\_data};
+\node[fast, right=0.5cm of data] {$< 10$ms};
+
+\node[box] (compute) at (0,-5.4) {Recalcul\\Pipeline ECL};
+\node[slow, right=0.5cm of compute] {$\sim$1.1s};
+
+\draw[-Stealth, thick, gray, dashed] (disk) -- node[right, font=\tiny, text=gray] {1\ier{} lancement} (resource);
+\draw[-Stealth, thick, gray, dashed] (resource) -- node[right, font=\tiny, text=gray] {1\ier{} lancement} (data);
+\draw[-Stealth, thick, accentgreen!70!black] (data) -- node[right, font=\tiny, text=accentgreen!70!black] {chaque slider} (compute);
+
+\end{tikzpicture}
+\end{center}
+
+\begin{interpretbox}[Bilan performance]
+Gr\^ace \`a la combinaison joblib + cache Streamlit + pipeline vectoris\'e, le temps de r\'eponse apr\`es le premier lancement est de \textbf{$\sim$1.1 seconde} par changement de slider. C'est sous le seuil des 2 secondes consid\'er\'e comme ``temps r\'eel'' par les utilisateurs.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Dashboard~: 8 Onglets}
+\label{sec:dashboard}
+% ══════════════════════════════════════════════════════════
+
+Le dashboard Streamlit comporte 8 onglets, chacun ciblant un besoin analytique diff\'erent~:
+
+\begin{center}
+\begin{tabular}{clp{6.5cm}}
+\toprule
+\textbf{N\textsuperscript{o}} & \textbf{Onglet} & \textbf{Contenu} \\
+\midrule
+1 & Performance Mod\`eles & Courbes ROC, calibration, backtesting, distribution scores \\
+2 & Analyse ECL & D\'ecomposition ECL, HHI, waterfall par sc\'enario \\
+3 & Analyse PE & NAV, MOIC/drawdown, cat\'egories de risque \\
+4 & Staging \& Transitions & Distribution des stages, matrice de transition \\
+5 & Asym\'etries \& Optimisation & Heatmap, RAROC, CRR3, drill-down sectoriel \\
+6 & Explicabilit\'e & SHAP global + SHAP individuel (@st.fragment) \\
+7 & Donn\'ees \& Export & Tableau interactif, export Excel 8 feuilles \\
+8 & Analyse CRO & AI Analyst, risk appetite, r\'egime, RST, trajectoires \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Palette Steel Blue}
+
+L'interface utilise une palette Steel Blue sur fond sombre, d\'efinie dans \texttt{DashboardConfig}~:
+
+\begin{center}
+\begin{tabular}{llp{5cm}}
+\toprule
+\textbf{Couleur} & \textbf{Hex} & \textbf{Usage} \\
+\midrule
+Primary & \texttt{\#3B82F6} & \'El\'ements principaux, graphiques \\
+Secondary & \texttt{\#1E40AF} & Headers, titres \\
+Accent & \texttt{\#10B981} & Succ\`es, indicateurs positifs \\
+Background & \texttt{\#0C1222} & Fond principal \\
+Card & \texttt{\#1E293B} & Fond des cartes \\
+Success & \texttt{\#10B981} & Stage 1, Performing \\
+Warning & \texttt{\#F59E0B} & Stage 2, Watchlist \\
+Danger & \texttt{\#EF4444} & Stage 3, Distressed \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Architecture des composants}
+
+Les composants graphiques sont r\'epartis en 3 fichiers~:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{\texttt{charts.py}}~: graphiques Plotly (ROC, waterfall, heatmap, SHAP, etc.). Chaque fonction utilise \texttt{\_base\_layout()} pour le style coh\'erent et la palette \texttt{CHART\_COLORS}.
+    \item \textbf{\texttt{components.py}}~: composants HTML/CSS Streamlit (KPI cards, badges de stage, bo\^ites d'insight, en-t\^etes).
+    \item \textbf{\texttt{styles.py}}~: CSS global inject\'e via \texttt{st.markdown()} (th\`eme sombre, animations).
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{AI Analyst~: 5 Couches Analytiques}
+\label{sec:ai}
+% ══════════════════════════════════════════════════════════
+
+L'onglet ``Analyse CRO'' est aliment\'e par un moteur analytique en 5 couches, orchestr\'e par \texttt{orchestrator.py}~:
+
+\begin{center}
+\begin{tikzpicture}[
+    layer/.style={draw=steelblue, rounded corners=5pt, minimum width=11cm, minimum height=0.9cm, fill=steelblue!8, font=\small, text=darkblue},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+
+\node[layer] (l1) at (0, 0) {\textbf{Layer 1 --- Crossing}~: croisement sectoriel (concentration, d\'ecomposition)};
+\node[layer] (l2) at (0, -1.3) {\textbf{Layer 2 --- Allocation Proportionnelle}~: allocation du capital aux secteurs};
+\node[layer] (l3) at (0, -2.6) {\textbf{Layer 3 --- Reverse Stress Test}~: tipping points (Mahalanobis)};
+\node[layer] (l4) at (0, -3.9) {\textbf{Layer 4 --- R\'egime}~: d\'etection du r\'egime macro (expansion / neutre / crise)};
+\node[layer] (l5) at (0, -5.2) {\textbf{Layer 5 --- Prospective}~: trajectoires Ornstein-Uhlenbeck \`a 12 mois};
+
+\draw[arrow] (l1) -- (l2);
+\draw[arrow] (l2) -- (l3);
+\draw[arrow] (l3) -- (l4);
+\draw[arrow] (l4) -- (l5);
+
+\end{tikzpicture}
+\end{center}
+
+Chaque couche produit un dictionnaire typ\'e (\texttt{types.py}) consomm\'e par la couche suivante et par le dashboard.
+
+
+% ══════════════════════════════════════════════════════════
+\section{Patterns et Bonnes Pratiques}
+\label{sec:patterns}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Transformation logit / expit}
+
+Toutes les transformations de probabilit\'es passent par l'espace logit~:
+
+\begin{formulebox}[Logit et Expit (dans \texttt{utils/helpers.py})]
+\begin{align}
+    \text{logit}(p) &= \ln\left(\frac{p}{1-p}\right) \label{eq:logit} \\[4pt]
+    \text{expit}(x) &= \frac{1}{1 + e^{-x}} = \sigma(x) \label{eq:expit}
+\end{align}
+Avantage~: dans l'espace logit, un choc additif de $+\delta$ sur le logit correspond \`a une multiplication des odds par $e^\delta$. C'est la mani\`ere math\'ematiquement correcte de stresser une probabilit\'e (par opposition au stress additif $p + \delta$ qui peut sortir de $[0,1]$).
+\end{formulebox}
+
+\subsection{Strat\'egie de seeds}
+
+Le projet utilise des seeds d\'eterministes pour garantir la reproductibilit\'e~:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Seed principale}~: 42 (entra\^inement) ou 123 (portfolio)
+    \item \textbf{Sous-seeds d\'eriv\'ees}~: seed + 1 (LGD Beta dispersion), seed + 7 (PE noise)
+    \item Le RNG est \textbf{r\'einitialis\'e} avant chaque composant non-d\'eterministe pour garantir la stabilit\'e inter-sc\'enarios
+\end{itemize}
+
+\subsection{Organisation des imports}
+
+Chaque module importe uniquement ce dont il a besoin depuis \texttt{config.py}. Les imports suivent l'ordre standard~:
+\begin{enumerate}[noitemsep]
+    \item Biblioth\`eque standard (\texttt{pathlib}, \texttt{dataclasses})
+    \item Biblioth\`eques tierces (\texttt{numpy}, \texttt{pandas}, \texttt{sklearn})
+    \item Modules internes (\texttt{ifrs9\_cockpit.config}, \texttt{ifrs9\_cockpit.models})
+\end{enumerate}
+
+\subsection{Gestion des erreurs}
+
+Les erreurs sont g\'er\'ees \`a deux niveaux~:
+\begin{itemize}[noitemsep]
+    \item \textbf{Validation pr\'ecoce}~: \texttt{validate\_config()} et \texttt{\_validate\_data\_contract()} d\'etectent les erreurs avant le calcul
+    \item \textbf{Assertions m\'etier}~: les invariants financiers sont v\'erifi\'es dans les tests, pas dans le code de production (pour \'eviter le co\^ut du \textit{runtime})
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Couche API REST (FastAPI)}
+\label{sec:api}
+% ══════════════════════════════════════════════════════════
+
+\subsection{D\'ecouplage Frontend / Backend}
+
+L'audit d'architecture a identifi\'e un couplage fort entre le frontend Streamlit et le moteur de calcul. Pour y rem\'edier, une couche API REST a \'et\'e ajout\'ee via \textbf{FastAPI}.
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=5pt, minimum width=3.8cm, minimum height=1.2cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    api/.style={draw=darkblue, rounded corners=5pt, minimum width=3.8cm, minimum height=1.2cm, fill=darkblue!10, font=\small\bfseries, text=darkblue, align=center},
+    arrow/.style={-Stealth, thick, steelblue!70},
+    biarrow/.style={Stealth-Stealth, thick, steelblue!70}
+]
+
+% Clients
+\node[box] (streamlit) at (0, 0) {Streamlit\\(Dashboard)};
+\node[box] (react) at (0, -1.8) {React / Excel\\(futur)};
+
+% API
+\node[api] (api) at (5.5, -0.9) {FastAPI\\(\texttt{api.py})};
+
+% Engine
+\node[box] (ecl) at (11, 0) {ECL Calculator};
+\node[box] (pe) at (11, -1.8) {PE Calculator};
+\node[box] (cro) at (11, -3.6) {CRO Analyst};
+
+\draw[biarrow] (streamlit) -- node[above, font=\tiny] {HTTP} (api);
+\draw[biarrow] (react) -- node[below, font=\tiny] {HTTP} (api);
+\draw[arrow] (api) -- (ecl);
+\draw[arrow] (api) -- (pe);
+\draw[arrow] (api) -- (cro);
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Endpoints API}
+
+\begin{center}
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{M\'ethode} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+\texttt{GET} & \texttt{/health} & Healthcheck (liveness probe Docker/K8s) \\
+\texttt{GET} & \texttt{/models} & Informations mod\`eles PD charg\'es \\
+\texttt{POST} & \texttt{/compute} & Pipeline complet (ECL + PE + CRO) \\
+\texttt{POST} & \texttt{/stress-test} & Alias s\'emantique pour \texttt{/compute} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Mod\`eles Pydantic (Requ\^ete / R\'eponse)}
+
+FastAPI utilise \textbf{Pydantic} pour la s\'erialisation et la validation des requ\^etes. Chaque param\`etre est typ\'e, born\'e, et document\'e automatiquement dans Swagger~:
+
+\begin{formulebox}[Exemple~: schema de requ\^ete]
+\begin{lstlisting}[language=Python]
+class MacroParams(BaseModel):
+    unemployment_rate: float = Field(7.5, ge=0, le=30)
+    gdp_growth: float = Field(1.2, ge=-10, le=10)
+    interest_rate: float = Field(3.5, ge=-2, le=15)
+    hpi_growth: float = Field(2.0, ge=-40, le=30)
+    inflation_rate: float = Field(2.5, ge=-5, le=15)
+
+class ComputeRequest(BaseModel):
+    macro_params: MacroParams
+    selected_model: str = "LR_WoE"
+\end{lstlisting}
+\end{formulebox}
+
+\begin{interpretbox}[Avantage pour la production]
+Un client externe (Excel VBA, React, script Python) peut int\'egrer le moteur de calcul IFRS~9 via de simples appels HTTP, sans d\'ependance directe au code Python. La documentation Swagger (\texttt{/docs}) est g\'en\'er\'ee automatiquement.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Validation Pandera (Contrat de Donn\'ees)}
+\label{sec:pandera}
+% ══════════════════════════════════════════════════════════
+
+\subsection{De la validation manuelle \`a la validation d\'eclarative}
+
+L'audit a identifi\'e que la validation manuelle (\texttt{\_validate\_data\_contract}) \'etait fragile et non auto-document\'ee. Le projet adopte d\'esormais \textbf{Pandera} pour d\'efinir des sch\'emas d\'eclaratifs~:
+
+\begin{center}
+\begin{tikzpicture}[
+    old/.style={draw=accentred, rounded corners=4pt, minimum width=5.5cm, minimum height=0.8cm, fill=accentred!8, font=\small, align=left, anchor=west},
+    new/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=5.5cm, minimum height=0.8cm, fill=accentgreen!8, font=\small, align=left, anchor=west}
+]
+
+\node[old] at (0, 0) {\texttt{if df[col].isnull().any()...}};
+\node[font=\small, text=accentred] at (7, 0) {Avant (imp\'eratif)};
+
+\node[new] at (0, -1.2) {\texttt{Column(float, Check.in\_range(0, 1))}};
+\node[font=\small, text=accentgreen!70!black] at (7, -1.2) {Apr\`es (d\'eclaratif)};
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Sch\'emas d\'efinis}
+
+Le fichier \texttt{schemas.py} d\'efinit 4 sch\'emas Pandera~:
+
+\begin{center}
+\begin{tabular}{lp{7cm}}
+\toprule
+\textbf{Sch\'ema} & \textbf{Description} \\
+\midrule
+\texttt{CreditInputSchema} & Entr\'ee credit~: 12 colonnes, enums secteur/pr\^et, bornes clipping \\
+\texttt{PEInputSchema} & Entr\'ee PE~: 9 colonnes, enum secteur, bornes levier \\
+\texttt{CreditResultSchema} & Sortie ECL~: PD, LGD, EAD, ECL, stage, RWA (7 colonnes) \\
+\texttt{PEResultSchema} & Sortie PE~: NAV, delta\_nav, EL, cat\'egorie, RWA (7 colonnes) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{formulebox}[Exemple~: sch\'ema Pandera]
+\begin{lstlisting}[language=Python]
+CreditInputSchema = pa.DataFrameSchema(
+    columns={
+        "sector": Column(str, Check.isin(ALLOWED_SECTORS)),
+        "debt_ratio": Column(float, Check.in_range(0, 1.5)),
+        "default_flag": Column(int, Check.isin([0, 1])),
+        ...
+    },
+    coerce=True,  # conversion automatique des types
+    strict=False,  # colonnes supplementaires autorisees
+)
+\end{lstlisting}
+\end{formulebox}
+
+\begin{interpretbox}[Avantage pour l'audit]
+Le contrat de donn\'ees est d\'esormais \textbf{auto-document\'e}~: lire le sch\'ema suffit \`a comprendre les types, bornes et contraintes de chaque colonne. La validation est atomique (un seul appel \texttt{.validate()}) et les erreurs sont explicites.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Containerisation Docker}
+\label{sec:docker}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Architecture Multi-Stage}
+
+Le Dockerfile utilise le pattern \textbf{multi-stage build} pour s\'eparer l'entra\^inement (GPU, image lourde) du service (CPU, image l\'eg\`ere)~:
+
+\begin{center}
+\begin{tikzpicture}[
+    stage/.style={draw=steelblue, rounded corners=5pt, minimum width=5cm, minimum height=1.5cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    file/.style={draw=accentorange, rounded corners=4pt, minimum width=4cm, minimum height=0.8cm, fill=accentorange!8, font=\small, align=center},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+
+\node[stage] (train) at (0, 0) {\textbf{Stage 1 : train}\\CUDA 12.8, Python 3.13\\PyTorch nightly, ~8 GB};
+\node[stage] (serve) at (8, 0) {\textbf{Stage 2 : serve}\\python:3.13-slim\\CPU only, ~1.5 GB};
+\node[file] (model) at (4, -2) {pd\_suite.joblib\\($\sim$50 MB)};
+
+\draw[arrow] (train) -- node[left, font=\tiny, text=gray] {volume partag\'e} (model);
+\draw[arrow] (model) -- node[right, font=\tiny, text=gray] {chargement} (serve);
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Commandes}
+
+\begin{lstlisting}[language=bash]
+# Build images
+docker build --target serve -t ifrs9:serve .
+docker build --target train -t ifrs9:train .
+
+# Dashboard
+docker run -p 8501:8501 ifrs9:serve dashboard
+
+# API
+docker run -p 8000:8000 ifrs9:serve api
+
+# Entrainement GPU
+docker run --gpus all ifrs9:train --n-clients 1500000
+
+# Docker Compose (dashboard + API)
+docker compose up
+\end{lstlisting}
+
+\subsection{Docker Compose}
+
+Le fichier \texttt{docker-compose.yml} d\'efinit 3 services~:
+
+\begin{center}
+\begin{tabular}{llp{5cm}}
+\toprule
+\textbf{Service} & \textbf{Port} & \textbf{Description} \\
+\midrule
+\texttt{dashboard} & 8501 & Streamlit (CPU, healthcheck) \\
+\texttt{api} & 8000 & FastAPI (CPU, 2 workers) \\
+\texttt{train} & -- & Entra\^inement GPU (profil \texttt{training}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les mod\`eles s\'erialis\'es sont partag\'es via un \textbf{volume Docker} nomm\'e \texttt{ifrs9-models}, garantissant la persistance entre les containers.
+
+\begin{warningbox}[Reproductibilit\'e compl\`ete]
+La containerisation garantit que le m\^eme code produit les m\^emes r\'esultats ind\'ependamment de l'OS, des versions syst\`eme, et des drivers CUDA. C'est une exigence r\'eglementaire (EBA GL/2019/04) pour les mod\`eles en production.
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Observabilit\'e (Logging Structur\'e)}
+\label{sec:logging}
+% ══════════════════════════════════════════════════════════
+
+\subsection{De \texttt{print()} \`a \texttt{structlog}}
+
+L'audit a identifi\'e l'absence de logs structur\'es. Le projet adopte d\'esormais \textbf{structlog} pour un logging enrichi et tra\c{c}able~:
+
+\begin{center}
+\begin{tikzpicture}[
+    old/.style={draw=accentred, rounded corners=4pt, minimum width=9cm, minimum height=0.8cm, fill=accentred!8, font=\small\ttfamily, align=left, anchor=west},
+    new/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=9cm, minimum height=0.8cm, fill=accentgreen!8, font=\small\ttfamily, align=left, anchor=west}
+]
+
+\node[old] at (0, 0) {print("[1/4] Chargement des donnees...")};
+\node[font=\small, text=accentred] at (11, 0) {Avant};
+
+\node[new] at (0, -1.2) {logger.info("stage\_started", stage="1/4")};
+\node[font=\small, text=accentgreen!70!black] at (11, -1.2) {Apr\`es};
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Architecture du logging}
+
+Le module \texttt{utils/logging.py} fournit un setup centralis\'e~:
+
+\begin{formulebox}[Configuration structlog]
+\begin{lstlisting}[language=Python]
+from ifrs9_cockpit.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Log enrichi automatiquement (timestamp, module, niveau)
+logger.info("ecl_calculated",
+    ecl_total=1_234_567.89,
+    n_clients=30_000,
+    elapsed_ms=1100,
+)
+# => 2026-02-12T14:30:00 [info] ecl_calculated
+#    ecl_total=1234567.89 n_clients=30000 elapsed_ms=1100
+\end{lstlisting}
+\end{formulebox}
+
+\subsection{Deux modes de sortie}
+
+\begin{center}
+\begin{tabular}{lp{4cm}p{5cm}}
+\toprule
+\textbf{Mode} & \textbf{Usage} & \textbf{Format} \\
+\midrule
+Console & D\'eveloppement local & Couleurs, lisible humainement \\
+JSON & Production / Docker & Structur\'e, parsable par ELK/Datadog \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}[language=Python]
+# Mode developpement (defaut)
+setup_logging(level="INFO", json_output=False)
+
+# Mode production (Docker)
+setup_logging(level="INFO", json_output=True)
+\end{lstlisting}
+
+\begin{interpretbox}[Tra\c{c}abilit\'e compl\`ete]
+En production, chaque \'ev\'enement est enrichi du timestamp ISO, du module, du niveau de log, et du contexte m\'etier (param\`etres macro, temps de calcul, etc.). Un auditeur peut reconstituer ``qui a lanc\'e quel stress test, avec quels param\`etres, en combien de temps''.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Limites et \'Evolutions}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Limites actuelles}
+
+\begin{enumerate}
+    \item \textbf{Pas de base de donn\'ees}~: les donn\'ees sont g\'en\'er\'ees en m\'emoire \`a chaque d\'emarrage. En production, il faudrait un connecteur vers une base relationnelle (PostgreSQL) ou un data lake.
+
+    \item \textbf{Pas de CI/CD}~: les tests sont ex\'ecut\'es manuellement. Un pipeline GitHub Actions avec ex\'ecution automatique des 574+ tests serait souhaitable.
+
+    \item \textbf{Pas de monitoring de d\'erive}~: les m\'etriques PSI (\textit{Population Stability Index}) et CSI (\textit{Characteristic Stability Index}) ne sont pas impl\'ement\'ees, car inutiles sur donn\'ees synth\'etiques stationnaires.
+
+    \item \textbf{Export PDF diff\'er\'e}~: l'export PDF (FR51) est report\'e. Le MVP utilise l'export Excel (FR50) avec 8 feuilles.
+\end{enumerate}
+
+\subsection{\'Evolutions possibles}
+
+\begin{enumerate}
+    \item \textbf{Pipeline MLOps}~: int\'egrer MLflow pour le tracking des exp\'eriences et le versioning des mod\`eles
+
+    \item \textbf{Validation out-of-time}~: sur donn\'ees r\'eelles, entra\^iner sur 2018--2022 et tester sur 2023--2024 pour valider la stabilit\'e temporelle
+
+    \item \textbf{Scheduling}~: r\'e-entra\^inement mensuel automatis\'e avec alerte si l'AUC chute sous le seuil
+
+    \item \textbf{Kubernetes}~: autoscaling horizontal de l'API FastAPI pour charges multi-utilisateurs
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════
+\section{R\'esum\'e de l'Architecture}
+% ══════════════════════════════════════════════════════════
+
+\begin{center}
+\begin{tikzpicture}[
+    block/.style={draw=steelblue, rounded corners=6pt, minimum width=3.5cm, minimum height=1.5cm, fill=steelblue!8, font=\normalsize, text=darkblue, align=center},
+    principle/.style={draw=darkblue, rounded corners=6pt, minimum width=15cm, minimum height=1cm, fill=darkblue!8, font=\normalsize\bfseries, text=darkblue, align=center}
+]
+
+\node[principle] (p1) at (0, 1.5) {Principe~: Configuration as Code (config.py = source unique)};
+
+\node[block] (b1) at (-5.5, -0.5) {\textbf{Offline}\\Train 1.5M\\3 mod\`eles\\joblib};
+\node[block] (b2) at (-1.8, -0.5) {\textbf{API-First}\\FastAPI\\Pydantic\\d\'ecoupl\'e};
+\node[block] (b3) at (1.8, -0.5) {\textbf{Online}\\Dashboard\\Streamlit\\Caching};
+\node[block] (b4) at (5.5, -0.5) {\textbf{Quality}\\574+ tests\\Pandera\\structlog};
+
+\node[principle] (p2) at (0, -2.5) {R\'esultat~: Pipeline $\sim$1.1s, Docker, Reproductible, Auditable};
+
+\draw[-Stealth, thick, steelblue!70] (p1) -- (b1);
+\draw[-Stealth, thick, steelblue!70] (p1) -- (b2);
+\draw[-Stealth, thick, steelblue!70] (p1) -- (b3);
+\draw[-Stealth, thick, steelblue!70] (p1) -- (b4);
+\draw[-Stealth, thick, steelblue!70] (b1) -- (p2);
+\draw[-Stealth, thick, steelblue!70] (b2) -- (p2);
+\draw[-Stealth, thick, steelblue!70] (b3) -- (p2);
+\draw[-Stealth, thick, steelblue!70] (b4) -- (p2);
+
+\end{tikzpicture}
+\end{center}
+
+\begin{interpretbox}[Points cl\'es \`a retenir]
+\begin{enumerate}[noitemsep]
+    \item \textbf{Config-driven}~: tout est dans \texttt{config.py}, aucun magic number dans le code
+    \item \textbf{Train/Serve}~: entra\^inement offline sur 1.5M lignes, service en $< 2$s via joblib
+    \item \textbf{Immutabilit\'e}~: \texttt{@dataclass(frozen=True)} garantit que la config ne change pas en vol
+    \item \textbf{API-First}~: FastAPI d\'ecouple le moteur de calcul du frontend (Streamlit / React / Excel)
+    \item \textbf{Contrat de donn\'ees}~: Pandera (sch\'emas d\'eclaratifs), enums strictes, clipping
+    \item \textbf{Docker}~: multi-stage build (GPU train / CPU serve), Docker Compose
+    \item \textbf{Observabilit\'e}~: structlog (structured logging), tra\c{c}abilit\'e compl\`ete des calculs
+    \item \textbf{Caching \`a 3 niveaux}~: disque (joblib) $\to$ m\'emoire (cache\_resource) $\to$ recalcul (1.1s)
+    \item \textbf{574+ tests}~: unitaires, int\'egration, invariants financiers
+    \item \textbf{GPU transparent}~: auto-d\'etection CUDA, fallback CPU sans modification du code
+\end{enumerate}
+\end{interpretbox}
+
+
+\end{document}

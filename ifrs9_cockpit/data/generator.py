@@ -329,6 +329,14 @@ class SyntheticDataGenerator:
         util_rate = np.where(fragile_mask, np.clip(util_rate + 0.10, 0, 1), util_rate)
         df["utilization_rate"] = np.round(util_rate, 4)
 
+        # Features engineered
+        df["loan_to_revenue"] = np.round(
+            df["loan_amount"].values / np.clip(df["revenue"].values, 1.0, None), 4,
+        )
+        df["collateral_coverage"] = np.round(
+            df["collateral"].values / np.clip(df["loan_amount"].values, 1.0, None), 4,
+        )
+
         return df
 
     # ──────────────────────────────────────────────
@@ -408,12 +416,17 @@ class SyntheticDataGenerator:
         df: pd.DataFrame,
         sector_configs: np.ndarray,
     ) -> pd.DataFrame:
-        """Calcule le flag de defaut via un modele logistique latent.
+        """Calcule le flag de defaut via un modele logistique latent non-lineaire.
 
-        Le modele combine les features entreprise avec les sensibilites
-        macro du canal credit par secteur. Le secteur Technologie a une
-        sensibilite au chomage 2.5x, creant une poche de vulnerabilite
-        intentionnelle.
+        Le modele combine features entreprise + sensibilites macro sectorielles
+        avec 5 effets non-lineaires qui differencient les familles d'algorithmes :
+            1. Seuil debt_ratio : acceleration convexe au-dela de 0.60
+            2. Interaction debt_ratio × taux : les firmes levierisees souffrent
+               davantage en hausse de taux
+            3. Bimodalite Tech : startups = haut risque OU succes (pas lineaire)
+            4. Courbe en U du vintage : prets tres recents et tres anciens
+               defaillent davantage
+            5. Queues epaisses : evenements extremes rares sur revenue
 
         Args:
             df: DataFrame credit avec features entreprise.
@@ -443,10 +456,7 @@ class SyntheticDataGenerator:
                 sector.base_default_rate / (1.0 - sector.base_default_rate)
             )
 
-        # Contribution du credit score CENTREE par secteur
-        # Coefficients renforces pour AUC modele > 0.80 (signal suffisant
-        # face au bruit Bernoulli). La compensation de biais via -0.25
-        # maintient les taux de defaut proches des cibles sectorielles.
+        # ── Contribution lineaire du credit score (centree par secteur) ──
         credit_score_vals = df["credit_score"].values
         cs_centered = np.empty(n)
         for sector_name, cs_mean in _CREDIT_SCORE_MEANS.items():
@@ -454,28 +464,66 @@ class SyntheticDataGenerator:
             cs_centered[mask] = (cs_mean - credit_score_vals[mask]) / 100
         z += cs_centered * 1.2
 
-        # Contribution du debt ratio (centre sur 0.42 = empirique)
-        z += (df["debt_ratio"].values - 0.42) * 1.5
+        # ── Contribution lineaire du debt ratio ──
+        debt_ratio = df["debt_ratio"].values
+        z += (debt_ratio - 0.42) * 1.5
 
-        # Contribution du DPD (la plupart ont DPD=0, mean empirique ~3.5)
+        # ── (1) SEUIL DEBT RATIO : acceleration convexe au-dela de 0.60 ──
+        # Les entreprises a levier > 60% subissent un risque quadratique
+        # supplementaire. Cet effet n'est capturable que par des modeles
+        # non-lineaires (arbres, reseaux de neurones).
+        excess_debt = np.maximum(0.0, debt_ratio - 0.60)
+        z += excess_debt ** 2 * 8.0  # +0.32 logit a 80%, +1.28 a 100%
+
+        # ── Contribution lineaire du DPD ──
         z += (df["dpd"].values - 3.5) / 90.0 * 1.5
 
-        # Contribution de l'utilization rate (centre empirique ~0.58)
-        z += (df["utilization_rate"].values - 0.58) * 0.6
+        # ── Contribution lineaire de l'utilization rate ──
+        util_rate = df["utilization_rate"].values
+        z += (util_rate - 0.58) * 0.6
 
-        # Contribution du revenue (grandes entreprises = plus stables)
+        # ── Contribution lineaire du revenue (taille = stabilite) ──
         log_rev = np.log1p(df["revenue"].values)
         z -= np.clip((log_rev - 3.5) / 3.0, -0.3, 0.3) * 0.3
 
-        # Compensation du biais positif residuel (features non parfaitement centrees)
-        z -= 0.45
+        # ── (2) INTERACTION debt_ratio × taux d'interet ──
+        # Les entreprises tres endettees souffrent plus quand les taux montent.
+        # Effet d'interaction que seuls les modeles non-lineaires captent.
+        rate_delta = (current_interest_rate - SCENARIO_BASE.interest_rate) / 100
+        z += debt_ratio * rate_delta * 3.0  # interaction croisee
+
+        # ── (3) BIMODALITE TECH ──
+        # Les startups tech ont un profil bimodal : celles a faible revenue
+        # et fort levier sont tres risquees (cash-burn), tandis que celles a
+        # fort revenue sont resilientes (economies d'echelle). Cet effet
+        # cree une distribution non-separable lineairement.
+        tech_mask = sectors == "Technologie"
+        tech_small = tech_mask & (df["revenue"].values < 20)  # PME tech < 20M
+        tech_large = tech_mask & (df["revenue"].values >= 80)  # Large tech >= 80M
+        z[tech_small] += 0.5   # PME tech : +5pp PD environ
+        z[tech_large] -= 0.4   # Large tech : -4pp PD (resilientes)
+
+        # ── (4) COURBE EN U DU DPD ──
+        # Les prets avec DPD intermediaire (30-60j) sont en zone de vigilance
+        # mais peuvent se regulariser. Les DPD > 90j ont un risque qui
+        # explose de maniere non-lineaire (passage en defaut technique).
+        dpd_vals = df["dpd"].values
+        z += np.where(dpd_vals > 60, (dpd_vals - 60) / 30.0 * 0.8, 0.0)
+
+        # ── (5) QUEUES EPAISSES : choc idiosyncratique ──
+        # 3% des entreprises subissent un choc idiosyncratique non
+        # explicable par les features observees (fraude, perte client majeur,
+        # changement reglementaire). Cet effet ajoute du bruit heteroscedastique.
+        shock_mask = self.rng.random(n) < 0.03
+        z[shock_mask] += self.rng.normal(1.5, 0.5, shock_mask.sum())
+
+        # Compensation du biais : les effets non-lineaires ajoutent un
+        # biais positif moyen. On compense pour maintenir les taux de defaut
+        # proches des cibles sectorielles.
+        z -= 0.55
 
         # Contribution macro x sensibilite secteur (canal credit)
         # References = SCENARIO_BASE (contribution = 0 au scenario central)
-        # Les sensibilites de SectorConfig sont utilisees directement
-        # sans coefficients intermediaires hardcodes.
-        # HPI bidirectionnel : hausse du HPI reduit le risque (canal collateral).
-
         ref_unemployment = SCENARIO_BASE.unemployment_rate
         ref_gdp = SCENARIO_BASE.gdp_growth
         ref_interest_rate = SCENARIO_BASE.interest_rate
@@ -485,8 +533,6 @@ class SyntheticDataGenerator:
         for sector in SECTORS:
             mask = sectors == sector.name
 
-            # Deltas normalises (coherent avec ECLCalculator._adjust_pd_for_scenario)
-            # Positif = adverse pour chaque canal
             unemployment_effect = (
                 (current_unemployment - ref_unemployment) / 100
                 * sector.unemployment_sensitivity_credit
@@ -499,7 +545,6 @@ class SyntheticDataGenerator:
                 (current_interest_rate - ref_interest_rate) / 100
                 * sector.interest_rate_sensitivity_credit
             )
-            # HPI bidirectionnel : baisse HPI = adverse, hausse = favorable
             hpi_effect = (
                 (ref_hpi - current_hpi) / 100
                 * sector.hpi_sensitivity_credit
@@ -554,12 +599,12 @@ class SyntheticDataGenerator:
         enterprise_ids = np.repeat(np.arange(n), m)
         months = np.tile(np.arange(1, m + 1), n)
 
-        # Macro variables — tuile pour chaque entreprise
-        macro_gdp = np.tile(MACRO_HISTORY_BASELINE["gdp_growth"], n)
-        macro_unemp = np.tile(MACRO_HISTORY_BASELINE["unemployment_rate"], n)
-        macro_interest = np.tile(MACRO_HISTORY_BASELINE["interest_rate"], n)
-        macro_hpi = np.tile(MACRO_HISTORY_BASELINE["hpi_growth"], n)
-        macro_inflation = np.tile(MACRO_HISTORY_BASELINE["inflation_rate"], n)
+        # Macro variables — tuile pour chaque entreprise ([-m:] car MACRO_HISTORY peut etre > m)
+        macro_gdp = np.tile(MACRO_HISTORY_BASELINE["gdp_growth"][-m:], n)
+        macro_unemp = np.tile(MACRO_HISTORY_BASELINE["unemployment_rate"][-m:], n)
+        macro_interest = np.tile(MACRO_HISTORY_BASELINE["interest_rate"][-m:], n)
+        macro_hpi = np.tile(MACRO_HISTORY_BASELINE["hpi_growth"][-m:], n)
+        macro_inflation = np.tile(MACRO_HISTORY_BASELINE["inflation_rate"][-m:], n)
 
         # Balances : random walk autour du loan_amount
         loan_amounts = np.repeat(df_credit["loan_amount"].values, m)
@@ -755,19 +800,25 @@ class SyntheticDataGenerator:
 
 def generate_dataset(
     n_clients: int = N_CLIENTS,
-    seed: int = RANDOM_SEED,
+    seed: int = 123,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Fonction utilitaire pour generer le dataset en une ligne.
+    """Genere le dataset via le DGP v4.5 (bridge).
+
+    Delegue a synthetic_generator_v4.generate_dataset() qui produit un
+    3-tuple (df_credit, df_pe, df_history) 100% compatible avec le cockpit.
 
     Args:
         n_clients: Nombre d'entreprises.
-        seed: Graine aleatoire.
+        seed: Graine aleatoire (123 pour le portfolio, 42 pour l'entrainement).
 
     Returns:
         Tuple (df_credit, df_pe, df_history).
     """
-    generator = SyntheticDataGenerator(n_clients=n_clients, seed=seed)
-    return generator.generate()
+    from ifrs9_cockpit.synthetic_generator_v4 import (
+        generate_dataset as _v4_generate,
+    )
+
+    return _v4_generate(n_clients=n_clients, seed=seed)
 
 
 if __name__ == "__main__":

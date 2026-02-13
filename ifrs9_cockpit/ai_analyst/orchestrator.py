@@ -24,7 +24,7 @@ from ifrs9_cockpit.ai_analyst.types import (
     RegimeClassification,
 )
 from ifrs9_cockpit.ai_analyst.layer1_crossing import analyze_crossings
-from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
 from ifrs9_cockpit.ai_analyst.layer3_rst import find_tipping_points, reverse_stress_test
 from ifrs9_cockpit.ai_analyst.layer4_regime import classify_regime
 from ifrs9_cockpit.ai_analyst.layer5_prospective import (
@@ -105,8 +105,8 @@ class CROAnalyst:
             self.result_credit, self.result_pe, self.macro_params,
         )
 
-        # Couche 2 — Allocation proportionnelle (backward-compat: decompose_euler)
-        state.euler_contributions, state.factor_attribution = decompose_euler(
+        # Couche 2 — Allocation proportionnelle
+        state.proportional_contributions, state.factor_attribution = decompose_proportional(
             self.result_credit, self.result_pe, self.macro_params, regime=regime,
         )
 
@@ -147,13 +147,20 @@ class CROAnalyst:
             ecl_ratio = float(expit(logit_base + stress_sum * LOGIT_AMPLITUDE))
             return ecl_ratio * ead_total  # Montant absolu EUR
 
-        # Seuil ambre en montant absolu (coherent avec le proxy qui retourne des EUR)
+        # Seuil tipping = max(ambre absolu, baseline ECL × 1.25)
+        # Garantit que le seuil est au-dessus du baseline pour detecter un vrai choc.
         ecl_amber_abs = RISK_APPETITE_CONFIG.ecl_ead_amber * ead_total
+        ecl_tipping_threshold = max(ecl_amber_abs, ecl_base * 1.25)
         state.tipping_points = find_tipping_points(
-            ecl_proxy, self.macro_params, regime, ecl_threshold=ecl_amber_abs,
+            ecl_proxy, self.macro_params, regime, ecl_threshold=ecl_tipping_threshold,
         )
         # RST retourne la distance de Mahalanobis (H6) depuis layer3_rst
-        rst = reverse_stress_test(ecl_proxy, self.macro_params, regime, target_ecl=self.target_ecl)
+        # Capital reel = RWA_credit × CET1_target (coherent avec comparator.py)
+        _actual_capital = self.result_credit["rwa_credit"].sum() * BASEL_CONFIG.cet1_target
+        rst = reverse_stress_test(
+            ecl_proxy, self.macro_params, regime,
+            target_ecl=self.target_ecl, capital_base=_actual_capital,
+        )
         state.rst_result = rst
         state.rst_distance = rst["rst_distance_sigma"]
 
@@ -183,12 +190,10 @@ class CROAnalyst:
         if regime is None:
             return recs
 
-        # Top allocation proportionnelle driver (backward-compat: euler_contributions)
-        # euler_contributions contient l'allocation proportionnelle du risque
-        euler = state.euler_contributions
-        if euler is not None and len(euler) > 0:
-            top_proportional = euler.sort_values("euler_share", ascending=False).iloc[0]
-            # euler_driver conserve pour compatibilite (= driver proportionnel)
+        # Top allocation proportionnelle driver
+        alloc = state.proportional_contributions
+        if alloc is not None and len(alloc) > 0:
+            top_proportional = alloc.sort_values("proportional_share", ascending=False).iloc[0]
             proportional_driver = f"{top_proportional['sector']} {top_proportional['canal']}"
         else:
             proportional_driver = "N/A"
@@ -206,7 +211,7 @@ class CROAnalyst:
         rouge_count = 0
         if ra is not None and len(ra) > 0:
             rouge_count = int((ra["signal"] == "rouge").sum())
-            ra_status = "rouge" if rouge_count > 3 else "ambre" if rouge_count > 0 else "vert"
+            ra_status = "rouge" if rouge_count > 3 else "ambre" if rouge_count > 1 else "vert"
         else:
             ra_status = "N/A"
 
@@ -244,8 +249,7 @@ class CROAnalyst:
             regime=regime.detected_regime,
             trigger=f"Risk appetite {ra_status} ({rouge_count} secteurs rouge)"
                 if ra is not None else "N/A",
-            # euler_driver conserve pour compatibilite (= allocation proportionnelle driver)
-            euler_driver=proportional_driver,
+            proportional_driver=proportional_driver,
             macro_factor=macro_factor,
             risk_appetite_status=ra_status,
             rst_distance=rst_dist,
@@ -276,12 +280,12 @@ class CROAnalyst:
             for _, row in top3.iterrows():
                 lines.append(f"  - {row['sector']} : asymetrie = {row['asymmetry']:.4f}")
 
-        # 3. Allocation proportionnelle (backward-compat: euler_contributions)
-        euler = state.euler_contributions
-        if euler is not None and len(euler) > 0:
-            top_cell = euler.sort_values("euler_share", ascending=False).iloc[0]
+        # 3. Allocation proportionnelle
+        alloc = state.proportional_contributions
+        if alloc is not None and len(alloc) > 0:
+            top_cell = alloc.sort_values("proportional_share", ascending=False).iloc[0]
             lines.append(f"Allocation proportionnelle : {top_cell['sector']} {top_cell['canal']} "
-                        f"domine ({top_cell['euler_share']:.1%} du risque total)")
+                        f"domine ({top_cell['proportional_share']:.1%} du risque total)")
 
         # 4. RST (Mahalanobis)
         if state.rst_result:

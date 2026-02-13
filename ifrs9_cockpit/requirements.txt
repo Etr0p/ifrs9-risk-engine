@@ -2,8 +2,19 @@ numpy
 pandas
 scipy
 scikit-learn
+statsmodels
 xgboost
 streamlit
 plotly
 shap
 openpyxl
+torch
+pytorch-tabnet
+# --- Production-Grade (Audit Recommendations) ---
+fastapi
+uvicorn[standard]
+pandera
+structlog
+# --- Dash Frontend ---
+dash>=2.14
+dash-bootstrap-components>=1.5

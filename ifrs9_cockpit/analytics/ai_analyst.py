@@ -381,7 +381,7 @@ class LocalCROAnalyst:
         elif risk_score >= 2:
             risk_level, risk_color = "MODERE", "orange"
         else:
-            risk_level, risk_color = "MAITRISE", "vert"
+            risk_level, risk_color = "BON", "vert"
 
         lines.append(
             f"\n**Niveau de risque global : {risk_level}** "
@@ -1363,7 +1363,7 @@ class LocalCROAnalyst:
 
         Returns:
             Dictionnaire structuré pour le rendu :
-                - risk_level: str ('ELEVE', 'MODERE', 'MAITRISE')
+                - risk_level: str ('ELEVE', 'MODERE', 'BON')
                 - risk_score: int (0-10)
                 - risk_color: str ('rouge', 'orange', 'vert')
                 - diagnostic: str (paragraphe d'analyse principal)
@@ -1415,7 +1415,7 @@ class LocalCROAnalyst:
         elif risk_score >= 2:
             risk_level, risk_color = "MODERE", "orange"
         else:
-            risk_level, risk_color = "MAITRISE", "vert"
+            risk_level, risk_color = "BON", "vert"
 
         # ── Diagnostic paragraph (prose) ──
         diagnostic = self._build_diagnostic_prose(

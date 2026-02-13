@@ -1,0 +1,1070 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- M\'ethodologie PD}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+% ─── PAGE DE TITRE ────────────────────────────────────────
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+
+{\Huge\bfseries\color{darkblue} Mod\'elisation de la\\[0.3cm]
+Probabilit\'e de D\'efaut (PD)}
+
+\vspace{1cm}
+
+{\LARGE\color{steelblue} M\'ethodologie, Calculs et Interpr\'etations}
+
+\vspace{2cm}
+
+{\large\color{gray}
+IFRS 9 Risk Cockpit\\[0.5cm]
+Approche multi-mod\`eles : LR\_WoE $\cdot$ TabNet $\cdot$ XGBoost
+}
+
+\vspace{3cm}
+
+\begin{tikzpicture}
+\node[draw=steelblue, rounded corners=8pt, minimum width=4cm, minimum height=1.2cm, fill=steelblue!10] (lr) {\textbf{LR\_WoE}};
+\node[draw=steelblue, rounded corners=8pt, minimum width=4cm, minimum height=1.2cm, fill=steelblue!10, right=1.5cm of lr] (tn) {\textbf{TabNet}};
+\node[draw=steelblue, rounded corners=8pt, minimum width=4cm, minimum height=1.2cm, fill=steelblue!10, right=1.5cm of tn] (xgb) {\textbf{XGBoost}};
+
+\node[below=0.3cm of lr, text=gray, font=\small] {Transparence};
+\node[below=0.3cm of tn, text=gray, font=\small] {Explicabilit\'e};
+\node[below=0.3cm of xgb, text=gray, font=\small] {Performance};
+\end{tikzpicture}
+
+\vfill
+
+{\large\today}
+
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════
+\section{Introduction et Contexte R\'eglementaire}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Pourquoi mod\'eliser la PD~?}
+
+La norme IFRS~9 impose aux \'etablissements financiers de provisionner les pertes de cr\'edit attendues (\textit{Expected Credit Loss}, ECL) d\`es l'origination du pr\^et. La formule fondamentale est~:
+
+\begin{formulebox}[Formule ECL fondamentale]
+\begin{equation}
+    \text{ECL} = \text{PD} \times \text{LGD} \times \text{EAD} \times \text{DF}
+    \label{eq:ecl}
+\end{equation}
+o\`u~:
+\begin{itemize}[noitemsep]
+    \item $\text{PD}$ = Probabilit\'e de D\'efaut (notre sujet)
+    \item $\text{LGD}$ = \textit{Loss Given Default} (perte en cas de d\'efaut)
+    \item $\text{EAD}$ = \textit{Exposure At Default} (exposition au moment du d\'efaut)
+    \item $\text{DF}$ = Facteur d'actualisation
+\end{itemize}
+\end{formulebox}
+
+La PD est le param\`etre le plus sensible de cette \'equation~: une erreur de 1 point de pourcentage sur la PD se propage directement dans l'ECL, et donc dans le compte de r\'esultat de la banque.
+
+\subsection{Exigences r\'eglementaires (BCE / EBA)}
+
+Le r\'egulateur europ\'een impose plusieurs exigences sur la mod\'elisation PD~:
+
+\begin{enumerate}[noitemsep]
+    \item \textbf{Model Risk Management}~: comparer plusieurs familles de mod\`eles pour \'eviter le risque de mod\`ele unique
+    \item \textbf{Interpr\'etabilit\'e}~: pouvoir expliquer les d\'ecisions de cr\'edit \`a un client ou un auditeur
+    \item \textbf{Calibration}~: les PD pr\'edites doivent correspondre aux taux de d\'efaut observ\'es
+    \item \textbf{Stabilit\'e}~: le mod\`ele doit \^etre robuste dans le temps (monitoring PSI/CSI)
+\end{enumerate}
+
+\subsection{Choix de trois familles de mod\`eles}
+
+Pour r\'epondre \`a ces exigences, nous d\'eployons trois mod\`eles compl\'ementaires~:
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\toprule
+\textbf{Mod\`ele} & \textbf{Famille} & \textbf{R\^ole} & \textbf{Public cible} \\
+\midrule
+LR\_WoE & Lin\'eaire & Transparence, audit & R\'egulateurs, auditeurs \\
+TabNet & Deep Learning & Explicabilit\'e individuelle & Comit\'e de cr\'edit, CRO \\
+XGBoost & Ensemble d'arbres & Performance maximale & \'Equipe risque, production \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{interpretbox}[Interpr\'etation]
+Chaque mod\`ele r\'epond \`a un besoin diff\'erent~: un mod\`ele qu'on \textbf{comprend} (LR\_WoE), un qu'on \textbf{utilise} en production (XGBoost), un qu'on \textbf{explique} individuellement (TabNet). C'est le trio classique en banque, conforme aux bonnes pratiques BCE/EBA.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Donn\'ees et G\'en\'erateur Synth\'etique (DGP v4.5)}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Architecture du DGP}
+
+Les donn\'ees sont produites par un \textit{Data Generating Process} (DGP) synth\'etique con\c{c}u pour reproduire les caract\'eristiques statistiques d'un portefeuille de cr\'edit corporate. L'architecture suit une d\'ecomposition 50/30/20~:
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=5pt, minimum width=3.5cm, minimum height=1cm, fill=steelblue!10, font=\small},
+    arrow/.style={-Stealth, thick, steelblue}
+]
+\node[box] (mono) at (0,0) {50\% Monotones\\par morceaux};
+\node[box] (cond) at (5.5,0) {30\% Amplifications\\conditionnelles};
+\node[box] (conj) at (11,0) {20\% Conjunctives\\(interactions)};
+
+\node[box, fill=darkblue!10, draw=darkblue, minimum width=12cm] (logit) at (5.5,-2) {$\text{logit}(\text{PD}) = \beta_0 + f_{\text{mono}}(\mathbf{x}) + f_{\text{cond}}(\mathbf{x}) + f_{\text{conj}}(\mathbf{x}) + \varepsilon$};
+
+\draw[arrow] (mono) -- (logit);
+\draw[arrow] (cond) -- (logit);
+\draw[arrow] (conj) -- (logit);
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}
+    \item \textbf{Monotones par morceaux (50\%)}~: effets lin\'eaires par segments (ex.~: \texttt{debt\_ratio} augmente la PD lin\'eairement par tranches)
+    \item \textbf{Amplifications conditionnelles (30\%)}~: effets non-lin\'eaires activ\'es sous condition (ex.~: seuil de dette \`a 60\% avec effet quadratique au-del\`a)
+    \item \textbf{Conjunctives (20\%)}~: interactions entre variables (ex.~: \texttt{debt\_ratio} $\times$ \texttt{interest\_rate})
+\end{itemize}
+
+\subsection{Variables g\'en\'er\'ees}
+
+\begin{center}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Variable} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{revenue} & Num\'erique & Chiffre d'affaires (log-normal par secteur) \\
+\texttt{ebitda} & Num\'erique & R\'esultat op\'erationnel (corr\'el\'e au revenue) \\
+\texttt{debt\_ratio} & Num\'erique & Ratio d'endettement (distribution Gamma) \\
+\texttt{credit\_score} & Num\'erique & Score de cr\'edit [300, 850] \\
+\texttt{dpd} & Num\'erique & Jours de retard de paiement \\
+\texttt{utilization\_rate} & Num\'erique & Taux d'utilisation de la ligne \\
+\texttt{loan\_amount} & Num\'erique & Montant du pr\^et \\
+\texttt{collateral} & Num\'erique & Valeur de la garantie \\
+\texttt{sector} & Cat\'egorielle & Secteur \'economique (5 secteurs) \\
+\texttt{loan\_type} & Cat\'egorielle & Type de pr\^et (Revolving / Term) \\
+\texttt{loan\_to\_revenue} & Engin. & $= \texttt{loan\_amount} / \texttt{revenue}$ \\
+\texttt{collateral\_coverage} & Engin. & $= \texttt{collateral} / \texttt{loan\_amount}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{S\'eparation entra\^inement / portfolio}
+
+\begin{warningbox}[Gestion des seeds]
+\begin{itemize}[noitemsep]
+    \item \textbf{Entra\^inement}~: 1\,500\,000 lignes, seed = 42
+    \item \textbf{Portfolio (dashboard)}~: 30\,000 lignes, seed = 123
+    \item Les deux seeds sont \textbf{toujours diff\'erentes} pour \'eviter la circularit\'e (le mod\`ele ne doit jamais \^etre \'evalu\'e sur ses donn\'ees d'entra\^inement)
+\end{itemize}
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Mod\`ele 1~: R\'egression Logistique avec WoE (LR\_WoE)}
+\label{sec:lr_woe}
+% ══════════════════════════════════════════════════════════
+
+Ce mod\`ele est la \textbf{scorecard bancaire classique}. C'est la r\'ef\'erence de l'industrie depuis les ann\'ees 1990 (Siddiqi, 2006). Son avantage principal~: \textbf{transparence totale}. Chaque d\'ecision peut \^etre expliqu\'ee par une formule lin\'eaire.
+
+\subsection{\'Etape 1~: Weight of Evidence (WoE)}
+
+\subsubsection{Principe}
+
+Le WoE transforme chaque variable num\'erique en une mesure de \textbf{pouvoir discriminant} par tranche. L'id\'ee~: d\'ecouper la variable en bins (intervalles), puis mesurer si chaque bin contient proportionnellement plus de ``bons'' ou de ``mauvais'' clients.
+
+\begin{definitionbox}[D\'efinition -- Weight of Evidence]
+Pour un bin $i$ d'une variable $X$~:
+\begin{equation}
+    \text{WoE}_i = \ln\left(\frac{\%\;\text{non-d\'efauts dans le bin}_i}{\%\;\text{d\'efauts dans le bin}_i}\right)
+    = \ln\left(\frac{n_{i}^{(\text{good})} / N^{(\text{good})}}{n_{i}^{(\text{bad})} / N^{(\text{bad})}}\right)
+    \label{eq:woe}
+\end{equation}
+\end{definitionbox}
+
+\textbf{Interpr\'etation intuitive}~:
+\begin{itemize}[noitemsep]
+    \item $\text{WoE} > 0$~: le bin contient proportionnellement plus de bons clients $\Rightarrow$ tranche s\^ure
+    \item $\text{WoE} < 0$~: le bin contient proportionnellement plus de mauvais clients $\Rightarrow$ tranche risqu\'ee
+    \item $\text{WoE} = 0$~: le bin a la m\^eme proportion que la population globale $\Rightarrow$ neutre
+\end{itemize}
+
+\subsubsection{Exemple concret~: \texttt{debt\_ratio}}
+
+\begin{center}
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Bin} & \textbf{\% Bons} & \textbf{\% Mauvais} & \textbf{WoE} & \textbf{Interpr\'etation} \\
+\midrule
+$[0.0,\; 0.2]$ & 25\% & 8\% & $+1.14$ & Tr\`es s\^ur \\
+$[0.2,\; 0.4]$ & 22\% & 15\% & $+0.38$ & S\^ur \\
+$[0.4,\; 0.6]$ & 20\% & 22\% & $-0.10$ & L\'eg\`erement risqu\'e \\
+$[0.6,\; 0.8]$ & 18\% & 25\% & $-0.33$ & Risqu\'e \\
+$[0.8,\; 1.0]$ & 15\% & 30\% & $-0.69$ & Tr\`es risqu\'e \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Lissage de Laplace ($\varepsilon$-smoothing)}
+
+Un bin peut contenir z\'ero d\'efaut (ou z\'ero non-d\'efaut), ce qui donnerait $\ln(x/0) = +\infty$. Pour \'eviter ce probl\`eme, on applique un \textbf{lissage de Laplace}~:
+
+\begin{formulebox}[WoE avec lissage]
+\begin{equation}
+    \text{WoE}_i = \ln\left(
+        \frac{(n_{i}^{(\text{good})} + \varepsilon)\;/\;(N^{(\text{good})} + 2\varepsilon)}
+             {(n_{i}^{(\text{bad})} + \varepsilon)\;/\;(N^{(\text{bad})} + 2\varepsilon)}
+    \right)
+    \label{eq:woe_smooth}
+\end{equation}
+Avec $\varepsilon = 0.5$ (valeur par d\'efaut, configurable).
+\end{formulebox}
+
+Le terme $2\varepsilon$ au d\'enominateur assure que les proportions somment toujours \`a 1 apr\`es lissage. C'est la correction de Jeffreys, standard en statistique bay\'esienne.
+
+\subsection{\'Etape 2~: Monotonicit\'e (PAV)}
+
+\subsubsection{Probl\`eme}
+
+Les WoE bruts peuvent \^etre \textbf{non-monotones} par hasard statistique. Par exemple, le bin $[0.4, 0.6]$ pourrait avoir un taux de d\'efaut \textit{inf\'erieur} au bin $[0.2, 0.4]$, simplement par fluctuation d'\'echantillonnage. Or, pour une scorecard r\'eglementaire, on exige que~:
+
+\begin{quote}
+\textit{``Plus la dette augmente, plus le risque augmente''} $\Rightarrow$ WoE strictement d\'ecroissant.
+\end{quote}
+
+\subsubsection{Solution~: Pool Adjacent Violators (PAV)}
+
+L'algorithme PAV (aussi appel\'e \textit{Isotonic Regression}) corrige les violations de monotonicit\'e en \textbf{fusionnant les bins adjacents} qui violent l'ordre attendu~:
+
+\begin{algorithm}[H]
+\caption{Pool Adjacent Violators (PAV)}
+\begin{algorithmic}[1]
+\Require Taux de d\'efaut par bin $\{r_1, r_2, \ldots, r_k\}$, direction attendue
+\Ensure Taux monotones $\{r_1', r_2', \ldots, r_m'\}$ avec $m \leq k$
+\State D\'eterminer la direction via corr\'elation de Spearman
+\State Appliquer la r\'egression isotonique (sklearn)
+\For{chaque paire de bins adjacents avec le m\^eme taux corrig\'e}
+    \State Fusionner les deux bins (somme des effectifs)
+    \State Supprimer le breakpoint interm\'ediaire
+\EndFor
+\State \Return Bins fusionn\'es (monotones par construction)
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{D\'etection automatique de la direction}
+
+La direction (croissante ou d\'ecroissante) est d\'etect\'ee par la \textbf{corr\'elation de Spearman} entre la m\'ediane du bin et le taux de d\'efaut~:
+
+\begin{itemize}[noitemsep]
+    \item $\rho_{\text{Spearman}} < 0$~: quand la variable augmente, le taux de d\'efaut diminue $\Rightarrow$ WoE croissant (variable protectrice)
+    \item $\rho_{\text{Spearman}} > 0$~: quand la variable augmente, le taux de d\'efaut augmente $\Rightarrow$ WoE d\'ecroissant (variable de risque)
+\end{itemize}
+
+\subsection{\'Etape 3~: Nombre minimum de d\'efauts par bin}
+
+Un bin avec seulement 3 d\'efauts sur 10\,000 observations n'est pas statistiquement fiable. On impose un \textbf{minimum de d\'efauts par bin} (param\`etre \texttt{min\_events\_per\_bin} $= 20$).
+
+Si un bin contient moins de 20 d\'efauts, il est \textbf{fusionn\'e avec le bin voisin} le plus proche (celui ayant le moins de d\'efauts). Ce processus est it\'eratif jusqu'\`a ce que tous les bins respectent le seuil.
+
+\begin{interpretbox}[Pourquoi 20~?]
+Avec 20 d\'efauts par bin, l'erreur standard du taux de d\'efaut est~:
+$$\text{SE} = \sqrt{\frac{p(1-p)}{n}} \approx \sqrt{\frac{0.05 \times 0.95}{20}} \approx 4.9\%$$
+C'est un compromis entre pr\'ecision statistique et granularit\'e des bins.
+\end{interpretbox}
+
+\subsection{\'Etape 3b~: Granularit\'e minimale post-PAV}
+
+L'algorithme PAV peut cr\'eer des bins minuscules en fusionnant des violations de monotonicit\'e. Un bin repr\'esentant moins de 5\% de la population totale n'est pas statistiquement repr\'esentatif et risque de provoquer du sur-apprentissage.
+
+\begin{warningbox}[Contrainte de granularit\'e]
+Apr\`es PAV, tout bin contenant \textbf{moins de 5\% de la population totale} (param\`etre \texttt{min\_bin\_pct} $= 0.05$) est fusionn\'e avec le bin voisin dont le \textbf{WoE est le plus proche} (et non le voisin num\'erique imm\'ediat). Cette technique pr\'eserve la s\'eparation optimale du mod\`ele en regroupant les segments les plus similaires en termes de risque.
+\end{warningbox}
+
+\subsection{\'Etape 3c~: Traitement du bin NaN (WoE imputation)}
+
+Les valeurs manquantes (NaN) sont isol\'ees dans un \textbf{bin explicite} avec leur propre WoE calcul\'e ind\'ependamment. Cela \'evite l'imputation par la m\'ediane, qui effacerait un signal potentiellement informatif (ex.~: un champ vide peut indiquer une anomalie dans le processus d'octroi).
+
+Si le bin NaN contient \textbf{moins de 5\% de la population}, il est fusionn\'e avec le bin num\'erique dont le WoE est le plus proche~:
+
+\begin{quote}
+\textit{Fusion par proximit\'e WoE (``WoE imputation'', Anderson 2007)~: on choisit le bin de destination par $\min_b |WoE_{\text{NaN}} - WoE_b|$, et non par proximit\'e num\'erique. Cela garantit que les NaN sont class\'es dans la cat\'egorie de risque la plus similaire.}
+\end{quote}
+
+\subsection{\'Etape 4~: Information Value (IV) --- S\'election de variables}
+
+L'IV mesure le \textbf{pouvoir discriminant total} d'une variable sur l'ensemble de ses bins~:
+
+\begin{formulebox}[Information Value]
+\begin{equation}
+    \text{IV} = \sum_{i=1}^{k} \left(\%\;\text{bons}_i - \%\;\text{mauvais}_i\right) \times \text{WoE}_i
+    \label{eq:iv}
+\end{equation}
+\end{formulebox}
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{IV} & \textbf{Interpr\'etation} \\
+\midrule
+$< 0.02$ & Pas de pouvoir pr\'edictif $\Rightarrow$ \textbf{\'elimin\'ee} \\
+$0.02 - 0.10$ & Faible \\
+$0.10 - 0.30$ & Moyen \\
+$0.30 - 0.50$ & Fort \\
+$> 0.50$ & Suspect (possible fuite de donn\'ees) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les variables avec $\text{IV} < 0.02$ sont automatiquement exclues du mod\`ele.
+
+\begin{interpretbox}[Interpr\'etation de l'IV]
+L'IV est en fait la \textbf{divergence de Kullback-Leibler sym\'etris\'ee} entre la distribution des bons et des mauvais clients. Plus cette divergence est grande, plus la variable s\'epare bien les deux populations.
+\end{interpretbox}
+
+\subsection{\'Etape 5~: D\'efinition de la cible}
+
+\begin{warningbox}[Convention de la variable cible]
+Le mod\`ele estime explicitement $P(\text{D\'efaut} = 1 \mid \mathbf{X})$, c'est-\`a-dire la probabilit\'e de d\'efaut. Certains syst\`emes (notamment des scorecards am\'ericaines) mod\'elisent $P(\text{Non-D\'efaut} = 1)$, ce qui \textbf{inverse tous les signes}. Ici, la cible est \texttt{default\_flag} $\in \{0, 1\}$ o\`u $1 =$ d\'efaut. Toutes les formules, conventions de signe ($\beta < 0$) et directions WoE sont coh\'erentes avec cette convention.
+\end{warningbox}
+
+\subsection{\'Etape 5b~: R\'egression Logistique}
+
+Apr\`es l'encodage WoE, chaque variable num\'erique est remplac\'ee par un scalaire (le WoE de sa tranche). Le mod\`ele est alors une simple r\'egression logistique~:
+
+\begin{formulebox}[Mod\`ele logistique]
+\begin{equation}
+    \text{logit}(\text{PD}) = \ln\left(\frac{\text{PD}}{1 - \text{PD}}\right) = \beta_0 + \sum_{j=1}^{p} \beta_j \cdot \text{WoE}_j(x_j)
+    \label{eq:logit}
+\end{equation}
+\begin{equation}
+    \text{PD} = \sigma\left(\beta_0 + \sum_{j=1}^{p} \beta_j \cdot \text{WoE}_j(x_j)\right) = \frac{1}{1 + e^{-(\beta_0 + \sum \beta_j \cdot \text{WoE}_j)}}
+    \label{eq:pd}
+\end{equation}
+\end{formulebox}
+
+\subsubsection{Filtrage de la multicolin\'earit\'e (VIF)}
+
+Avant de v\'erifier les signes des $\beta$, on filtre les variables pr\'esentant une \textbf{multicolin\'earit\'e s\'ev\`ere}. Un coefficient $\beta_j > 0$ inattendu (alors que le WoE est monotone) est souvent le sympt\^ome d'un \textit{effet de masque} entre variables corr\'el\'ees, plut\^ot que d'une mauvaise qualit\'e intrins\`eque de la variable.
+
+\begin{formulebox}[Variance Inflation Factor]
+\begin{equation}
+    \text{VIF}_j = \frac{1}{1 - R_j^2}
+    \label{eq:vif}
+\end{equation}
+o\`u $R_j^2$ est le coefficient de d\'etermination de la r\'egression de $\text{WoE}_j$ sur les autres $\text{WoE}_{k \neq j}$.
+\end{formulebox}
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{VIF} & \textbf{Interpr\'etation} \\
+\midrule
+$1$ & Pas de corr\'elation \\
+$1 - 5$ & Corr\'elation mod\'er\'ee (acceptable) \\
+$> 5$ & Multicolin\'earit\'e forte $\Rightarrow$ \textbf{variable supprim\'ee} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le processus est it\'eratif~: on supprime la variable avec le VIF le plus \'elev\'e ($> 5$), on recalcule les VIF, et on r\'ep\`ete jusqu'\`a ce que tous les VIF soient acceptables. Cela stabilise les signes des $\beta$ sans rejeter arbitrairement des variables pr\'edictives.
+
+\subsubsection{Contrainte $\beta \leq 0$}
+
+Chaque coefficient $\beta_j$ doit \^etre \textbf{n\'egatif ou nul}. La justification est la suivante~:
+
+\begin{itemize}
+    \item Un WoE positif signifie ``tranche s\^ure'' $\Rightarrow$ doit \textbf{diminuer} la PD $\Rightarrow$ $\beta < 0$
+    \item Un WoE n\'egatif signifie ``tranche risqu\'ee'' $\Rightarrow$ $\beta < 0 \times \text{WoE} < 0 = \text{positif}$ $\Rightarrow$ \textbf{augmente} la PD \checkmark
+\end{itemize}
+
+Apr\`es le filtrage VIF, si un $\beta_j > 0$ subsiste (rare une fois la multicolin\'earit\'e trait\'ee), la variable est \textbf{supprim\'ee} et le mod\`ele est r\'e-estim\'e. Le processus est it\'eratif jusqu'\`a ce que tous les $\beta_j \leq 0$.
+
+\begin{warningbox}[Alternative~: optimisation sous contrainte]
+Une approche plus \'el\'egante serait d'estimer directement la LR sous contrainte de signe via \texttt{scipy.optimize.minimize} avec \textit{bounds}. L'\'elimination it\'erative apr\`es filtrage VIF est cependant standard en pratique bancaire (Anderson, 2007) et donne des r\'esultats \'equivalents dans la majorit\'e des cas.
+\end{warningbox}
+
+\subsection{\'Etape 6~: Correction du Prior}
+
+Le mod\`ele est entra\^in\'e avec \texttt{class\_weight="balanced"}, ce qui attribue des poids inversement proportionnels \`a la fr\'equence de chaque classe. Cela revient \`a entra\^iner sur un \'echantillon 50/50, ce qui am\'eliore l'apprentissage des patterns (les d\'efauts repr\'esentent typiquement 5\% du portefeuille).
+
+Cependant, les probabilit\'es pr\'edites sont alors \textbf{biais\'ees vers 50\%}. On corrige l'intercept~:
+
+\begin{formulebox}[Correction du prior (King \& Zeng, 2001)]
+\begin{equation}
+    \beta_{0,\text{corrig\'e}} = \beta_0 + \underbrace{\ln\left(\frac{\pi_{\text{pop}}}{1 - \pi_{\text{pop}}}\right)}_{\text{logit pr\'evalence r\'eelle}} - \underbrace{\ln\left(\frac{\pi_{\text{train}}}{1 - \pi_{\text{train}}}\right)}_{\text{logit pr\'evalence entra\^inement}}
+    \label{eq:prior}
+\end{equation}
+Avec $\pi_{\text{pop}} = 0.05$ (taux de d\'efaut r\'eel) et $\pi_{\text{train}} = 0.5$ (\'echantillonnage balanc\'e).
+\end{formulebox}
+
+\begin{interpretbox}[Pourquoi cette formule fonctionne~?]
+La r\'egression logistique avec sur-\'echantillonnage ne modifie que l'intercept, pas les pentes (propri\'et\'e connue du maximum de vraisemblance conditionnelle). La correction revient \`a ``d\'ecaler'' toutes les PD pr\'edites du bon montant pour retrouver le niveau moyen r\'eel. En terme num\'erique~:
+$$\text{correction} = \ln\left(\frac{0.05}{0.95}\right) - \underbrace{\ln\left(\frac{0.5}{0.5}\right)}_{= \ln(1) = 0} = -2.944 - 0 = -2.944$$
+Toutes les PD sont donc d\'ecal\'ees vers le bas d'environ 3 unit\'es logit.
+
+\textbf{Condition d'annulation}~: le second terme ne s'annule que si $\pi_{\text{train}} = 0.5$ exactement. C'est le cas avec \texttt{class\_weight="balanced"} (les poids \'equilibrent parfaitement les classes). Si une autre strat\'egie de r\'e-\'echantillonnage est utilis\'ee (SMOTE, undersampling \`a un ratio $\neq$ 50/50), il faut mettre \`a jour $\pi_{\text{train}}$ en cons\'equence, et la formule g\'en\'erale s'applique pleinement.
+\end{interpretbox}
+
+\subsection{\'Etape 7~: Conversion en Scorecard}
+
+Pour les op\'erationnels, une PD de 3.2\% est moins intuitive qu'un \textbf{score de 720 points}. On convertit donc la PD en score entier via une transformation log-odds~:
+
+\begin{formulebox}[Scorecard (Siddiqi, 2006)]
+\begin{equation}
+    \text{Score} = \underbrace{\text{Offset}}_{\text{point d'ancrage}} + \underbrace{\text{Factor}}_{\text{\'echelle}} \times \ln\left(\frac{\text{PD}}{1 - \text{PD}}\right)
+    \label{eq:score}
+\end{equation}
+Avec~:
+\begin{align}
+    \text{Factor} &= \frac{-\text{PDO}}{\ln(2)} = \frac{-20}{\ln(2)} \approx -28.85 \label{eq:factor} \\
+    \text{Offset} &= \text{Target\_Score} - \text{Factor} \times \ln(\text{Target\_Odds}) \label{eq:offset}
+\end{align}
+\end{formulebox}
+
+\textbf{Param\`etres de calibration}~:
+\begin{itemize}[noitemsep]
+    \item \textbf{Target\_Score} $= 600$~: score d'un client au odds de r\'ef\'erence
+    \item \textbf{Target\_Odds} $= 50$~: ratio de cotes de r\'ef\'erence (50 bons pour 1 mauvais, soit PD $\approx 2\%$)
+    \item \textbf{PDO} $= 20$~: \textit{Points to Double the Odds} --- chaque $+20$ points de score signifie que les odds sont multipli\'es par 2
+\end{itemize}
+
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+\textbf{PD} & \textbf{Odds (bons:mauvais)} & \textbf{Score} & \textbf{Cat\'egorie} \\
+\midrule
+1\% & 99:1 & 846 & Excellent \\
+2\% & 49:1 & 713 & Bon \\
+5\% & 19:1 & 628 & Moyen \\
+10\% & 9:1 & 576 & Risqu\'e \\
+20\% & 4:1 & 513 & Tr\`es risqu\'e \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Pipeline complet LR\_WoE}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=3.2cm, minimum height=0.9cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    newbox/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=3.2cm, minimum height=0.9cm, fill=accentgreen!8, font=\small, text=darkblue, align=center},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+\node[box] (bin) at (0,0) {D\'ecoupage\\en bins};
+\node[box] (woe) at (4,0) {Calcul WoE\\+ lissage $\varepsilon$};
+\node[box] (pav) at (8,0) {PAV\\(monotonicit\'e)};
+\node[newbox] (minbin) at (12,0) {Granularit\'e\\$\geq 5\%$};
+\node[box] (iv) at (0,-2) {S\'election IV\\$\geq 0.02$};
+\node[newbox] (vif) at (4,-2) {Filtrage VIF\\$\leq 5$};
+\node[box] (lr) at (8,-2) {R\'egression\\logistique};
+\node[box] (beta) at (12,-2) {\'Elimination\\$\beta > 0$};
+\node[box] (prior) at (3,-4) {Correction\\du prior};
+\node[box] (score) at (9,-4) {Scorecard\\(points)};
+
+\draw[arrow] (bin) -- (woe);
+\draw[arrow] (woe) -- (pav);
+\draw[arrow] (pav) -- (minbin);
+\draw[arrow] (minbin) -- ++(0,-0.5) -| (iv);
+\draw[arrow] (iv) -- (vif);
+\draw[arrow] (vif) -- (lr);
+\draw[arrow] (lr) -- (beta);
+\draw[arrow] (beta) -- ++(0,-0.5) -| (prior);
+\draw[arrow] (prior) -- (score);
+\end{tikzpicture}
+\end{center}
+
+\begin{interpretbox}[Nouvelles \'etapes (en vert)]
+Deux \'etapes ont \'et\'e ajout\'ees pour renforcer la robustesse r\'eglementaire~:
+\begin{itemize}[noitemsep]
+    \item \textbf{Granularit\'e $\geq 5\%$}~: fusion post-PAV des micro-bins par proximit\'e WoE (\'evite le sur-apprentissage)
+    \item \textbf{Filtrage VIF $\leq 5$}~: \'elimination it\'erative des variables multicolin\'eaires \textit{avant} la contrainte de signe (stabilise les $\beta$)
+\end{itemize}
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Mod\`ele 2~: TabNet (Deep Learning Tabulaire)}
+\label{sec:tabnet}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Pourquoi du deep learning sur des donn\'ees tabulaires~?}
+
+Le deep learning domine sur les images (CNN), le texte (Transformers) et l'audio (WaveNet). Sur les \textbf{donn\'ees tabulaires}, la question est l\'egitime~: les m\'ethodes ensemblistes (XGBoost, Random Forest) sont souvent aussi bonnes, voire meilleures.
+
+TabNet (Arik \& Pfister, 2019, Google Research) est sp\'ecifiquement con\c{c}u pour les donn\'ees tabulaires. Son avantage unique~: des \textbf{masques d'attention} qui montrent, \textit{pour chaque client individuellement}, quelles variables ont compt\'e dans la d\'ecision.
+
+\subsection{Architecture}
+
+\begin{definitionbox}[Architecture TabNet]
+TabNet proc\`ede en $N_{\text{steps}}$ \'etapes s\'equentielles. \`A chaque \'etape~:
+\begin{enumerate}[noitemsep]
+    \item Un \textbf{masque d'attention} s\'electionne un sous-ensemble de variables
+    \item Les variables s\'electionn\'ees passent dans un r\'eseau dense (\textit{Feature Transformer})
+    \item La sortie est accumul\'ee pour la pr\'ediction finale
+\end{enumerate}
+\end{definitionbox}
+
+\subsubsection{Masques d'attention sparses}
+
+\`A chaque \'etape $s$, TabNet calcule un masque d'attention $\mathbf{M}^{(s)} \in [0, 1]^D$ (o\`u $D$ est le nombre de features)~:
+
+\begin{equation}
+    \mathbf{M}^{(s)} = \text{Sparsemax}\left(\mathbf{P}^{(s-1)} \cdot h_s\left(\mathbf{a}^{(s-1)}\right)\right)
+    \label{eq:attention}
+\end{equation}
+
+o\`u~:
+\begin{itemize}[noitemsep]
+    \item $\mathbf{P}^{(s-1)}$~: prior scales (force l'exploration de nouvelles features)
+    \item $h_s$~: r\'eseau appris (fully connected + BN)
+    \item $\text{Sparsemax}$~: version sparse de softmax (pousse les poids faibles \`a exactement z\'ero)
+\end{itemize}
+
+Le coefficient $\gamma$ (= 1.3 dans notre config) contr\^ole la r\'eutilisation des features~: $\gamma = 1$ interdit la r\'eutilisation, $\gamma > 1$ l'autorise partiellement.
+
+\subsubsection{Feature Transformer}
+
+Chaque \'etape transforme les features s\'electionn\'ees via~:
+
+\begin{equation}
+    \mathbf{h}^{(s)} = \text{ReLU}\left(\text{BN}\left(\text{FC}_{n_d}\left(\mathbf{M}^{(s)} \odot \mathbf{x}\right)\right)\right)
+    \label{eq:ft}
+\end{equation}
+
+Avec $\odot$ le produit \'el\'ement par \'el\'ement (masquage), $n_d = 64$ la dimension de sortie.
+
+\subsubsection{Pr\'ediction finale}
+
+La sortie est la somme des contributions de chaque \'etape~:
+
+\begin{equation}
+    \hat{y} = \sigma\left(\sum_{s=1}^{N_{\text{steps}}} \text{ReLU}\left(\mathbf{h}^{(s)}\right) \cdot \mathbf{W}_{\text{final}}\right)
+    \label{eq:tabnet_pred}
+\end{equation}
+
+\subsection{Hyperparamètres}
+
+\begin{center}
+\begin{tabular}{lcp{7cm}}
+\toprule
+\textbf{Param\`etre} & \textbf{Valeur} & \textbf{R\^ole} \\
+\midrule
+$n_d$ (decision) & 64 & Dimension des couches de d\'ecision \\
+$n_a$ (attention) & 64 & Dimension des couches d'attention \\
+$N_{\text{steps}}$ & 5 & Nombre d'\'etapes d'attention s\'equentielles \\
+$\gamma$ & 1.3 & Coefficient de r\'eutilisation des features \\
+$\lambda_{\text{sparse}}$ & $10^{-3}$ & P\'enalit\'e de sparsit\'e (encourage les masques \`a z\'ero) \\
+Batch size & 8\,192 & Taille des mini-lots \\
+Virtual batch & 512 & Ghost Batch Normalization \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Nombre total de param\`etres~: $\sim$120\,000 (comparable \`a un petit r\'eseau de neurones).
+
+\subsection{Entra\^inement et Early Stopping}
+
+\subsubsection{Qu'est-ce qu'une \'epoque~?}
+
+\begin{definitionbox}[\'Epoque]
+Une \textbf{\'epoque} = une passe compl\`ete sur l'ensemble des donn\'ees d'entra\^inement. Avec 1\,500\,000 lignes et un batch de 8\,192~:
+$$1\;\text{\'epoque} = \left\lceil\frac{1\,500\,000}{8\,192}\right\rceil = 184\;\text{batches (mini-ajustements des poids)}$$
+\end{definitionbox}
+
+\subsubsection{Early stopping}
+
+On r\'eserve 20\% des donn\'ees comme \textbf{validation}. Apr\`es chaque \'epoque, on mesure l'AUC sur ce jeu de validation~:
+
+\begin{itemize}[noitemsep]
+    \item Si l'AUC s'am\'eliore $\Rightarrow$ on sauvegarde les poids (``meilleur mod\`ele'')
+    \item Si l'AUC ne s'am\'eliore plus pendant \textbf{patience = 20} \'epoques cons\'ecutives $\Rightarrow$ \textbf{arr\^et}
+    \item Le mod\`ele final utilise les poids de la \textbf{meilleure \'epoque}, pas de la derni\`ere
+\end{itemize}
+
+\begin{interpretbox}[R\'esultat observ\'e]
+Sur 1.5M lignes~: arr\^et \`a l'\'epoque 40, meilleur score \`a l'\'epoque 20 ($\text{AUC} = 0.814$). Le mod\`ele a donc vu chaque client environ 20 fois avant d'atteindre son optimum.
+\end{interpretbox}
+
+\subsubsection{Co\^ut computationnel}
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Op\'eration} & \textbf{Calculs} & \textbf{Cumul} \\
+\midrule
+1 forward + backward (1 client) & $\sim$720\,000 FLOPs & -- \\
+1 batch (8\,192 clients) & $\sim$5.9 milliards & -- \\
+1 \'epoque (1.5M clients) & $\sim$1 TFLOP & 1 TFLOP \\
+20 \'epoques utiles & -- & \textbf{$\sim$20 TFLOP} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Hardware} & \textbf{Puissance} & \textbf{Temps r\'eel} \\
+\midrule
+CPU (Intel i9) & $\sim$0.5 TFLOPS & $\sim$10--15 min \\
+GPU (RTX 5070 Ti) & $\sim$35 TFLOPS & $\sim$2--3 min \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Feature importance individuelle}
+
+L'avantage unique de TabNet~: les masques d'attention donnent une importance \textbf{par client}~:
+
+$$\text{Importance}_j^{(\text{client}\;i)} = \sum_{s=1}^{N_{\text{steps}}} \eta^{(s)} \cdot M_{j}^{(s)}(i)$$
+
+o\`u $\eta^{(s)}$ est le coefficient de l'\'etape $s$ et $M_{j}^{(s)}(i)$ le masque d'attention de la feature $j$ pour le client $i$ \`a l'\'etape $s$.
+
+\begin{interpretbox}[Utilisation m\'etier]
+Devant un comit\'e de cr\'edit~: ``\textit{Pour le client Durand SA, la d\'ecision repose \`a 45\% sur son ratio d'endettement et \`a 30\% sur son retard de paiement. Les autres variables sont secondaires.}'' --- Ce type d'explication individuelle est impossible avec XGBoost ou la r\'egression logistique.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Mod\`ele 3~: XGBoost (Gradient Boosting)}
+\label{sec:xgboost}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Principe du Gradient Boosting}
+
+XGBoost (\textit{eXtreme Gradient Boosting}, Chen \& Guestrin, 2016) est un ensemble de \textbf{petits arbres de d\'ecision} entra\^in\'es s\'equentiellement. Chaque nouvel arbre corrige les erreurs des arbres pr\'ec\'edents.
+
+\begin{formulebox}[Gradient Boosting]
+\begin{equation}
+    \hat{y}_i = \sum_{t=1}^{T} \eta \cdot f_t(\mathbf{x}_i)
+    \label{eq:xgb}
+\end{equation}
+o\`u~:
+\begin{itemize}[noitemsep]
+    \item $T = 200$~: nombre d'arbres
+    \item $\eta = 0.05$~: learning rate (pas d'apprentissage)
+    \item $f_t$~: arbre de d\'ecision de profondeur max 4 (petit arbre, appel\'e \textit{weak learner})
+\end{itemize}
+\end{formulebox}
+
+\subsection{Construction de chaque arbre}
+
+\`A l'it\'eration $t$, on calcule le \textbf{gradient} de la loss par rapport aux pr\'edictions actuelles (d'o\`u le nom \textit{gradient} boosting)~:
+
+\begin{equation}
+    g_i = \frac{\partial \mathcal{L}(y_i, \hat{y}_i^{(t-1)})}{\partial \hat{y}_i^{(t-1)}}
+    \qquad
+    h_i = \frac{\partial^2 \mathcal{L}(y_i, \hat{y}_i^{(t-1)})}{\partial (\hat{y}_i^{(t-1)})^2}
+    \label{eq:grad}
+\end{equation}
+
+Avec la log-loss (classification binaire)~:
+\begin{equation}
+    \mathcal{L}(y, \hat{y}) = -\left[y \cdot \ln(\hat{y}) + (1-y) \cdot \ln(1-\hat{y})\right]
+\end{equation}
+
+Le nouvel arbre $f_t$ est ajust\'e sur les r\'esidus $(g_i, h_i)$ pour minimiser~:
+\begin{equation}
+    \text{Gain} = \frac{1}{2}\left[\frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda}\right] - \gamma
+    \label{eq:gain}
+\end{equation}
+
+o\`u $G_L, G_R$ sont les sommes des gradients dans les branches gauche/droite, $\lambda$ la r\'egularisation L2, et $\gamma$ le co\^ut de complexit\'e.
+
+\subsection{Hyperparamètres}
+
+\begin{center}
+\begin{tabular}{lcp{6cm}}
+\toprule
+\textbf{Param\`etre} & \textbf{Valeur} & \textbf{R\^ole} \\
+\midrule
+\texttt{n\_estimators} & 200 & Nombre d'arbres \\
+\texttt{max\_depth} & 4 & Profondeur max (contr\^ole la complexit\'e) \\
+\texttt{learning\_rate} & 0.05 & Pas d'apprentissage (petit = r\'egularisant) \\
+\texttt{subsample} & 0.8 & 80\% des donn\'ees par arbre (stochastique) \\
+\texttt{scale\_pos\_weight} & $\frac{N^-}{N^+}$ & Compense le d\'es\'equilibre des classes \\
+\texttt{device} & \texttt{cuda} & Entra\^inement sur GPU \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Calibration isotonique}
+
+Les probabilit\'es brutes de XGBoost ne sont pas toujours bien calibr\'ees (une PD pr\'edite de 5\% ne correspond pas n\'ecessairement \`a 5\% de d\'efauts observ\'es). On applique une \textbf{calibration isotonique}~:
+
+\begin{definitionbox}[Calibration isotonique]
+On ajuste une fonction croissante par morceaux $g$ telle que~:
+$$\text{PD}_{\text{calibr\'ee}} = g(\text{PD}_{\text{brute}})$$
+Cette fonction est estim\'ee par r\'egression isotonique sur le jeu de validation, en minimisant~:
+$$\sum_i \left(y_i - g(\hat{p}_i)\right)^2 \quad \text{sous contrainte} \quad g \text{ croissante}$$
+\end{definitionbox}
+
+\subsection{Feature importance globale}
+
+XGBoost fournit une importance globale par variable, bas\'ee sur le \textbf{gain total} apport\'e par chaque variable dans l'ensemble des splits de tous les arbres~:
+
+$$\text{Importance}_j = \sum_{t=1}^{T}\;\sum_{\text{split sur } j \text{ dans } f_t} \text{Gain}_{\text{split}}$$
+
+\begin{interpretbox}[Diff\'erence avec TabNet]
+L'importance XGBoost est \textbf{globale} (moyenne sur tous les clients). TabNet donne une importance \textbf{individuelle} (diff\'erente pour chaque client). Pour un audit de portefeuille, l'importance globale suffit. Pour expliquer une d\'ecision \`a un client, l'importance individuelle est n\'ecessaire.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Calibration et Validation}
+% ══════════════════════════════════════════════════════════
+
+\subsection{M\'etrique principale~: AUC-ROC}
+
+L'AUC (\textit{Area Under the ROC Curve}) mesure la capacit\'e du mod\`ele \`a \textbf{discriminer} les bons des mauvais clients~:
+
+\begin{definitionbox}[AUC-ROC]
+$$\text{AUC} = P(\hat{p}_{\text{d\'efaut}} > \hat{p}_{\text{non-d\'efaut}})$$
+\begin{itemize}[noitemsep]
+    \item $\text{AUC} = 0.5$~: mod\`ele al\'eatoire (aucun pouvoir discriminant)
+    \item $\text{AUC} = 1.0$~: mod\`ele parfait (s\'eparation totale)
+    \item $\text{AUC} \in [0.7, 0.8]$~: acceptable pour du cr\'edit corporate
+    \item $\text{AUC} > 0.8$~: bon mod\`ele
+\end{itemize}
+\end{definitionbox}
+
+La relation avec le coefficient de Gini~:
+$$\text{Gini} = 2 \times \text{AUC} - 1$$
+
+\subsection{Statistique de Kolmogorov-Smirnov (KS)}
+
+Le KS mesure la \textbf{s\'eparation maximale} entre les distributions cumul\'ees des bons et des mauvais~:
+
+$$\text{KS} = \max_t \left|F_{\text{good}}(t) - F_{\text{bad}}(t)\right|$$
+
+Un KS $> 0.3$ est g\'en\'eralement consid\'er\'e comme satisfaisant.
+
+\subsection{R\'esultats observ\'es}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Mod\`ele} & \textbf{AUC (test)} & \textbf{Gini} & \textbf{Caract\'eristique} \\
+\midrule
+LR\_WoE & $\sim$0.78 & $\sim$0.56 & Transparence totale \\
+TabNet & $\sim$0.81 & $\sim$0.62 & Explicabilit\'e individuelle \\
+XGBoost & $\sim$0.82 & $\sim$0.64 & Performance maximale \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{interpretbox}[Interpr\'etation des r\'esultats]
+\begin{itemize}
+    \item L'\'ecart \textbf{XGBoost vs TabNet est inf\'erieur \`a 1\% d'AUC}. C'est un r\'esultat classique sur donn\'ees tabulaires (Grinsztajn et al., 2022)~: le deep learning n'apporte pas de gain significatif par rapport aux m\'ethodes ensemblistes.
+    \item L'\'ecart \textbf{LR vs XGBoost est de $\sim$4\% d'AUC}. C'est le prix de la transparence. La LR ne peut pas capturer les interactions et non-lin\'earit\'es que XGBoost exploite.
+    \item Le triplet est \textbf{compl\'ementaire}~: la LR montre que les variables sont globalement lin\'eairement s\'eparables. XGBoost gagne 4 points en exploitant les non-lin\'earit\'es. TabNet confirme le r\'esultat de XGBoost avec un m\'ecanisme diff\'erent.
+\end{itemize}
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Comparaison et Justification du Choix}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Tableau comparatif}
+
+\begin{center}
+\begin{tabular}{p{3.5cm}ccc}
+\toprule
+\textbf{Crit\`ere} & \textbf{LR\_WoE} & \textbf{TabNet} & \textbf{XGBoost} \\
+\midrule
+AUC (test) & 0.78 & 0.81 & 0.82 \\
+Interpr\'etabilit\'e globale & \textcolor{accentgreen}{\textbf{+++}} & + & ++ \\
+Explicabilit\'e individuelle & + & \textcolor{accentgreen}{\textbf{+++}} & + \\
+Temps d'entra\^inement (1.5M) & $\sim$10s & $\sim$3 min & $\sim$1 min \\
+Nombre de param\`etres & $\sim$10 & $\sim$120\,000 & $\sim$40\,000 \\
+Risque d'overfitting & Faible & Moyen & Moyen \\
+Stabilit\'e temporelle & \textcolor{accentgreen}{\textbf{+++}} & + & ++ \\
+Scorecard (points) & \textcolor{accentgreen}{\textbf{Oui}} & Non & Non \\
+GPU requis & Non & Oui & Optionnel \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Pourquoi garder les trois~?}
+
+\begin{enumerate}
+    \item \textbf{Model Risk Management (BCE/EBA)}~: le r\'egulateur exige la comparaison de plusieurs familles pour d\'etecter le \textit{model risk}. Si les trois mod\`eles s'accordent, on peut \^etre confiant. S'ils divergent, c'est un signal d'alerte.
+
+    \item \textbf{Chaque mod\`ele a un usage diff\'erent}~:
+    \begin{itemize}[noitemsep]
+        \item \textbf{LR\_WoE}~: scorecard r\'eglementaire, audit, refus de cr\'edit avec justification transparente
+        \item \textbf{XGBoost}~: mod\`ele de production pour le provisionnement IFRS~9 (meilleure performance)
+        \item \textbf{TabNet}~: explicabilit\'e individuelle pour le comit\'e de cr\'edit (``pourquoi ce client~?'')
+    \end{itemize}
+
+    \item \textbf{Benchmark honnête}~: sans TabNet, un r\'eviseur pourrait demander ``pourquoi n'avez-vous pas test\'e le deep learning~?''. Maintenant on peut r\'epondre~: ``on a test\'e, XGBoost fait aussi bien pour 100$\times$ moins cher''.
+\end{enumerate}
+
+\subsection{Le deep learning est-il utile sur des donn\'ees tabulaires~?}
+
+La litt\'erature r\'ecente (Grinsztajn et al., 2022 ; Borisov et al., 2022) montre de mani\`ere r\'ep\'et\'ee que~:
+
+\begin{quote}
+\textit{``Sur des donn\'ees tabulaires, les m\'ethodes ensemblistes \`a base d'arbres (XGBoost, LightGBM, CatBoost) \'egalent ou d\'epassent le deep learning dans la majorit\'e des cas.''}
+\end{quote}
+
+Les raisons principales~:
+\begin{itemize}
+    \item Les donn\'ees tabulaires n'ont \textbf{pas de structure spatiale ou s\'equentielle} (contrairement aux images ou au texte)
+    \item Les arbres sont naturellement adapt\'es aux \textbf{interactions entre variables} et aux \textbf{seuils}
+    \item Le deep learning a besoin de beaucoup plus de donn\'ees pour g\'en\'eraliser
+\end{itemize}
+
+\textbf{Notre r\'esultat confirme cette observation}~: XGBoost (AUC $\approx 0.82$) $\approx$ TabNet (AUC $\approx 0.81$) sur 1.5M lignes de cr\'edit corporate.
+
+
+% ══════════════════════════════════════════════════════════
+\section{Architecture Train / Serve}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Phase d'entra\^inement (offline)}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=3.5cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    data/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentgreen!8, font=\small},
+    file/.style={draw=accentorange, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentorange!8, font=\small},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+
+\node[data] (dgp) at (0,0) {DGP v4.5\\seed=42};
+\node[box] (gen) at (4,0) {G\'en\'eration\\1.5M lignes};
+\node[box] (train) at (8,0) {Entra\^inement\\3 mod\`eles};
+\node[file] (save) at (12,0) {pd\_suite\\.joblib};
+
+\draw[arrow] (dgp) -- (gen);
+\draw[arrow] (gen) -- (train);
+\draw[arrow] (train) -- (save);
+
+\node[below=0.2cm of gen, font=\tiny, text=gray] {$\sim$50s};
+\node[below=0.2cm of train, font=\tiny, text=gray] {$\sim$5 min (GPU)};
+\node[below=0.2cm of save, font=\tiny, text=gray] {$\sim$50 MB};
+
+\end{tikzpicture}
+\end{center}
+
+Commande~:
+\begin{verbatim}
+python -m ifrs9_cockpit.training.train --n-clients 1500000
+python -m ifrs9_cockpit.training.train --models LR_WoE,XGBoost  # partiel
+\end{verbatim}
+
+\subsection{Phase de service (dashboard)}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw=steelblue, rounded corners=4pt, minimum width=3.5cm, minimum height=1cm, fill=steelblue!8, font=\small, text=darkblue, align=center},
+    data/.style={draw=accentgreen!70!black, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentgreen!8, font=\small},
+    file/.style={draw=accentorange, rounded corners=4pt, minimum width=3cm, minimum height=0.8cm, fill=accentorange!8, font=\small},
+    arrow/.style={-Stealth, thick, steelblue!70}
+]
+
+\node[file] (model) at (0,0) {pd\_suite\\.joblib};
+\node[data] (port) at (4,0) {Portfolio\\30K (seed=123)};
+\node[box] (pred) at (8,0) {Pr\'ediction\\PD};
+\node[box] (dash) at (12,0) {Dashboard\\Streamlit};
+
+\draw[arrow] (model) -- (pred);
+\draw[arrow] (port) -- (pred);
+\draw[arrow] (pred) -- (dash);
+
+\node[below=0.2cm of pred, font=\tiny, text=gray] {$\sim$1s};
+\node[below=0.2cm of dash, font=\tiny, text=gray] {temps r\'eel};
+
+\end{tikzpicture}
+\end{center}
+
+Le dashboard d\'etecte automatiquement le fichier \texttt{pd\_suite.joblib}. S'il existe, les mod\`eles pr\'e-entra\^in\'es sont charg\'es ($\sim$1s). Sinon, un entra\^inement rapide sur les 30\,000 lignes du portfolio est effectu\'e ($\sim$3.5s).
+
+
+% ══════════════════════════════════════════════════════════
+\section{Robustesse du Pipeline}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Contrat de donn\'ees}
+
+Le pipeline impose un \textbf{contrat de donn\'ees strict} avant tout entra\^inement~:
+
+\begin{enumerate}
+    \item \textbf{Enums strictes}~: les valeurs cat\'egorielles (\texttt{sector}, \texttt{loan\_type}) sont valid\'ees contre des listes ferm\'ees. Toute valeur inconnue d\'eclenche une erreur.
+    \item \textbf{Clipping des outliers}~: les variables num\'eriques sont born\'ees~:
+    \begin{center}
+    \begin{tabular}{lcc}
+    \toprule
+    \textbf{Variable} & \textbf{Min} & \textbf{Max} \\
+    \midrule
+    \texttt{debt\_ratio} & 0.0 & 1.5 \\
+    \texttt{credit\_score} & 300 & 850 \\
+    \texttt{utilization\_rate} & 0.0 & 1.2 \\
+    \bottomrule
+    \end{tabular}
+    \end{center}
+    \item \textbf{Feature engineering automatique}~: \texttt{loan\_to\_revenue} et \texttt{collateral\_coverage} sont calcul\'es \`a la vol\'ee.
+    \item \textbf{Alertes NaN}~: si plus de 5\% d'une colonne est manquant, un warning est \'emis.
+\end{enumerate}
+
+\subsection{S\'eparation train / test}
+
+\begin{itemize}[noitemsep]
+    \item Split 80\% / 20\%, stratifi\'e sur la variable cible (\texttt{default\_flag})
+    \item La stratification garantit le m\^eme taux de d\'efaut dans les deux ensembles
+    \item Toutes les m\'etriques rapport\'ees sont sur le \textbf{jeu de test} (jamais vu pendant l'entra\^inement)
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Limites et Perspectives}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Limites actuelles}
+
+\begin{enumerate}
+    \item \textbf{Donn\'ees synth\'etiques}~: le DGP, aussi sophistiqu\'e soit-il, ne remplace pas des donn\'ees r\'eelles. En production, il faudrait valider sur un historique de d\'efauts observ\'es.
+
+    \item \textbf{Pas de validation out-of-time (OOT)}~: sur donn\'ees synth\'etiques stationnaires, l'OOT n'a pas de sens. En production, c'est indispensable (entra\^iner sur 2018--2022, tester sur 2023).
+
+    \item \textbf{Monitoring de d\'erive (PSI/CSI)}~: non impl\'ement\'e car inutile sur donn\'ees synth\'etiques. En production, il faut surveiller la stabilit\'e de la population (PSI) et des caract\'eristiques (CSI) pour d\'etecter les d\'erives.
+
+    \item \textbf{Contrainte de signe par \'elimination}~: malgr\'e le filtrage VIF en amont (qui stabilise les signes), l'\'elimination it\'erative des $\beta > 0$ reste un dernier recours. Une optimisation sous contrainte directe (\texttt{scipy.optimize} avec \textit{bounds}) serait plus \'el\'egante.
+\end{enumerate}
+
+\subsection{Extensions possibles}
+
+\begin{enumerate}
+    \item \textbf{PD multi-p\'eriodes}~: mod\'eliser la PD \`a 1 an, 2 ans, \ldots, N ans via des taux de hasard~:
+    $$\text{PD}_{\text{lifetime}} = 1 - \prod_{t=1}^{N} (1 - \text{PD}_t) = 1 - e^{-\sum_{t=1}^N h_t}$$
+    (d\'ej\`a impl\'ement\'e dans le module ECL avec $h = -\ln(1 - \text{PD})$)
+
+    \item \textbf{Mod\`eles de survie}~: Cox proportional hazards ou DeepSurv pour mod\'eliser le \textit{time-to-default}
+
+    \item \textbf{Ensemble des 3 mod\`eles}~: combiner les pr\'edictions par moyenne pond\'er\'ee pourrait gagner $\sim$0.5\% d'AUC suppl\'ementaire
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════
+\section{R\'ef\'erences}
+% ══════════════════════════════════════════════════════════
+
+\begin{enumerate}[label={[\arabic*]}]
+    \item \textbf{Siddiqi, N.} (2006). \textit{Credit Risk Scorecards: Developing and Implementing Intelligent Credit Scoring}. Wiley.
+
+    \item \textbf{Anderson, R.} (2007). \textit{The Credit Scoring Toolkit: Theory and Practice for Retail Credit Risk Management and Decision Automation}. Oxford University Press.
+
+    \item \textbf{Arik, S.~\"O. \& Pfister, T.} (2019). TabNet: Attentive Interpretable Tabular Learning. \textit{arXiv:1908.07442}.
+
+    \item \textbf{Chen, T. \& Guestrin, C.} (2016). XGBoost: A Scalable Tree Boosting System. \textit{KDD 2016}.
+
+    \item \textbf{King, G. \& Zeng, L.} (2001). Logistic Regression in Rare Events Data. \textit{Political Analysis}, 9(2), 137--163.
+
+    \item \textbf{Grinsztajn, L., Oyallon, E. \& Varoquaux, G.} (2022). Why do tree-based models still outperform deep learning on typical tabular data? \textit{NeurIPS 2022}.
+
+    \item \textbf{Borisov, V. et al.} (2022). Deep Neural Networks and Tabular Data: A Survey. \textit{IEEE TNNLS}.
+
+    \item \textbf{IFRS Foundation} (2014). IFRS 9 Financial Instruments. International Accounting Standards Board.
+
+    \item \textbf{EBA} (2017). Guidelines on PD estimation, LGD estimation and the treatment of defaulted exposures. EBA/GL/2017/16.
+\end{enumerate}
+
+
+\end{document}

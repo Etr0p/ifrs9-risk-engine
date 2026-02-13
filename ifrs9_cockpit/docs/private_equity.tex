@@ -1,0 +1,1235 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- Private Equity}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries\color{darkblue} Module Private Equity\\[0.5cm]}
+{\Large\color{steelblue} Valorisation IFRS 13, Stress Test \& Risque Prudentiel\\[1cm]}
+{\large\color{gray} IFRS 9 Risk Cockpit --- Documentation Technique\\[2cm]}
+\vfill
+{\large \today}
+\end{titlepage}
+
+% ══════════════════════════════════════════════════════════
+\section*{R\'{e}sum\'{e} ex\'{e}cutif}
+\addcontentsline{toc}{section}{R\'{e}sum\'{e} ex\'{e}cutif}
+% ══════════════════════════════════════════════════════════
+
+Ce document d\'{e}crit le module Private Equity (PE) du Risk Cockpit IFRS 9.
+Le module valorise un portefeuille de participations en capital-investissement
+r\'{e}parties sur 5 secteurs (Technologie, Industrie, Sant\'{e}, Immobilier, Services)
+selon les m\'{e}thodes IPEV (EV/Revenue, EV/EBITDA, Cap rate/NOI).
+
+Le mod\`{e}le de stress \`{a} 3 canaux (EBITDA, Multiples, Leverage) utilise une
+approche exponentielle en espace logarithmique, garantissant des NAV strictement
+positives. La probabilit\'{e} de distress est calcul\'{e}e en espace logit avec
+ajustements MOIC et macro. Les risk weights CRR3 sont d\'{e}termin\'{e}s par un score
+composite \`{a} 4 dimensions (190\%/250\%/400\%).
+
+Le pipeline produit 15 m\'{e}triques par position (NAV, MOIC, IRR approx., P(distress),
+RWA, etc.) et v\'{e}rifie 11 invariants \`{a} chaque ex\'{e}cution. Le bruit de dispersion
+utilise un mod\`{e}le \`{a} facteur sectoriel avec corr\'{e}lation intra-sectorielle
+($\rho = 0{,}40$). Le co\^{u}t de sortie int\`{e}gre un DLOM (Discount for Lack of
+Marketability) ajust\'{e} par la maturit\'{e} du fonds.
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════
+\section{Portefeuille Private Equity}
+\label{sec:portfolio}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Structure du portefeuille}
+
+Le module PE mod\'{e}lise un portefeuille de participations en capital-investissement
+r\'{e}parties sur 5 secteurs. Chaque position est caract\'{e}ris\'{e}e par les attributs suivants :
+
+\begin{definitionbox}[Attributs d'une position PE]
+\begin{itemize}[nosep]
+    \item \texttt{sector} --- Secteur d'activit\'{e} (Technologie, Industrie, Sant\'{e}, Immobilier, Services)
+    \item \texttt{revenue} --- Chiffre d'affaires en M EUR
+    \item \texttt{ebitda} --- EBITDA en M EUR
+    \item \texttt{entry\_multiple} --- Multiple d'entr\'{e}e (EV/m\'{e}trique)
+    \item \texttt{leverage} --- Ratio d'endettement LBO $\in [0, 0{,}95]$
+    \item \texttt{vintage} --- Ann\'{e}e d'entr\'{e}e dans le portefeuille
+    \item \texttt{holding\_years} --- Dur\'{e}e de d\'{e}tention (ann\'{e}es)
+    \item \texttt{valuation\_method} --- M\'{e}thode IPEV applicable
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Secteurs et configuration}
+
+La r\'{e}partition sectorielle est pilot\'{e}e par la classe \texttt{SectorConfig} dans \texttt{config.py}.
+Chaque secteur poss\`{e}de 10 sensibilit\'{e}s macro\'{e}conomiques (5 variables $\times$ 2 canaux : cr\'{e}dit et PE),
+une m\'{e}thode de valorisation IPEV, un multiple de sortie de base et des fourchettes de g\'{e}n\'{e}ration.
+
+\begin{table}[h]
+\centering
+\caption{Configuration sectorielle PE}
+\label{tab:sectors}
+\begin{tabular}{lcccl}
+\toprule
+\textbf{Secteur} & \textbf{Proportion} & \textbf{Multiple sortie} & \textbf{Fourchette} & \textbf{M\'{e}thode IPEV} \\
+\midrule
+Technologie & 25\% & 6{,}0$\times$ & $[4{,}0 ; 8{,}0]$ & EV/Revenue \\
+Industrie   & 25\% & 6{,}0$\times$ & $[4{,}0 ; 8{,}0]$ & EV/EBITDA \\
+Sant\'{e}      & 15\% & 12{,}0$\times$ & $[10{,}0 ; 15{,}0]$ & EV/EBITDA \\
+Immobilier  & 20\% & 5{,}5$\times$ & $[4{,}0 ; 7{,}0]$ & Cap rate/NOI \\
+Services    & 15\% & 8{,}0$\times$ & $[6{,}0 ; 10{,}0]$ & EV/EBITDA \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{interpretbox}[Logique \'{e}conomique des m\'{e}thodes IPEV]
+La Technologie utilise EV/Revenue car les soci\'{e}t\'{e}s SaaS/Tech ont souvent un EBITDA n\'{e}gatif
+(phase de croissance). L'Immobilier utilise Cap rate/NOI : l'EBITDA est converti en NOI
+via un ratio de charges d'exploitation (\texttt{NOI\_OPEX\_RATIO} = 15\%, cf. section~\ref{sec:noi}).
+Les autres secteurs suivent la m\'{e}thode standard EV/EBITDA.
+\end{interpretbox}
+
+\subsection{Sensibilit\'{e}s macro par secteur (canal PE)}
+
+Chaque secteur d\'{e}finit 5 sensibilit\'{e}s PE aux variables macro\'{e}conomiques.
+Ces sensibilit\'{e}s sont des \textbf{moyennes de cycle} calibr\'{e}es par jugement expert.
+Elles ne d\'{e}pendent pas du vintage ni de la position dans le cycle \'{e}conomique
+(cf. section~\ref{sec:limitations}, limitation L2).
+
+\begin{table}[h]
+\centering
+\caption{Sensibilit\'{e}s PE par secteur (canal PE)}
+\label{tab:sensitivities}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Secteur} & \textbf{Ch\^{o}mage} & \textbf{PIB} & \textbf{Taux} & \textbf{HPI} & \textbf{Inflation} \\
+\midrule
+Technologie & $-1{,}5$ & $1{,}0$ & $2{,}5$ & $0{,}3$ & $0{,}8$ \\
+Industrie   & $1{,}0$  & $2{,}5$ & $1{,}5$ & $0{,}5$ & $1{,}0$ \\
+Sant\'{e}      & $0{,}3$  & $0{,}5$ & $0{,}5$ & $0{,}2$ & $0{,}5$ \\
+Immobilier  & $0{,}8$  & $1{,}0$ & $2{,}0$ & $3{,}0$ & $0{,}5$ \\
+Services    & $1{,}0$  & $1{,}2$ & $1{,}0$ & $0{,}3$ & $2{,}0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{warningbox}[Sensibilit\'{e} n\'{e}gative : Technologie et ch\^{o}mage]
+La sensibilit\'{e} ch\^{o}mage de la Technologie est \textbf{n\'{e}gative} ($-1{,}5$). Cela refl\`{e}te
+le sc\'{e}nario de \textit{rupture technologique} : le ch\^{o}mage augmente (automatisation),
+mais le secteur Tech en b\'{e}n\'{e}ficie. Ce signe s'inverse en mode \textit{crise \'{e}conomique}
+(voir section~\ref{sec:unemployment_crisis}).
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Mod\`{e}le de Valorisation NAV}
+\label{sec:nav}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Formule fondamentale}
+
+La NAV (Net Asset Value) de chaque position est calcul\'{e}e via la formule IPEV \`{a} 3 canaux
+de stress, impl\'{e}ment\'{e}e dans \texttt{pe\_model.py} (\texttt{PEModel.calculate\_nav}).
+
+\begin{formulebox}[NAV fondamentale IPEV]
+\begin{equation}
+\label{eq:nav}
+\mathrm{NAV}_i = \underbrace{\mathrm{Metric}_i^{\mathrm{stress\'{e}}}}_{\text{Canal EBITDA}}
+\;\times\; \underbrace{M_{\mathrm{sortie}}^{\mathrm{compress\'{e}}}}_{\text{Canal Multiples}}
+\;\times\; \underbrace{(1 - L_i^{\mathrm{stress\'{e}}})}_{\text{Canal Leverage}}
+\;\times\; \varepsilon_i
+\end{equation}
+o\`{u} $\varepsilon_i$ est un bruit de dispersion \`{a} facteur sectoriel (cf. section~\ref{sec:noise}).
+\end{formulebox}
+
+Les trois composantes de l'\'{e}quation~\eqref{eq:nav} correspondent aux trois canaux de transmission
+du stress macro\'{e}conomique sur la valeur des participations PE :
+
+\begin{enumerate}
+    \item \textbf{Canal EBITDA (m\'{e}trique)} : stress sur le revenue, l'EBITDA ou le NOI selon la m\'{e}thode IPEV.
+    \item \textbf{Canal Multiples} : compression du multiple de sortie via les taux et le PIB.
+    \item \textbf{Canal Leverage} : hausse du levier effectif en environnement de taux hauts.
+\end{enumerate}
+
+\subsection{M\'{e}trique IPEV et conversion NOI}
+\label{sec:noi}
+
+La m\'{e}trique de valorisation d\'{e}pend du secteur. Pour l'Immobilier (Cap rate/NOI),
+l'EBITDA est converti en NOI (Net Operating Income) en d\'{e}duisant les charges
+d'exploitation non captur\'{e}es par l'EBITDA.
+
+\begin{formulebox}[M\'{e}trique IPEV avec conversion NOI]
+\begin{equation}
+\mathrm{Metric}_i = \begin{cases}
+\texttt{revenue}_i & \text{si EV/Revenue (Technologie)} \\
+\texttt{ebitda}_i \times (1 - \alpha_{\mathrm{OPEX}}) & \text{si Cap rate/NOI (Immobilier)} \\
+\texttt{ebitda}_i & \text{sinon (EV/EBITDA)}
+\end{cases}
+\end{equation}
+avec $\alpha_{\mathrm{OPEX}} = \texttt{NOI\_OPEX\_RATIO} = 0{,}15$ (15\%).
+\end{formulebox}
+
+\begin{interpretbox}[Pourquoi la conversion EBITDA $\rightarrow$ NOI ?]
+Le NOI (Net Operating Income) exclut les charges de gestion, maintenance et assurance
+que l'EBITDA ne d\'{e}duit pas. L'\'{e}cart peut atteindre 10--30\% selon les structures.
+Le ratio $\alpha_{\mathrm{OPEX}} = 15\%$ est calibr\'{e} sur les benchmarks CBRE/JLL (2023)
+pour l'immobilier commercial europ\'{e}en (fourchette 12--18\%).
+Sans cette correction, la NAV Immobilier \'{e}tait syst\'{e}matiquement surestim\'{e}e de $\sim$15\%.
+\end{interpretbox}
+
+\subsection{NAV Stress : mod\`{e}le exponentiel}
+\label{sec:nav_stress}
+
+Le stress de la m\'{e}trique utilise un facteur multiplicatif exponentiel, \textbf{pas} un mod\`{e}le
+lin\'{e}aire. Cette approche est impl\'{e}ment\'{e}e dans \texttt{PEModel.\_stress\_metric}.
+
+\begin{formulebox}[Stress m\'{e}trique (Canal EBITDA)]
+\begin{equation}
+\label{eq:metric_stress}
+\mathrm{Metric}_i^{\mathrm{stress\'{e}}} = \mathrm{Metric}_i \times \exp\!\bigl(-S_{\mathrm{EBITDA}} \times 3{,}0\bigr)
+\end{equation}
+avec le choc composite EBITDA :
+\begin{equation}
+S_{\mathrm{EBITDA}} = \delta_{\mathrm{PIB}} \cdot s_{\mathrm{PIB}}^{\mathrm{PE}}
++ \delta_{\mathrm{ch\hat{o}m}} \cdot s_{\mathrm{ch\hat{o}m}}^{\mathrm{PE}}
++ \delta_{\mathrm{infl}} \cdot s_{\mathrm{infl}}^{\mathrm{PE}}
+\end{equation}
+\end{formulebox}
+
+\begin{interpretbox}[Pourquoi l'exponentielle ?]
+Le facteur $\exp(-S \times 3{,}0)$ est toujours strictement positif par construction.
+Contrairement \`{a} un mod\`{e}le lin\'{e}aire $\max(\textit{floor},\; 1 - \alpha \cdot S)$,
+il n'y a pas de \textit{floor} artificiel et le stress est sym\'{e}trique en espace logarithmique :
+un choc favorable de +10\% et un choc adverse de $-10\%$ ont des effets \'{e}quivalents en magnitude.
+\end{interpretbox}
+
+\subsection{Compression du multiple de sortie}
+
+Le multiple de sortie est compress\'{e} par les taux d'int\'{e}r\^{e}t, le PIB et le HPI,
+impl\'{e}ment\'{e} dans \texttt{PEModel.\_compress\_exit\_multiple} :
+
+\begin{formulebox}[Compression du multiple (Canal Multiples)]
+\begin{equation}
+\label{eq:multiple_compress}
+M_{\mathrm{sortie}}^{\mathrm{compress\'{e}}} = \mathrm{clip}\!\Bigl(
+M_{\mathrm{base}} \times \exp(-C \times 5{,}0),\;
+\tfrac{1}{2}\,m_{\min},\; \tfrac{3}{2}\,m_{\max}
+\Bigr)
+\end{equation}
+avec le choc de compression :
+\begin{equation}
+C = \delta_{\mathrm{taux}} \cdot s_{\mathrm{taux}}^{\mathrm{PE}}
++ \delta_{\mathrm{PIB}} \cdot s_{\mathrm{PIB}}^{\mathrm{PE}}
++ \delta_{\mathrm{HPI}} \cdot s_{\mathrm{HPI}}^{\mathrm{PE}}
+\end{equation}
+o\`{u} $(m_{\min}, m_{\max})$ est la fourchette IPEV du secteur (Table~\ref{tab:sectors}).
+\end{formulebox}
+
+L'\'{e}chelle de 5{,}0 pour les multiples est plus \'{e}lev\'{e}e que les 3{,}0 du canal EBITDA,
+refl\'{e}tant la plus grande sensibilit\'{e} des multiples de valorisation aux conditions de march\'{e}
+(WACC, spread de cr\'{e}dit, sentiment).
+
+\subsection{Stress du leverage}
+
+Le leverage effectif augmente lorsque les taux d'int\'{e}r\^{e}t montent (charges de dette plus \'{e}lev\'{e}es),
+mod\'{e}lis\'{e} dans \texttt{PEModel.\_stress\_leverage} :
+
+\begin{formulebox}[Stress leverage (Canal Leverage)]
+\begin{equation}
+\label{eq:leverage_stress}
+L_i^{\mathrm{stress\'{e}}} = \mathrm{clip}\!\bigl(
+L_i + \delta_{\mathrm{taux}} \cdot s_{\mathrm{taux}}^{\mathrm{PE}} \times 2{,}0,\;
+0,\; 0{,}95
+\bigr)
+\end{equation}
+\end{formulebox}
+
+Le facteur $2{,}0$ amplifie la sensibilit\'{e} aux taux pour le canal leverage,
+car la hausse des taux a un double effet : elle augmente les charges d'int\'{e}r\^{e}t
+et comprime la capacit\'{e} de refinancement.
+
+\subsection{Deltas macro\'{e}conomiques}
+
+Tous les canaux de stress utilisent des deltas normalis\'{e}s par rapport au sc\'{e}nario de base
+(\texttt{SCENARIO\_BASE}). La convention de signe est : \textbf{delta positif = choc adverse}.
+
+\begin{formulebox}[Deltas macro normalis\'{e}s]
+\begin{align}
+\delta_{\mathrm{ch\hat{o}m}} &= \frac{\text{Ch\^{o}mage} - \text{Ch\^{o}mage}_{\text{base}}}{100} \label{eq:delta_unemp}\\[4pt]
+\delta_{\mathrm{PIB}} &= \frac{\text{PIB}_{\text{base}} - \text{PIB}}{100} &\text{(inverse : baisse PIB = adverse)} \label{eq:delta_gdp}\\[4pt]
+\delta_{\mathrm{taux}} &= \frac{\text{Taux} - \text{Taux}_{\text{base}}}{100} \label{eq:delta_ir}\\[4pt]
+\delta_{\mathrm{HPI}} &= \frac{\text{HPI}_{\text{base}} - \text{HPI}}{100} &\text{(inverse : baisse HPI = adverse)} \label{eq:delta_hpi}\\[4pt]
+\delta_{\mathrm{infl}} &= \frac{\text{Inflation} - \text{Inflation}_{\text{base}}}{100} \label{eq:delta_infl}
+\end{align}
+\end{formulebox}
+
+Avec les valeurs de base : PIB = 1{,}2\%, Ch\^{o}mage = 7{,}5\%, Taux = 3{,}5\%, HPI = 2{,}0\%, Inflation = 2{,}5\%.
+
+\subsection{Bruit de dispersion : mod\`{e}le \`{a} facteur sectoriel}
+\label{sec:noise}
+
+Le bruit de dispersion $\varepsilon_i$ utilise un \textbf{mod\`{e}le \`{a} facteur sectoriel}
+pour capturer la corr\'{e}lation entre positions du m\^{e}me secteur (m\^{e}me vintage,
+m\^{e}me GP, conditions de march\'{e} similaires).
+
+\begin{formulebox}[Bruit de dispersion \`{a} facteur sectoriel]
+\begin{equation}
+\label{eq:noise_factor}
+\varepsilon_i = 1 + \sigma \bigl(\sqrt{\rho}\; Z_{\mathrm{sect}(i)} + \sqrt{1 - \rho}\; Z_i\bigr)
+\end{equation}
+avec :
+\begin{itemize}[nosep]
+    \item $\sigma = 0{,}03$ : \'{e}cart-type de dispersion ($\pm 3\%$)
+    \item $\rho = \texttt{PE\_NOISE\_INTRA\_SECTOR\_CORR} = 0{,}40$ : corr\'{e}lation intra-sectorielle
+    \item $Z_{\mathrm{sect}(i)} \sim \mathcal{N}(0, 1)$ : facteur commun au secteur (1 par secteur)
+    \item $Z_i \sim \mathcal{N}(0, 1)$ : facteur idiosyncratique (1 par position)
+\end{itemize}
+\end{formulebox}
+
+\begin{interpretbox}[Propri\'{e}t\'{e}s du mod\`{e}le \`{a} facteur]
+\begin{itemize}[nosep]
+    \item \textbf{Variance marginale} : $\mathrm{Var}(\varepsilon_i - 1) = \sigma^2 (\rho + 1 - \rho) = \sigma^2$. Chaque position conserve la m\^{e}me dispersion $\pm 3\%$.
+    \item \textbf{Corr\'{e}lation intra-sectorielle} : $\mathrm{Corr}(\varepsilon_i, \varepsilon_j) = \rho = 0{,}40$ si $i$ et $j$ sont dans le m\^{e}me secteur, 0 sinon.
+    \item \textbf{Source} : Preqin (2023) estime la corr\'{e}lation intra-fonds vintage \`{a} 0{,}3--0{,}5.
+\end{itemize}
+\end{interpretbox}
+
+\begin{warningbox}[Gestion du seed pour le d\'{e}terminisme cross-sc\'{e}nario]
+Le g\'{e}n\'{e}rateur de bruit utilise un seed d\'{e}di\'{e} \texttt{seed + 7}, r\'{e}initialis\'{e} \`{a} chaque appel
+de \texttt{calculate\_nav}. Les facteurs sectoriels sont g\'{e}n\'{e}r\'{e}s \textit{avant} les facteurs
+idiosyncratiques pour garantir le m\^{e}me ordre de tirage.
+Cela garantit que le \textbf{m\^{e}me bruit} est appliqu\'{e}
+\`{a} une position donn\'{e}e quel que soit le sc\'{e}nario de stress.
+Sans cette pr\'{e}caution, le $\Delta$NAV contiendrait du bruit pur (diff\'{e}rence de deux
+r\'{e}alisations al\'{e}atoires ind\'{e}pendantes), rendant les sensibilit\'{e}s inexploitables.
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Capital Investi et M\'{e}triques de Performance}
+\label{sec:metrics}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Capital investi (equity LBO)}
+
+Le capital investi repr\'{e}sente la part equity dans une structure de type LBO,
+calcul\'{e} par \texttt{PECalculator.\_compute\_capital\_invested} :
+
+\begin{formulebox}[Capital investi \`{a} l'entr\'{e}e]
+\begin{equation}
+\label{eq:capital}
+K_i = \mathrm{Metric}_i \times M_{\mathrm{entr\'{e}e},i} \times (1 - L_i)
+\end{equation}
+avec $K_i \geq 0$ (plancher \`{a} z\'{e}ro). La m\'{e}trique inclut la conversion NOI pour l'Immobilier.
+\end{formulebox}
+
+\subsection{MOIC et IRR approx.}
+
+Le MOIC mesure la performance en multiples du capital investi.
+L'IRR est une \textbf{approximation simplifi\'{e}e} (cf. section~\ref{sec:limitations}, L1) :
+
+\begin{formulebox}[MOIC et m\'{e}triques de performance]
+\begin{align}
+\mathrm{MOIC}_i &= \frac{\mathrm{NAV}_i}{K_i} \quad \text{si } K_i > 0,\quad 0 \text{ sinon} \label{eq:moic}\\[6pt]
+\mathrm{IRR}_{\mathrm{approx},i} &= \mathrm{MOIC}_i^{1/T_i} - 1 \quad \text{si MOIC} > 0 \text{ et } T_i > 0 \label{eq:irr}\\[6pt]
+\mathrm{DPI}_i &= 0 \quad \text{(pas de distributions interm\'{e}diaires)} \label{eq:dpi}\\[6pt]
+\mathrm{RVPI}_i &= \mathrm{MOIC}_i \label{eq:rvpi}\\[6pt]
+\mathrm{TVPI}_i &= \mathrm{DPI}_i + \mathrm{RVPI}_i = \mathrm{MOIC}_i \label{eq:tvpi}
+\end{align}
+o\`{u} $T_i$ est la dur\'{e}e de d\'{e}tention (\texttt{holding\_years}).
+\end{formulebox}
+
+\begin{warningbox}[IRR simplifi\'{e}e --- ne pas comparer aux IRR GP]
+Le mod\`{e}le ne g\`{e}re pas de cash flows interm\'{e}diaires (distributions partielles,
+appels de fonds successifs, J-curve). En cons\'{e}quence :
+\begin{itemize}[nosep]
+    \item $\mathrm{DPI} = 0$ et $\mathrm{TVPI} = \mathrm{RVPI} = \mathrm{MOIC}$
+    \item L'IRR est calcul\'{e}e sous l'hypoth\`{e}se d'un investissement unique en $t=0$
+          et d'une valeur terminale en $t=T$ (pas de XIRR)
+    \item L'IRR est \textbf{surestim\'{e}e} pour les vintages r\'{e}cents (illusion RVPI)
+          et ne capture pas la J-curve des fonds en p\'{e}riode de d\'{e}ploiement
+    \item Les IRR publi\'{e}es par les GPs utilisent les cash flows r\'{e}els (XIRR) ---
+          la comparaison directe avec l'\texttt{irr} de ce module est \textbf{d\'{e}conseill\'{e}e}
+\end{itemize}
+\end{warningbox}
+
+\subsection{NAV Drawdown}
+\label{sec:drawdown}
+
+Le drawdown mesure la perte de valeur par rapport au sc\'{e}nario de r\'{e}f\'{e}rence (sans stress).
+La formule est \textbf{directionnelle} : seules les pertes comptent.
+
+\begin{formulebox}[NAV Drawdown (KPI directionnel)]
+\begin{align}
+\Delta\mathrm{NAV}_i &= \mathrm{NAV}_i^{\mathrm{stress}} - \mathrm{NAV}_i^{\mathrm{ref}} \label{eq:delta_nav}\\[6pt]
+\mathrm{Drawdown}_i &= \max\!\left(0,\; \frac{\mathrm{NAV}_i^{\mathrm{ref}} - \mathrm{NAV}_i^{\mathrm{stress}}}{\mathrm{NAV}_i^{\mathrm{ref}}}\right) \label{eq:drawdown}
+\end{align}
+\end{formulebox}
+
+\begin{warningbox}[Erreur historique corrig\'{e}e : $|\delta|$ vs $\max(0, -\delta)$]
+L'impl\'{e}mentation initiale utilisait $\mathrm{Drawdown} = |\Delta\mathrm{NAV}| / \mathrm{NAV}_{\mathrm{ref}}$,
+ce qui comptait les gains comme des pertes. La correction utilise $\max(0, -\Delta/\mathrm{NAV}_{\mathrm{ref}})$
+pour ne capturer que les baisses de valeur. Un sc\'{e}nario favorable produit un drawdown de z\'{e}ro.
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Probabilit\'{e} de Distress}
+\label{sec:distress}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Mod\`{e}le logit-space}
+
+La probabilit\'{e} de distress est calcul\'{e}e enti\`{e}rement en espace logit, ce qui garantit
+un r\'{e}sultat dans $]0, 1[$ sans clip artificiel. L'impl\'{e}mentation se trouve dans
+\texttt{PECalculator.\_calculate\_distress\_prob}.
+
+\begin{formulebox}[P(distress) en espace logit]
+\begin{equation}
+\label{eq:distress_logit}
+\mathrm{logit}\bigl(P_{\mathrm{distress},i}\bigr)
+= \underbrace{\mathrm{logit}(0{,}05)}_{\text{base}}
++ \underbrace{A_{\mathrm{MOIC},i}}_{\text{ajust. MOIC}}
++ \underbrace{A_{\mathrm{macro},i}}_{\text{ajust. macro}}
+\end{equation}
+puis :
+\begin{equation}
+P_{\mathrm{distress},i} = \mathrm{expit}\bigl(\mathrm{logit}(P_{\mathrm{distress},i})\bigr)
+= \frac{1}{1 + e^{-\mathrm{logit}(P_{\mathrm{distress},i})}}
+\end{equation}
+\end{formulebox}
+
+\subsection{Terme de base et calibration}
+
+La probabilit\'{e} de base est fix\'{e}e \`{a} 5\% :
+\begin{equation}
+\mathrm{logit}(0{,}05) = \ln\!\left(\frac{0{,}05}{0{,}95}\right) \approx -2{,}944
+\end{equation}
+
+\begin{definitionbox}[Calibration : P(distress) base = 5\%]
+Ce taux correspond au taux de d\'{e}faut implicite moyen des participations PE en conditions normales.
+Sources de calibration :
+\begin{itemize}[nosep]
+    \item Preqin (2022) : $\sim$8\% des fonds PE en situation de distress (quartile sup\'{e}rieur des vintages)
+    \item Cambridge Associates (2023) : taux de perte totale PE buyout $\sim$3--5\% sur 20 ans
+    \item Le choix de 5\% est un compromis conservateur entre ces deux benchmarks
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Ajustement MOIC (p\'{e}nalit\'{e} logarithmique)}
+
+Le MOIC contribue \`{a} la distress via une p\'{e}nalit\'{e} logarithmique pour les positions
+sous-performantes :
+
+\begin{formulebox}[Ajustement MOIC]
+\begin{equation}
+\label{eq:moic_adj}
+A_{\mathrm{MOIC},i} = \begin{cases}
+-2 \times \ln\!\bigl(\max(\mathrm{MOIC}_i,\; 0{,}01)\bigr) & \text{si } \mathrm{MOIC}_i < 1 \\
+0 & \text{si } \mathrm{MOIC}_i \geq 1
+\end{cases}
+\end{equation}
+\end{formulebox}
+
+\begin{interpretbox}[Sensibilit\'{e} de l'ajustement MOIC]
+\begin{itemize}[nosep]
+    \item $\mathrm{MOIC} = 0{,}5 \;\Rightarrow\; A_{\mathrm{MOIC}} = -2 \ln(0{,}5) \approx +1{,}4$ logit (hausse mod\'{e}r\'{e}e du risque)
+    \item $\mathrm{MOIC} = 0{,}1 \;\Rightarrow\; A_{\mathrm{MOIC}} = -2 \ln(0{,}1) \approx +4{,}6$ logit (forte hausse du risque)
+    \item $\mathrm{MOIC} \geq 1{,}0 \;\Rightarrow\; A_{\mathrm{MOIC}} = 0$ (pas de p\'{e}nalit\'{e})
+\end{itemize}
+La forme logarithmique est plus douce qu'un seuil binaire et plus r\'{e}aliste
+\'{e}conomiquement : un MOIC de 0{,}9 est l\'{e}g\`{e}rement risqu\'{e}, un MOIC de 0{,}1 est critique.
+\end{interpretbox}
+
+\subsection{Ajustement macro\'{e}conomique}
+
+L'ajustement macro combine les deltas normalis\'{e}s (\'{e}quations~\eqref{eq:delta_unemp}--\eqref{eq:delta_infl})
+avec les sensibilit\'{e}s PE de chaque secteur, \`{a} l'\'{e}chelle \texttt{PE\_DISTRESS\_LOGIT\_SCALE} = 3{,}0.
+
+\begin{formulebox}[Ajustement macro P(distress)]
+\begin{equation}
+\label{eq:macro_adj}
+A_{\mathrm{macro},i} = \Biggl(
+\sum_{v \in \mathcal{V}} \delta_v \cdot s_{v,\mathrm{sect}(i)}^{\mathrm{PE}}
+\Biggr) \times \underbrace{3{,}0}_{\texttt{PE\_DISTRESS\_LOGIT\_SCALE}}
+\end{equation}
+o\`{u} $\mathcal{V} = \{\text{ch\^{o}mage, PIB, taux, HPI, inflation}\}$ et $s_{v,k}^{\mathrm{PE}}$ est la
+sensibilit\'{e} PE de la variable $v$ pour le secteur $k$.
+\end{formulebox}
+
+\begin{interpretbox}[Calibration de l'\'{e}chelle 3{,}0]
+L'\'{e}chelle \texttt{PE\_DISTRESS\_LOGIT\_SCALE} = 3{,}0 est plus faible que l'amplitude
+cr\'{e}dit (\texttt{LOGIT\_AMPLITUDE} $\approx 4{,}94$, calibr\'{e}e dynamiquement sur PD 6\%$\rightarrow$18\%
+via points d'ancrage EBA) car les participations PE sont en equity
+(tranche junior) et les sensibilit\'{e}s PE dans \texttt{SectorConfig} sont d\'{e}j\`{a}
+plus \'{e}lev\'{e}es que celles du canal cr\'{e}dit. Une \'{e}chelle trop forte causerait
+une saturation \`{a} $P_{\mathrm{distress}} \approx 1$ d\`{e}s un stress mod\'{e}r\'{e}.
+\end{interpretbox}
+
+\begin{warningbox}[Division par 100]
+Les deltas macro sont divis\'{e}s par 100 (cf. \'{e}quations~\eqref{eq:delta_unemp}--\eqref{eq:delta_infl})
+avant d'\^{e}tre multipli\'{e}s par les sensibilit\'{e}s. Cette normalisation est essentielle
+pour \'{e}viter des ajustements logit disproportionn\'{e}s. Un \'{e}cart de ch\^{o}mage de
+$+3$ points de pourcentage donne $\delta_{\mathrm{ch\hat{o}m}} = 0{,}03$, et non $3{,}0$.
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Cat\'{e}gories de Risque PE}
+\label{sec:categories}
+% ══════════════════════════════════════════════════════════
+
+Les positions PE sont class\'{e}es en 3 cat\'{e}gories selon les seuils d\'{e}finis
+dans \texttt{PEClassificationConfig}, impl\'{e}ment\'{e}s dans \texttt{PECalculator.\_classify\_pe}.
+
+\begin{formulebox}[Classification PE (FR17)]
+\begin{equation}
+\label{eq:classification}
+\text{Cat\'{e}gorie}_i = \begin{cases}
+\textcolor{accentgreen}{\textbf{Performing}} & \text{si } P_{\mathrm{distress},i} < 0{,}10 \\
+\textcolor{accentorange}{\textbf{Watchlist}} & \text{si } 0{,}10 \leq P_{\mathrm{distress},i} < 0{,}30 \\
+\textcolor{accentred}{\textbf{Distressed}} & \text{si } P_{\mathrm{distress},i} \geq 0{,}30
+\end{cases}
+\end{equation}
+\end{formulebox}
+
+\begin{definitionbox}[Param\`{e}tres de classification et calibration]
+\begin{itemize}[nosep]
+    \item \texttt{distress\_threshold\_performing} $= 0{,}10$ --- Seuil Performing/Watchlist.
+          Preqin (2022) : $\sim$8\% des fonds PE en distress (Q3 vintages).
+    \item \texttt{distress\_threshold\_watchlist} $= 0{,}30$ --- Seuil Watchlist/Distressed.
+          Conservateur vs. benchmark $\sim$25\% (Preqin).
+    \item \texttt{secondary\_discount} $= 0{,}10$ --- D\'{e}cote march\'{e} secondaire de base.
+          Jefferies/Lazard (2023) : m\'{e}diane 8--12\% buyouts mid-market.
+    \item \texttt{lgd\_equity} $= 0{,}60$ --- LGD en cas de distress.
+          Moody's Recovery \& LGD study (2023) : recovery equity $\sim$40\%.
+    \item \texttt{dlom\_vintage\_factor} $= 0{,}50$ --- Facteur DLOM vintage.
+    \item \texttt{dlom\_vintage\_threshold} $= 5{,}0$ --- Seuil maturit\'{e} DLOM (ann\'{e}es).
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Expected Loss PE}
+
+La perte attendue PE est calcul\'{e}e pour chaque position :
+
+\begin{formulebox}[Expected Loss PE (FR16)]
+\begin{equation}
+\mathrm{EL}_{\mathrm{PE},i} = P_{\mathrm{distress},i} \times \mathrm{LGD}_{\mathrm{equity}} \times \mathrm{NAV}_i \label{eq:el_pe}
+\end{equation}
+avec $\mathrm{LGD}_{\mathrm{equity}} = 0{,}60$.
+\end{formulebox}
+
+\subsection{Co\^{u}t de sortie avec DLOM ajust\'{e} par vintage}
+\label{sec:dlom}
+
+Le co\^{u}t de sortie sur le march\'{e} secondaire int\`{e}gre un DLOM (Discount for Lack of
+Marketability) ajust\'{e} par la maturit\'{e} du fonds. Les fonds jeunes (\texttt{holding\_years}
+faible) sont moins liquides et subissent une d\'{e}cote plus \'{e}lev\'{e}e.
+
+\begin{formulebox}[Exit Cost avec DLOM vintage (FR18)]
+\begin{align}
+\mathrm{DLOM}_i^{\mathrm{eff}} &= d_{\mathrm{base}} \times \left(1 + f_{\mathrm{DLOM}} \times \frac{\max(0,\; T_{\mathrm{seuil}} - T_i)}{T_{\mathrm{seuil}}}\right) \label{eq:dlom}\\[6pt]
+\mathrm{Exit\;Cost}_i &= \mathrm{NAV}_i \times (1 - \mathrm{DLOM}_i^{\mathrm{eff}}) \label{eq:exit_cost}
+\end{align}
+avec $d_{\mathrm{base}} = 0{,}10$, $f_{\mathrm{DLOM}} = 0{,}50$, $T_{\mathrm{seuil}} = 5$ ans.
+\end{formulebox}
+
+\begin{interpretbox}[Exemples DLOM par maturit\'{e}]
+\begin{itemize}[nosep]
+    \item Fonds mature ($T = 5$ ans) : $\mathrm{DLOM} = 10\%$ (d\'{e}cote de base)
+    \item Fonds mid-life ($T = 2{,}5$ ans) : $\mathrm{DLOM} = 10\% \times (1 + 0{,}5 \times 0{,}5) = 12{,}5\%$
+    \item Fonds r\'{e}cent ($T = 0$ an) : $\mathrm{DLOM} = 10\% \times (1 + 0{,}5) = 15\%$
+\end{itemize}
+Source : AICPA Practice Aid (2013), Pratt \& Grabowski (2014). La litt\'{e}rature
+DLOM sugg\`{e}re 15--30\% pour le PE illiquide ; la fourchette 10--15\% est conservatrice.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Risk Weights CRR3 pour le Private Equity}
+\label{sec:crr3}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Score composite CRR3}
+
+Le risk weight PE n'est \textbf{pas} un 400\% fixe. La CRR3 (Art. 133, janvier 2025)
+pr\'{e}voit une grille gradu\'{e}e. L'impl\'{e}mentation dans \texttt{compute\_crr3\_rw}
+(fichier \texttt{comparator.py}, import\'{e} par \texttt{pe\_calculator.py}) calcule un score
+composite \`{a} 4 dimensions pour chaque position individuellement.
+
+\begin{formulebox}[Score composite CRR3 (Art. 133)]
+\begin{equation}
+\label{eq:crr3_score}
+\mathrm{Score}_i = 0{,}30 \times F_i + 0{,}25 \times Q_i + 0{,}25 \times L_i + 0{,}20 \times E_i
+\end{equation}
+o\`{u} les 4 composantes sont :
+\begin{align}
+F_i &= \begin{cases} \mathrm{clip}(1 - \mathrm{MOIC}_i,\; 0,\; 1) & \text{si } \mathrm{MOIC}_i < 1{,}5 \\ 0 & \text{sinon} \end{cases}
+&& \text{(performance financi\`{e}re)} \label{eq:financial_perf}\\[4pt]
+Q_i &= P_{\mathrm{distress},i}
+&& \text{(qualit\'{e} du portefeuille)} \label{eq:portfolio_quality}\\[4pt]
+L_i &= \mathrm{clip}\!\left(\frac{\text{leverage}_i}{0{,}95},\; 0,\; 1\right)
+&& \text{(risque de levier)} \label{eq:leverage_risk}\\[4pt]
+E_i &= \mathrm{clip}\!\left(\frac{L_i + F_i}{2},\; 0,\; 1\right)
+&& \text{(environnement macro)} \label{eq:macro_env}
+\end{align}
+\end{formulebox}
+
+\begin{warningbox}[\'{E}vitement du double-comptage]
+La composante \textit{environnement macro} ($E_i$) combine le leverage et la performance
+financi\`{e}re, et \textbf{non} la probabilit\'{e} de distress ($Q_i$). Cela \'{e}vite un
+double-comptage de $P_{\mathrm{distress}}$ qui appara\^{i}t d\'{e}j\`{a} dans $Q_i$.
+Une version ant\'{e}rieure utilisait $E_i = Q_i$ (copie de \textit{portfolio\_quality}),
+ce qui donnait un poids effectif de 45\% \`{a} $P_{\mathrm{distress}}$.
+\end{warningbox}
+
+\subsection{Grille de Risk Weights}
+
+Le score composite est mapp\'{e} vers les trois niveaux CRR3 :
+
+\begin{formulebox}[Classification CRR3 $\rightarrow$ Risk Weight]
+\begin{equation}
+\label{eq:rw_mapping}
+\mathrm{RW}_i = \begin{cases}
+190\% & \text{si } \mathrm{Score}_i < 0{,}25 \quad \text{(IRB diversifi\'{e})} \\
+250\% & \text{si } 0{,}25 \leq \mathrm{Score}_i < 0{,}50 \quad \text{(equity g\'{e}n\'{e}ral)} \\
+400\% & \text{si } \mathrm{Score}_i \geq 0{,}50 \quad \text{(sp\'{e}culatif)}
+\end{cases}
+\end{equation}
+\end{formulebox}
+
+\begin{interpretbox}[Lecture \'{e}conomique des seuils CRR3]
+\begin{itemize}[nosep]
+    \item \textbf{190\% (IRB diversifi\'{e})} : Position performante (MOIC $> 1$), faible distress,
+          leverage mod\'{e}r\'{e}. Typique d'un fonds mature bien diversifi\'{e}.
+    \item \textbf{250\% (equity g\'{e}n\'{e}ral)} : Performance moyenne ou stress mod\'{e}r\'{e}.
+          C'est le RW par d\'{e}faut (\texttt{rw\_pe\_default = 250}).
+    \item \textbf{400\% (sp\'{e}culatif)} : MOIC faible, leverage \'{e}lev\'{e}, distress probable.
+          Typique d'un investissement en difficult\'{e} n\'{e}cessitant un provisionnement lourd.
+\end{itemize}
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{RWA Private Equity}
+\label{sec:rwa}
+% ══════════════════════════════════════════════════════════
+
+Les actifs pond\'{e}r\'{e}s par les risques (RWA) pour le portefeuille PE sont calcul\'{e}s
+position par position, en utilisant le risk weight CRR3 composite :
+
+\begin{formulebox}[RWA PE par position]
+\begin{equation}
+\label{eq:rwa_pe}
+\mathrm{RWA}_{\mathrm{PE},i} = \mathrm{NAV}_i \times \frac{\mathrm{RW}_i}{100}
+\end{equation}
+et au niveau du portefeuille :
+\begin{equation}
+\mathrm{RWA}_{\mathrm{PE}} = \sum_{i=1}^{N} \mathrm{RWA}_{\mathrm{PE},i}
+\end{equation}
+\end{formulebox}
+
+\begin{definitionbox}[Capital prudentiel PE]
+Le capital r\'{e}glementaire absorb\'{e} par le portefeuille PE est :
+\begin{equation}
+\mathrm{Capital}_{\mathrm{PE}} = \mathrm{RWA}_{\mathrm{PE}} \times \mathrm{CET1}_{\mathrm{cible}}
+\end{equation}
+avec $\mathrm{CET1}_{\mathrm{cible}} = 13\%$ (param\`{e}tre \texttt{BaselConfig.cet1\_target}).
+\end{definitionbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{RAROC Private Equity}
+\label{sec:raroc}
+% ══════════════════════════════════════════════════════════
+
+Le RAROC (Risk-Adjusted Return on Capital) PE mesure la rentabilit\'{e} ajust\'{e}e
+du portefeuille PE, calcul\'{e} dans \texttt{comparator.py}. La formule compl\`{e}te
+int\`{e}gre les frais de gestion (management fees), le carry, les pertes attendues,
+le coefficient d'exploitation (CIR) et la fiscalit\'{e}.
+
+\begin{formulebox}[RAROC PE complet (H5)]
+\begin{equation}
+\label{eq:raroc_pe}
+\mathrm{RAROC}_{\mathrm{PE}} = \frac{(\mathrm{Revenus} - \mathrm{EL}_{\mathrm{PE}}) \times (1 - \mathrm{CIR}) \times (1 - \tau)}{\mathrm{Capital}_{\mathrm{PE}}}
+\end{equation}
+avec :
+\begin{align}
+\mathrm{Revenus} &= \text{Management fees} + \text{Carried interest} \\
+\mathrm{EL}_{\mathrm{PE}} &= \sum_{i=1}^{N} P_{\mathrm{distress},i} \times \mathrm{LGD}_{\mathrm{equity}} \times \mathrm{NAV}_i \\
+\mathrm{Capital}_{\mathrm{PE}} &= \mathrm{RWA}_{\mathrm{PE}} \times \mathrm{CET1}_{\mathrm{cible}}
+\end{align}
+\end{formulebox}
+
+Les param\`{e}tres issus de \texttt{BaselConfig} :
+\begin{itemize}[nosep]
+    \item $\mathrm{CIR} = 0{,}45$ --- Cost/Income Ratio
+    \item $\tau = 0{,}25$ --- Taux d'imposition effectif
+    \item $\mathrm{CET1}_{\mathrm{cible}} = 13\%$
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Mode Crise Ch\^{o}mage (Unemployment Crisis)}
+\label{sec:unemployment_crisis}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Probl\'{e}matique : le ch\^{o}mage bipolaire}
+
+Le ch\^{o}mage est la seule variable macro dont l'interpr\'{e}tation d\'{e}pend de sa \textbf{nature} :
+
+\begin{itemize}
+    \item \textbf{Rupture technologique} (signe $+$ sur le slider) : le ch\^{o}mage augmente par
+          automatisation. Le secteur Tech en b\'{e}n\'{e}ficie (sensibilit\'{e} $-1{,}5$),
+          les autres souffrent.
+    \item \textbf{Crise \'{e}conomique} (signe $-$ sur le slider) : le ch\^{o}mage augmente par
+          r\'{e}cession. \textbf{Tous} les secteurs souffrent, y compris la Tech.
+\end{itemize}
+
+\subsection{Convention bipolaire}
+
+Dans les deux cas, le taux de ch\^{o}mage effectif est :
+\begin{equation}
+\text{Ch\^{o}mage}_{\text{effectif}} = \text{Ch\^{o}mage}_{\text{base}} + |\text{slider}|
+\end{equation}
+
+Le signe du slider d\'{e}termine uniquement la nature de la crise et donc le
+traitement des sensibilit\'{e}s n\'{e}gatives.
+
+\subsection{Impl\'{e}mentation : \texttt{abs(sensitivity)} en mode crise}
+
+Lorsque \texttt{unemployment\_crisis = True} (crise \'{e}conomique), le code utilise
+la valeur absolue de la sensibilit\'{e} ch\^{o}mage PE pour chaque secteur.
+
+\begin{formulebox}[Sensibilit\'{e} ch\^{o}mage en mode crise]
+\begin{equation}
+\label{eq:crisis_mode}
+s_{\mathrm{ch\hat{o}m},k}^{\mathrm{effectif}} = \begin{cases}
+|s_{\mathrm{ch\hat{o}m},k}^{\mathrm{PE}}| & \text{si \texttt{unemployment\_crisis} = True} \\
+s_{\mathrm{ch\hat{o}m},k}^{\mathrm{PE}} & \text{sinon (rupture techno)}
+\end{cases}
+\end{equation}
+\end{formulebox}
+
+Cette logique est appliqu\'{e}e \`{a} la fois dans :
+\begin{itemize}[nosep]
+    \item \texttt{PEModel.\_stress\_metric} (Canal EBITDA)
+    \item \texttt{PECalculator.\_calculate\_distress\_prob} (P(distress))
+\end{itemize}
+
+\begin{interpretbox}[Exemple : Technologie en crise \'{e}conomique]
+En mode rupture techno : $s_{\mathrm{ch\hat{o}m,Tech}}^{\mathrm{PE}} = -1{,}5$.
+Un choc ch\^{o}mage $\delta > 0$ fait \textit{baisser} le stress ($-1{,}5 \times \delta < 0$),
+donc la NAV Tech monte et la P(distress) baisse.
+
+En mode crise \'{e}conomique : $|{-1{,}5}| = 1{,}5$.
+Le m\^{e}me choc fait maintenant \textit{monter} le stress ($1{,}5 \times \delta > 0$),
+la NAV baisse et la P(distress) augmente. C'est le comportement attendu :
+en r\'{e}cession g\'{e}n\'{e}ralis\'{e}e, m\^{e}me la Tech souffre.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Sensibilit\'{e}s Factorielles}
+\label{sec:sensitivities}
+% ══════════════════════════════════════════════════════════
+
+La matrice de sensibilit\'{e}s factorielles $5 \times 5$ (secteurs $\times$ variables macro)
+est calcul\'{e}e par \texttt{PECalculator.compute\_factorial\_sensitivities}.
+
+\subsection{M\'{e}thodologie}
+
+Pour chaque variable macro $v$ et chaque secteur $k$ :
+
+\begin{enumerate}
+    \item Calculer la NAV de r\'{e}f\'{e}rence $\mathrm{NAV}_k^{\mathrm{ref}}$ au sc\'{e}nario de base.
+    \item Perturber la variable $v$ de $+\delta$ (direction adverse) :
+        \begin{itemize}[nosep]
+            \item Ch\^{o}mage, taux, inflation : $+\delta$ (hausse = adverse)
+            \item PIB, HPI : $-\delta$ (baisse = adverse)
+        \end{itemize}
+    \item Recalculer la NAV perturb\'{e}e $\mathrm{NAV}_k^{\mathrm{pert}}$.
+    \item Calculer la sensibilit\'{e} en pourcentage :
+\end{enumerate}
+
+\begin{formulebox}[Sensibilit\'{e} factorielle $dNAV/d(\text{macro})$]
+\begin{equation}
+\label{eq:sensitivity}
+\mathrm{Sensibilit\'{e}}_{k,v} = \frac{\mathrm{NAV}_k^{\mathrm{pert}} - \mathrm{NAV}_k^{\mathrm{ref}}}{\mathrm{NAV}_k^{\mathrm{ref}}} \times 100\%
+\end{equation}
+avec $\delta = 1{,}0$ (perturbation de 1 point de pourcentage).
+\end{formulebox}
+
+Le r\'{e}sultat est une matrice $5 \times 5$ (5 secteurs en lignes, 5 variables macro en colonnes)
+exprim\'{e}e en pourcentage de variation de la NAV.
+
+
+% ══════════════════════════════════════════════════════════
+\section{Sc\'{e}narios Macro\'{e}conomiques}
+\label{sec:scenarios}
+% ══════════════════════════════════════════════════════════
+
+Le module PE supporte 3 sc\'{e}narios ECL pond\'{e}r\'{e}s (IFRS 9 \S5.5.17) et 5 sc\'{e}narios
+pr\'{e}d\'{e}finis pour le stress test.
+
+\subsection{Sc\'{e}narios ECL}
+
+\begin{table}[h]
+\centering
+\caption{Sc\'{e}narios macro\'{e}conomiques ECL}
+\label{tab:scenarios}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Sc\'{e}nario} & \textbf{PIB (\%)} & \textbf{Ch\^{o}m. (\%)} & \textbf{Taux (\%)} & \textbf{HPI (\%)} & \textbf{Poids} \\
+\midrule
+Base       & $+1{,}2$  & $7{,}5$  & $3{,}5$ & $+2{,}0$  & 50\% \\
+Adverse    & $-1{,}5$  & $10{,}5$ & $5{,}0$ & $-8{,}0$  & 25\% \\
+Favorable  & $+2{,}5$  & $5{,}5$  & $2{,}0$ & $+5{,}0$  & 25\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sc\'{e}narios pr\'{e}d\'{e}finis (dashboard)}
+
+\begin{table}[h]
+\centering
+\caption{Sc\'{e}narios pr\'{e}d\'{e}finis pour le stress test PE}
+\label{tab:predefined}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Sc\'{e}nario} & \textbf{Taux (bp)} & \textbf{Ch\^{o}m. bipol.} & \textbf{PIB (\%)} & \textbf{HPI (\%)} & \textbf{Infl. (\%)} \\
+\midrule
+Central         & $+50$   & $0$   & $+1{,}2$ & $+2{,}0$  & $2{,}5$ \\
+Crise financi\`{e}re & $+200$  & $-4$  & $-3{,}0$ & $-15{,}0$ & $-1{,}0$ \\
+Stagflation     & $+300$  & $-2$  & $-1{,}0$ & $-5{,}0$  & $+6{,}0$ \\
+Rupture techno  & $0$     & $+3$  & $+2{,}0$ & $+5{,}0$  & $+1{,}0$ \\
+Reprise         & $-100$  & $0$   & $+3{,}0$ & $+8{,}0$  & $+2{,}0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{interpretbox}[Lecture du slider bipolaire]
+Le signe du slider ch\^{o}mage indique la \textbf{nature} :
+$+3$ = rupture techno ($+3$ pp ch\^{o}mage, Tech b\'{e}n\'{e}ficie),
+$-4$ = crise \'{e}co ($+4$ pp ch\^{o}mage, tous secteurs p\'{e}nalis\'{e}s).
+Le sc\'{e}nario Reprise utilise $0$ : pas de hausse de ch\^{o}mage suppl\'{e}mentaire.
+\end{interpretbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Architecture Logicielle}
+\label{sec:architecture}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Diagramme des classes}
+
+\begin{center}
+\begin{tikzpicture}[
+    class/.style={rectangle, draw=steelblue, rounded corners, fill=steelblue!10,
+                  text width=5.5cm, minimum height=2cm, align=center,
+                  font=\small},
+    config/.style={rectangle, draw=darkblue, rounded corners, fill=lightgray,
+                   text width=4cm, minimum height=1.5cm, align=center,
+                   font=\small},
+    ext/.style={rectangle, draw=accentorange, rounded corners, fill=accentorange!10,
+                text width=4cm, minimum height=1.2cm, align=center,
+                font=\small},
+    ->, >=Stealth, thick
+]
+
+\node[class] (model) at (0,0) {
+    \textbf{PEModel}\\
+    \texttt{pe\_model.py}\\[4pt]
+    \texttt{calculate\_nav()}\\
+    \texttt{\_stress\_metric()}\\
+    \texttt{\_compress\_exit\_multiple()}\\
+    \texttt{\_stress\_leverage()}
+};
+
+\node[class] (calc) at (7,0) {
+    \textbf{PECalculator}\\
+    \texttt{pe\_calculator.py}\\[4pt]
+    \texttt{calculate()}\\
+    \texttt{\_calculate\_distress\_prob()}\\
+    \texttt{\_classify\_pe()}\\
+    \texttt{compute\_factorial\_sensitivities()}
+};
+
+\node[ext] (comp) at (7,-3.5) {
+    \textbf{comparator.py}\\
+    \texttt{compute\_crr3\_rw()}
+};
+
+\node[config] (sector) at (-1,-4) {
+    \textbf{SectorConfig}\\
+    5 secteurs $\times$ 10 sens.
+};
+
+\node[config] (pe_class) at (4,-6) {
+    \textbf{PEClassificationConfig}\\
+    Seuils distress + DLOM
+};
+
+\node[config] (basel) at (11,-3.5) {
+    \textbf{BaselConfig}\\
+    CRR3, CET1, CIR
+};
+
+\draw (calc) -- node[above] {utilise} (model);
+\draw (model) -- (sector);
+\draw (calc) -- (pe_class);
+\draw (calc) -- node[left] {importe} (comp);
+\draw (comp) -- (basel);
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Pipeline de calcul}
+
+Le pipeline complet, ex\'{e}cut\'{e} par \texttt{PECalculator.calculate()}, s'encha\^{i}ne comme suit :
+
+\begin{algorithm}[H]
+\caption{Pipeline PE complet}
+\label{algo:pipeline}
+\begin{algorithmic}[1]
+\State $\mathrm{NAV}_{\mathrm{stress}},\, M_{\mathrm{sortie}} \gets \texttt{PEModel.calculate\_nav}(df\_pe, \text{overrides})$
+\State $\mathrm{NAV}_{\mathrm{ref}} \gets \texttt{PEModel.calculate\_nav}(df\_pe)$
+\Comment{Sans stress, pour $\Delta$NAV}
+\State $K \gets \texttt{\_compute\_capital\_invested}(df\_pe)$
+\Comment{Incl. conversion NOI}
+\State $\mathrm{MOIC} \gets \mathrm{NAV}_{\mathrm{stress}} / K$
+\State $\mathrm{IRR}_{\mathrm{approx}} \gets \mathrm{MOIC}^{1/T} - 1$
+\Comment{Simplifi\'{e}e, sans J-curve}
+\State $\Delta\mathrm{NAV} \gets \mathrm{NAV}_{\mathrm{stress}} - \mathrm{NAV}_{\mathrm{ref}}$
+\State $\mathrm{Drawdown} \gets \max(0,\, (\mathrm{NAV}_{\mathrm{ref}} - \mathrm{NAV}_{\mathrm{stress}}) / \mathrm{NAV}_{\mathrm{ref}})$
+\State $P_{\mathrm{distress}} \gets \texttt{\_calculate\_distress\_prob}(df\_pe, \mathrm{MOIC}, \text{overrides})$
+\State $\mathrm{Cat\'{e}gorie} \gets \texttt{\_classify\_pe}(P_{\mathrm{distress}})$
+\State $\mathrm{EL}_{\mathrm{PE}} \gets P_{\mathrm{distress}} \times \mathrm{LGD}_{\mathrm{equity}} \times \mathrm{NAV}_{\mathrm{stress}}$
+\State $\mathrm{Exit\;Cost} \gets \mathrm{NAV}_{\mathrm{stress}} \times (1 - \mathrm{DLOM}^{\mathrm{eff}})$
+\Comment{DLOM ajust\'{e} vintage}
+\State $\mathrm{RW} \gets \texttt{compute\_crr3\_rw}(\text{position})$
+\Comment{Score composite CRR3}
+\State $\mathrm{RWA}_{\mathrm{PE}} \gets \mathrm{NAV}_{\mathrm{stress}} \times \mathrm{RW} / 100$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Colonnes de sortie}
+
+Le DataFrame r\'{e}sultat de \texttt{PECalculator.calculate()} contient les colonnes requises
+d\'{e}finies dans \texttt{REQUIRED\_PE\_RESULT\_COLS} :
+
+\begin{table}[h]
+\centering
+\caption{Colonnes de sortie du pipeline PE}
+\label{tab:output_cols}
+\begin{tabular}{lll}
+\toprule
+\textbf{Colonne} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{nav}             & float & NAV stress\'{e}e (M EUR) \\
+\texttt{exit\_multiple}  & float & Multiple de sortie compress\'{e} \\
+\texttt{capital\_invested} & float & Capital investi equity (M EUR) \\
+\texttt{moic}            & float & Multiple on Invested Capital \\
+\texttt{irr}             & float & IRR approx. (sans J-curve) \\
+\texttt{dpi}             & float & Distributed to Paid-In (= 0) \\
+\texttt{rvpi}            & float & Residual Value to Paid-In \\
+\texttt{tvpi}            & float & Total Value to Paid-In \\
+\texttt{delta\_nav}      & float & $\Delta$NAV vs r\'{e}f\'{e}rence (M EUR) \\
+\texttt{nav\_drawdown}   & float & Drawdown directionnel $\in [0, 1]$ \\
+\texttt{distress\_prob}  & float & P(distress) $\in\; ]0, 1[$ \\
+\texttt{risk\_category}  & str   & Performing / Watchlist / Distressed \\
+\texttt{expected\_loss\_pe} & float & Perte attendue PE (M EUR) \\
+\texttt{exit\_cost}      & float & Co\^{u}t de sortie avec DLOM vintage (M EUR) \\
+\texttt{rwa\_pe}         & float & RWA prudentiel PE (M EUR) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Validations et Invariants}
+\label{sec:validations}
+% ══════════════════════════════════════════════════════════
+
+Le module PE v\'{e}rifie 11 invariants \`{a} chaque ex\'{e}cution (bloc \texttt{\_\_main\_\_}
+du \texttt{pe\_calculator.py}) :
+
+\begin{enumerate}[label=\textbf{V\arabic*}]
+    \item \texttt{risk\_category} $\in \{\text{Performing, Watchlist, Distressed}\}$
+    \item $\mathrm{EL}_{\mathrm{PE}} \geq 0$ pour toutes les positions
+    \item $P_{\mathrm{distress}} \in [0, 1]$
+    \item Stress adverse $\Rightarrow$ nombre de Distressed $\geq$ baseline
+    \item Toutes les colonnes \texttt{REQUIRED\_PE\_RESULT\_COLS} pr\'{e}sentes
+    \item Ordering IRR : Adverse $<$ Base $<$ Favorable
+    \item $\mathrm{TVPI} = \mathrm{DPI} + \mathrm{RVPI}$ (tol\'{e}rance $10^{-3}$)
+    \item Sensibilit\'{e}s $5 \times 5$ non-nulles
+    \item $\mathrm{NAV} \geq 0$ pour toutes les positions
+    \item $\mathrm{Exit\;Cost} > 0$ pour toutes les positions
+    \item $\mathrm{RWA}_{\mathrm{PE}} > 0$ pour toutes les positions
+\end{enumerate}
+
+\begin{definitionbox}[Reproductibilit\'{e}]
+L'ensemble du pipeline PE est reproductible gr\^{a}ce \`{a} la graine \texttt{RANDOM\_SEED = 42}
+d\'{e}finie dans \texttt{config.py}. Le bruit de dispersion NAV utilise un seed d\'{e}di\'{e}
+\texttt{seed + 7} pour garantir le d\'{e}terminisme cross-sc\'{e}nario (section~\ref{sec:noise}).
+\end{definitionbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Limites du Mod\`{e}le et Pistes d'Am\'{e}lioration}
+\label{sec:limitations}
+% ══════════════════════════════════════════════════════════
+
+Le mod\`{e}le PE est con\c{c}u pour un cockpit de gestion des risques et n'a pas
+vocation \`{a} remplacer une valorisation IPEV compl\`{e}te. Les limites suivantes
+sont document\'{e}es conform\'{e}ment aux exigences de model risk management (SR 11-7).
+
+\begin{warningbox}[L1 --- IRR simplifi\'{e}e (pas de J-curve)]
+L'IRR est calcul\'{e}e comme $\mathrm{MOIC}^{1/T} - 1$, soit un investissement unique en $t=0$
+et une valeur terminale en $t=T$. Cette formule ignore :
+\begin{itemize}[nosep]
+    \item les appels de fonds progressifs (capital calls)
+    \item les distributions interm\'{e}diaires (dividendes, cessions partielles)
+    \item la J-curve typique des fonds PE (IRR n\'{e}gatif en ann\'{e}es 1--3)
+\end{itemize}
+\textbf{Impact} : surestimation de l'IRR pour les vintages r\'{e}cents,
+sous-estimation pour les fonds matures avec distributions \'{e}lev\'{e}es.
+Les IRR de ce module ne sont \textbf{pas comparables} aux IRR GP publi\'{e}es (XIRR).
+\end{warningbox}
+
+\begin{warningbox}[L2 --- Sensibilit\'{e}s statiques]
+Les sensibilit\'{e}s PE par secteur (Table~\ref{tab:sensitivities}) sont des constantes
+calibr\'{e}es par jugement expert. En r\'{e}alit\'{e} :
+\begin{itemize}[nosep]
+    \item la sensibilit\'{e} aux taux d\'{e}pend de la maturit\'{e} du LBO (dette fixe vs. variable)
+    \item la sensibilit\'{e} au PIB est non-lin\'{e}aire en r\'{e}cession
+    \item le \texttt{holding\_years} devrait moduler les sensibilit\'{e}s
+\end{itemize}
+\textbf{Piste} : sensibilit\'{e}s vintage-d\'{e}pendantes $s_{v,k}(T_i)$.
+\end{warningbox}
+
+\begin{warningbox}[L3 --- Corr\'{e}lation intra-sectorielle simplifi\'{e}e]
+Le mod\`{e}le \`{a} facteur (\'{e}q.~\eqref{eq:noise_factor}) capture la corr\'{e}lation
+syst\'{e}matique (macro) et intra-sectorielle ($\rho = 0{,}40$), mais pas :
+\begin{itemize}[nosep]
+    \item la corr\'{e}lation entre positions du m\^{e}me GP ou fonds
+    \item la corr\'{e}lation inter-sectorielle de la dispersion idiosyncratique
+    \item la d\'{e}pendance de queue (\textit{tail dependence})
+\end{itemize}
+\textbf{Piste} : mod\`{e}le copula ou facteur hi\'{e}rarchique (GP $\rightarrow$ secteur $\rightarrow$ position).
+\end{warningbox}
+
+\begin{warningbox}[L4 --- Pas de backtesting sur donn\'{e}es r\'{e}elles]
+Les param\`{e}tres sont calibr\'{e}s sur jugement expert et benchmarks industriels
+(Preqin, Cambridge Associates, CBRE, Moody's), pas sur l'historique du portefeuille
+r\'{e}el de la banque. Le pipeline utilise des donn\'{e}es synth\'{e}tiques.
+\textbf{Piste} : backtesting sur historique NAV r\'{e}el + benchmarking vs. indices PE
+(Cambridge PE Index, Preqin Private Equity Index).
+\end{warningbox}
+
+\begin{warningbox}[L5 --- Approximation EBITDA $\rightarrow$ NOI]
+Pour l'Immobilier, le NOI est estim\'{e} comme $\mathrm{EBITDA} \times (1 - 0{,}15)$.
+Le vrai NOI exclut des postes sp\'{e}cifiques (capex de maintenance, frais de contentieux)
+que l'EBITDA retient. L'\'{e}cart r\'{e}siduel peut atteindre 5--10\% selon les actifs.
+\textbf{Piste} : colonne \texttt{noi} d\'{e}di\'{e}e dans le DataFrame PE pour l'immobilier.
+\end{warningbox}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Annexe A : R\'{e}capitulatif des Param\`{e}tres}
+\label{sec:annexe}
+% ══════════════════════════════════════════════════════════
+
+\begin{longtable}{llll}
+\caption{Param\`{e}tres du module PE} \label{tab:params} \\
+\toprule
+\textbf{Param\`{e}tre} & \textbf{Valeur} & \textbf{Source} & \textbf{R\^{o}le} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{c}{\textit{(suite)}} \\
+\toprule
+\textbf{Param\`{e}tre} & \textbf{Valeur} & \textbf{Source} & \textbf{R\^{o}le} \\
+\midrule
+\endhead
+\texttt{RANDOM\_SEED} & 42 & config.py & Reproductibilit\'{e} \\
+\texttt{PE\_DISTRESS\_LOGIT\_SCALE} & 3{,}0 & config.py & \'{E}chelle logit distress \\
+\texttt{LOGIT\_AMPLITUDE} & $\approx 4{,}94$ (dyn.) & config.py & Calibr\'{e} PD 6\%$\rightarrow$18\% (EBA) \\
+\texttt{NOI\_OPEX\_RATIO} & 0{,}15 & config.py & Conversion EBITDA$\rightarrow$NOI \\
+\texttt{PE\_NOISE\_INTRA\_SECTOR\_CORR} & 0{,}40 & config.py & Corr. bruit intra-secteur \\
+\texttt{rw\_pe\_options} & (190, 250, 400) & BaselConfig & Grille CRR3 \\
+\texttt{rw\_pe\_default} & 250 & BaselConfig & RW par d\'{e}faut \\
+\texttt{cet1\_target} & 13\% & BaselConfig & Ratio CET1 cible \\
+\texttt{cir} & 0{,}45 & BaselConfig & Cost/Income Ratio \\
+\texttt{tax\_rate} & 0{,}25 & BaselConfig & Taux d'imposition \\
+\texttt{pe\_max\_allocation} & 40\% & BaselConfig & Alloc. max PE \\
+\texttt{lgd\_equity} & 0{,}60 & PEClassif. & LGD equity (Moody's 2023) \\
+\texttt{secondary\_discount} & 0{,}10 & PEClassif. & D\'{e}cote secondaire base \\
+\texttt{dlom\_vintage\_factor} & 0{,}50 & PEClassif. & Surcharge DLOM vintage \\
+\texttt{dlom\_vintage\_threshold} & 5{,}0 ans & PEClassif. & Seuil maturit\'{e} DLOM \\
+\texttt{distress\_threshold\_performing} & 0{,}10 & PEClassif. & Seuil Performing \\
+\texttt{distress\_threshold\_watchlist} & 0{,}30 & PEClassif. & Seuil Watchlist \\
+\texttt{nav\_drawdown\_green} & 10\% & RiskAppetite & Seuil vert drawdown \\
+\texttt{nav\_drawdown\_amber} & 25\% & RiskAppetite & Seuil ambre drawdown \\
+\'{E}chelle EBITDA & 3{,}0 & pe\_model.py & Facteur $\exp(-S \times 3{,}0)$ \\
+\'{E}chelle multiples & 5{,}0 & pe\_model.py & Facteur $\exp(-C \times 5{,}0)$ \\
+\'{E}chelle leverage & 2{,}0 & pe\_model.py & Amplification taux \\
+Bruit dispersion & $\sigma = 0{,}03$ & pe\_model.py & Mod\`{e}le \`{a} facteur \\
+P(distress) base & 5\% & pe\_calc.py & Taux distress (Preqin) \\
+MOIC floor & 0{,}01 & pe\_calc.py & Plancher $\ln(\mathrm{MOIC})$ \\
+Leverage clip max & 0{,}95 & pe\_model.py & Borne sup. leverage \\
+\bottomrule
+\end{longtable}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Annexe B : Glossaire}
+\label{sec:glossaire}
+% ══════════════════════════════════════════════════════════
+
+\begin{longtable}{lp{11cm}}
+\toprule
+\textbf{Acronyme} & \textbf{D\'{e}finition} \\
+\midrule
+\endfirsthead
+CET1 & Common Equity Tier 1 --- fonds propres de base de cat\'{e}gorie 1 \\
+CIR & Cost/Income Ratio --- coefficient d'exploitation bancaire \\
+CRR3 & Capital Requirements Regulation 3 --- r\`{e}glement prudentiel europ\'{e}en (2024) \\
+DLOM & Discount for Lack of Marketability --- d\'{e}cote d'illiquidit\'{e} \\
+DPI & Distributed to Paid-In --- distributions cumul\'{e}es rapport\'{e}es au capital investi \\
+EBA & European Banking Authority --- autorit\'{e} bancaire europ\'{e}enne \\
+EBITDA & Earnings Before Interest, Taxes, Depreciation \& Amortization \\
+EL & Expected Loss --- perte attendue \\
+HPI & House Price Index --- indice des prix immobiliers \\
+IFRS 9 & International Financial Reporting Standard 9 --- instruments financiers \\
+IFRS 13 & International Financial Reporting Standard 13 --- juste valeur \\
+IPEV & International Private Equity and Venture Capital Valuation Guidelines \\
+IRR & Internal Rate of Return --- taux de rendement interne \\
+LBO & Leveraged Buyout --- rachat par effet de levier \\
+LGD & Loss Given Default --- perte en cas de d\'{e}faut \\
+MOIC & Multiple on Invested Capital --- rendement en multiple du capital \\
+NAV & Net Asset Value --- valeur liquidative \\
+NOI & Net Operating Income --- revenu net d'exploitation (immobilier) \\
+RAROC & Risk-Adjusted Return on Capital --- rendement ajust\'{e} du risque \\
+RVPI & Residual Value to Paid-In --- valeur r\'{e}siduelle rapport\'{e}e au capital \\
+RWA & Risk-Weighted Assets --- actifs pond\'{e}r\'{e}s par les risques \\
+TVPI & Total Value to Paid-In --- valeur totale rapport\'{e}e au capital ($= \mathrm{DPI} + \mathrm{RVPI}$) \\
+\bottomrule
+\end{longtable}
+
+
+% ══════════════════════════════════════════════════════════
+\section{Annexe C : R\'{e}f\'{e}rences}
+\label{sec:references}
+% ══════════════════════════════════════════════════════════
+
+\begin{enumerate}[label={[\arabic*]}]
+    \item AICPA, \textit{Valuation of Privately-Held-Company Equity Securities Issued as Compensation --- Practice Aid}, 2013.
+    \item BCBS, \textit{Basel III: Finalising post-crisis reforms} (d424), d\'{e}cembre 2017.
+    \item Cambridge Associates, \textit{Private Equity Index and Benchmark Statistics}, 2023.
+    \item CBRE Research, \textit{European Real Estate Operating Expenses Benchmark}, 2023.
+    \item EBA, \textit{Guidelines on credit risk stress testing} (GL/2020/06), 2020.
+    \item IASB, \textit{IFRS 9 Financial Instruments}, 2014 (amend\'{e} 2022).
+    \item IASB, \textit{IFRS 13 Fair Value Measurement}, 2011.
+    \item IPEV Board, \textit{International Private Equity and Venture Capital Valuation Guidelines}, \'{e}dition 2022.
+    \item Jefferies / Lazard, \textit{Global Secondary Market Review}, 2023.
+    \item Moody's Investors Service, \textit{Annual Default Study: Corporate Default and Recovery Rates}, 2023.
+    \item Pratt S.P. \& Grabowski R.J., \textit{Cost of Capital: Applications and Examples}, 5th ed., Wiley, 2014.
+    \item Preqin, \textit{Global Private Equity Report}, 2022--2023.
+    \item R\`{e}glement (UE) 2024/xxx, \textit{Capital Requirements Regulation 3} (CRR3), Art. 133 (SA equity), Art. 155 (IRB equity), janvier 2025.
+\end{enumerate}
+
+\end{document}

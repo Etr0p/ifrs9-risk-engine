@@ -135,9 +135,23 @@ class ECLCalculator:
         else:
             pd_stressed_ref = pd_current.copy()
 
-        # Staging sur les PD stressées (réagit aux sliders)
+        # Construire le dict macro pour le SICR forward-looking (IFRS 9 B5.5.17)
+        base = SCENARIO_BASE
+        if has_override:
+            _macro_for_sicr = {
+                "unemployment_rate": unemployment_override if unemployment_override is not None else base.unemployment_rate,
+                "gdp_growth": gdp_override if gdp_override is not None else base.gdp_growth,
+                "interest_rate": interest_rate_override if interest_rate_override is not None else base.interest_rate,
+                "hpi_growth": hpi_override if hpi_override is not None else base.hpi_growth,
+                "inflation_rate": inflation_override if inflation_override is not None else base.inflation_rate,
+            }
+        else:
+            _macro_for_sicr = None
+
+        # Staging sur les PD stressées (réagit aux sliders + macro Z-score)
         stages = self.staging_engine.assign_stages(
             pd_stressed_ref, pd_origination, dpd, default_flag,
+            macro_params=_macro_for_sicr,
         )
 
         # Calcul ECL par scénario

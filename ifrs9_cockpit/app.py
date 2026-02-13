@@ -31,6 +31,7 @@ from ifrs9_cockpit.config import (
     MACRO_INCOHERENCE_RULES,
     PREDEFINED_SCENARIOS,
     RANDOM_SEED,
+    RISK_APPETITE_CONFIG,
     SCENARIO_BASE,
     TARGET,
 )
@@ -60,6 +61,7 @@ from ifrs9_cockpit.dashboard.components import (
 )
 from ifrs9_cockpit.dashboard import charts
 from ifrs9_cockpit.utils.helpers import format_euro, format_pct
+from ifrs9_cockpit.export.audit_trail_latex import generate_audit_latex
 
 
 # ──────────────────────────────────────────────
@@ -82,9 +84,17 @@ def load_data() -> tuple:
     return df_credit, df_pe, df_history
 
 
-@st.cache_resource(show_spinner="Entraînement des modèles PD...")
+@st.cache_resource(show_spinner="Chargement des modèles PD...")
 def train_pd_models(df_hash: str) -> PDModelSuite:
-    """Entraîne et cache la suite de modèles PD."""
+    """Charge des modèles pré-entraînés ou entraîne sur données synthétiques 30K."""
+    pretrained_path = Path("ifrs9_cockpit/training/models/pd_suite.joblib")
+    if pretrained_path.exists():
+        try:
+            suite = PDModelSuite.load(str(pretrained_path))
+            return suite
+        except Exception:
+            pass  # Fichier corrompu → fallback entraînement
+    # Fallback : entraîner sur données synthétiques 30K
     df_credit, _, _ = load_data()
     suite = PDModelSuite()
     suite.fit(df_credit)
@@ -102,6 +112,54 @@ def train_lgd_ead(df_hash: str) -> tuple:
     return lgd_model, ead_model
 
 
+def _force_models_cpu(pd_suite: PDModelSuite) -> None:
+    """Force tous les modeles sur CPU pour eviter segfault CUDA nightly.
+
+    Le training GPU est cache (st.cache_resource), mais les predictions
+    repetees sur GPU nightly Blackwell causent des segfaults lors des
+    reruns Streamlit. CPU est assez rapide pour 30K predictions.
+    """
+    import torch as _torch
+
+    _cpu = _torch.device("cpu")
+
+    def _move_all_tensors(module: _torch.nn.Module) -> None:
+        """Deplace params + buffers + tenseurs bruts (group_attention_matrix)."""
+        module.to(_cpu)
+        for m in module.modules():
+            for attr_name in list(m.__dict__.keys()):
+                attr = m.__dict__[attr_name]
+                if isinstance(attr, _torch.Tensor) and attr.device != _cpu:
+                    m.__dict__[attr_name] = attr.to(_cpu)
+
+    for _name, result in pd_suite.results.items():
+        model = result.model
+        if not hasattr(model, "calibrated_classifiers_"):
+            continue
+        for cc in model.calibrated_classifiers_:
+            inner = getattr(cc, "estimator", getattr(cc, "base_estimator", None))
+            if inner is None:
+                continue
+            # TabNet → deplacer TOUS les tenseurs sur CPU
+            if hasattr(inner, "_model") and hasattr(inner._model, "network"):
+                try:
+                    _move_all_tensors(inner._model.network)
+                    inner._model.device_name = "cpu"
+                    inner._model.device = _cpu
+                except Exception:
+                    pass
+            # XGBoost → forcer CPU
+            if hasattr(inner, "set_params"):
+                try:
+                    inner.set_params(device="cpu")
+                except (TypeError, ValueError):
+                    pass
+
+
+_SHAP_MAX_SAMPLES = 500  # Limiter pour éviter timeout KernelExplainer
+_SHAP_BACKGROUND = 50    # Échantillons de fond (KernelExplainer)
+
+
 @st.cache_data(show_spinner="Calcul SHAP values...")
 def compute_shap_values(
     _model,
@@ -111,10 +169,19 @@ def compute_shap_values(
 ) -> np.ndarray:
     """Calcule et cache les SHAP values."""
     import shap
+    # Limiter la taille pour éviter les timeouts (surtout KernelExplainer)
+    if X_sample.shape[0] > _SHAP_MAX_SAMPLES:
+        X_sample = X_sample[:_SHAP_MAX_SAMPLES]
     if model_name == "LR_WoE":
         explainer = shap.LinearExplainer(_model, X_sample)
-    else:
+    elif model_name == "XGBoost":
         explainer = shap.TreeExplainer(_model)
+    else:  # TabNet — model-agnostic via KernelExplainer
+        n_bg = min(_SHAP_BACKGROUND, X_sample.shape[0])
+        background = shap.sample(X_sample, n_bg)
+        explainer = shap.KernelExplainer(
+            lambda x: _model.predict_proba(x)[:, 1], background,
+        )
     shap_vals = explainer.shap_values(X_sample)
     # Gérer les différents formats de sortie SHAP :
     # - Liste de 2 arrays (classe 0, classe 1) → prendre classe 1
@@ -143,6 +210,9 @@ def main() -> None:
 
     pd_suite = train_pd_models(df_hash)
     lgd_model, ead_model = train_lgd_ead(df_hash)
+
+    # Force CPU pour les predictions (evite segfault CUDA nightly Blackwell)
+    _force_models_cpu(pd_suite)
 
     # ── SIDEBAR : Stress Test Controls ──
     with st.sidebar:
@@ -184,10 +254,15 @@ def main() -> None:
 
         _ue = DASHBOARD_CONFIG.stress_unemployment_range
         unemployment_bipolar = st.slider(
-            "Chomage (bipolaire, pp)",
+            "Chomage bipolaire (pp)",
             min_value=_ue[0], max_value=_ue[1], value=0.0, step=_ue[2],
             key="sl_unemployment_bipolar",
-            help=f"0 = base ({SCENARIO_BASE.unemployment_rate:.1f}%), negatif = hausse chomage",
+            help=(
+                f"0 = base ({SCENARIO_BASE.unemployment_rate:.1f}%). "
+                "Les deux extremes augmentent le chomage : "
+                "positif = rupture techno (PE tech beneficie), "
+                "negatif = crise eco (tout souffre)."
+            ),
         )
 
         _gd = DASHBOARD_CONFIG.stress_gdp_range
@@ -234,7 +309,11 @@ def main() -> None:
                 st.warning(f"Incoherence : {_rule.description}")
 
         # ── Conversion sliders → valeurs macro reelles ──
-        unemployment_rate = SCENARIO_BASE.unemployment_rate - unemployment_bipolar
+        # Bipolaire : |slider| = amplitude du choc chomage (toujours hausse),
+        # signe = nature (+ = rupture techno, - = crise eco).
+        unemployment_rate = SCENARIO_BASE.unemployment_rate + abs(unemployment_bipolar)
+        # Nature du chomage pour le canal PE : crise eco → abs(sensitivity)
+        _unemployment_crisis = unemployment_bipolar < 0
         interest_rate = SCENARIO_BASE.interest_rate + interest_rate_bp / 100.0
         gdp_growth = gdp_pct
         hpi_growth = hpi_pct
@@ -318,77 +397,87 @@ def main() -> None:
         "inflation_rate": inflation_rate,
     }
 
-    # Stage 1/5 — Credit ECL
-    _progress.progress(0.05, text="[1/5] Calcul ECL Credit...")
-    pd_predictions = pd_suite.predict(df_clients)
-    pd_current = pd_predictions[selected_model]
-    # pd_origination reelle stockee dans df_credit (H2, Phase C)
-    pd_origination = df_clients["pd_origination"].values
+    try:
+        # Stage 1/5 — Credit ECL
+        _progress.progress(0.05, text="[1/5] Calcul ECL Credit...")
+        pd_predictions = pd_suite.predict(df_clients)
+        pd_current = pd_predictions[selected_model]
+        # pd_origination reelle stockee dans df_credit (H2, Phase C)
+        pd_origination = df_clients["pd_origination"].values
 
-    ecl_calc = ECLCalculator(lgd_model=lgd_model, ead_model=ead_model)
-    result_base = ecl_calc.calculate(df_clients, pd_current, pd_origination)
-    ecl_base_total = result_base["ecl_weighted"].sum()
+        ecl_calc = ECLCalculator(lgd_model=lgd_model, ead_model=ead_model)
+        result_base = ecl_calc.calculate(df_clients, pd_current, pd_origination)
+        ecl_base_total = result_base["ecl_weighted"].sum()
 
-    result_stressed = ecl_calc.calculate(
-        df_clients, pd_current, pd_origination,
-        unemployment_override=unemployment_rate,
-        gdp_override=gdp_growth,
-        interest_rate_override=interest_rate,
-        hpi_override=hpi_growth,
-        inflation_override=inflation_rate,
-    )
+        result_stressed = ecl_calc.calculate(
+            df_clients, pd_current, pd_origination,
+            unemployment_override=unemployment_rate,
+            gdp_override=gdp_growth,
+            interest_rate_override=interest_rate,
+            hpi_override=hpi_growth,
+            inflation_override=inflation_rate,
+        )
 
-    # Alias compat — tabs existants utilisent "segment" (nettoyage Story 6-4)
-    for _df in [result_base, result_stressed]:
-        if "sector" in _df.columns and "segment" not in _df.columns:
-            _df["segment"] = _df["sector"]
+        # Alias compat — tabs existants utilisent "segment" (nettoyage Story 6-4)
+        for _df in [result_base, result_stressed]:
+            if "sector" in _df.columns and "segment" not in _df.columns:
+                _df["segment"] = _df["sector"]
 
-    # Stage 2/5 — PE IFRS 13
-    _progress.progress(0.25, text="[2/5] Valorisation PE IFRS 13...")
-    pe_calc = PECalculator()
-    result_pe = pe_calc.calculate(
-        df_pe,
-        unemployment_override=unemployment_rate,
-        gdp_override=gdp_growth,
-        interest_rate_override=interest_rate,
-        hpi_override=hpi_growth,
-        inflation_override=inflation_rate,
-    )
+        # Stage 2/5 — PE IFRS 13
+        _progress.progress(0.25, text="[2/5] Valorisation PE IFRS 13...")
+        pe_calc = PECalculator()
+        result_pe = pe_calc.calculate(
+            df_pe,
+            unemployment_override=unemployment_rate,
+            gdp_override=gdp_growth,
+            interest_rate_override=interest_rate,
+            hpi_override=hpi_growth,
+            inflation_override=inflation_rate,
+            unemployment_crisis=_unemployment_crisis,
+        )
 
-    # Stage 3/5 — Comparaison & Metriques avancees
-    _progress.progress(0.45, text="[3/5] Comparaison portefeuille...")
-    comparator = PortfolioComparator(result_stressed, result_pe)
-    advanced_metrics = comparator.compute_advanced_credit_metrics()
-    hhi_cross = comparator.compute_hhi_crosscell()
-    raroc_eva = comparator.compute_raroc_eva()
-    asymmetry_matrix = comparator.build_asymmetry_matrix()
+        # Stage 3/5 — Comparaison & Metriques avancees
+        _progress.progress(0.45, text="[3/5] Comparaison portefeuille...")
+        comparator = PortfolioComparator(result_stressed, result_pe)
+        advanced_metrics = comparator.compute_advanced_credit_metrics()
+        hhi_cross = comparator.compute_hhi_crosscell()
+        gar_result = comparator.compute_green_asset_ratio()
+        raroc_eva = comparator.compute_raroc_eva()
+        asymmetry_matrix = comparator.build_asymmetry_matrix()
 
-    # Stage 4/5 — Optimisation allocation
-    _progress.progress(0.60, text="[4/5] Optimisation allocation CRR3...")
-    optimization = comparator.optimize_allocation()
-    crr3_sensitivity = comparator.compute_crr3_sensitivity()
+        # Stage 4/5 — Optimisation allocation
+        _progress.progress(0.60, text="[4/5] Optimisation allocation CRR3...")
+        optimization = comparator.optimize_allocation()
+        crr3_sensitivity = comparator.compute_crr3_sensitivity()
 
-    # Stage 5/5 — AI Analyst (2 passes)
-    _progress.progress(0.80, text="[5/5] AI Analyst (2 passes)...")
-    cro_analyst_ai = CROAnalyst(result_stressed, result_pe, macro_params, target_ecl=rst_target_ecl)
-    analytics_state = cro_analyst_ai.analyze()
+        # Stage 5/5 — AI Analyst (2 passes)
+        _progress.progress(0.80, text="[5/5] AI Analyst (2 passes)...")
+        cro_analyst_ai = CROAnalyst(result_stressed, result_pe, macro_params, target_ecl=rst_target_ecl)
+        analytics_state = cro_analyst_ai.analyze()
 
-    # Virtual CRO (alertes regles)
-    cro = VirtualCRO()
-    psi_value = pd_suite.results[selected_model].metrics_test.get("psi", 0.0)
-    alerts = cro.analyze(
-        result_stressed,
-        ecl_previous=ecl_base_total,
-        psi_value=psi_value,
-        unemployment_rate=unemployment_rate,
-        gdp_growth=gdp_growth,
-    )
-    summary = cro.get_executive_summary(
-        result_stressed, unemployment_rate, gdp_growth,
-    )
+        # Virtual CRO (alertes regles)
+        cro = VirtualCRO()
+        psi_value = pd_suite.results[selected_model].metrics_test.get("psi", 0.0)
+        alerts = cro.analyze(
+            result_stressed,
+            ecl_previous=ecl_base_total,
+            psi_value=psi_value,
+            unemployment_rate=unemployment_rate,
+            gdp_growth=gdp_growth,
+        )
+        summary = cro.get_executive_summary(
+            result_stressed, unemployment_rate, gdp_growth,
+        )
 
-    _progress.progress(1.0, text="Pipeline complet.")
-    _progress.empty()
+        _progress.progress(1.0, text="Pipeline complet.")
+        _progress.empty()
+
+    except Exception as _pipeline_err:
+        _progress.empty()
+        import traceback
+        st.error(f"Erreur pipeline : {_pipeline_err}")
+        st.code(traceback.format_exc(), language=None)
+        st.stop()
 
     # ── KPI CARDS (FR45 : Credit, PE, Optimisation, Risk Appetite) ──
     _ecl_total = summary["ecl_total"]
@@ -397,27 +486,30 @@ def main() -> None:
 
     _nav_total = result_pe["nav"].sum()
     _delta_nav = result_pe["delta_nav"].sum()
-    _drawdown = abs(_delta_nav / max(_nav_total, 1))
+    # Drawdown = perte de NAV par rapport au baseline (pas au stressed)
+    _nav_ref_total = _nav_total - _delta_nav  # NAV baseline = NAV_stressed - delta
+    _drawdown = max(0, -_delta_nav) / max(_nav_ref_total, 1)
     _pe_cls = "negative" if _drawdown > 0.15 else "neutral" if _drawdown > 0.05 else "positive"
 
-    _raroc_total_row = raroc_eva[raroc_eva["sector"] == "TOTAL_CREDIT"]
+    _raroc_total_row = raroc_eva[(raroc_eva["sector"] == "Total") & (raroc_eva["canal"] == "Credit")]
     _raroc_val = float(_raroc_total_row["raroc"].iloc[0]) if len(_raroc_total_row) > 0 else 0.0
     _raroc_cls = "positive" if _raroc_val > 0.12 else "neutral" if _raroc_val > 0.0 else "negative"
 
     _ra = analytics_state.risk_appetite_matrix
     _ra_rouge = int((_ra["signal"] == "rouge").sum()) if _ra is not None and len(_ra) > 0 else 0
-    _ra_signal = "rouge" if _ra_rouge > 3 else "ambre" if _ra_rouge > 0 else "vert"
+    _ra_signal = "rouge" if _ra_rouge > 3 else "ambre" if _ra_rouge > 1 else "vert"
     _ra_cls = "negative" if _ra_signal == "rouge" else "neutral" if _ra_signal == "ambre" else "positive"
 
     render_kpi_row([
+        {"label": "RISK APPETITE", "value": _ra_signal.upper(),
+         "sub_text": f"{_ra_rouge} secteur{'s' if _ra_rouge != 1 else ''} en rouge" if _ra_rouge > 0
+         else "Tous les secteurs OK", "sub_class": _ra_cls},
         {"label": "ECL CREDIT", "value": format_euro(_ecl_total),
          "sub_text": f"{'+'if _ecl_delta > 0 else ''}{_ecl_delta:.1%} vs base", "sub_class": _ecl_cls},
+        {"label": "RAROC CREDIT", "value": f"{_raroc_val:.2%}",
+         "sub_text": f"HHI cross : {hhi_cross.get('hhi_crosscell', 0):,.0f} | Name : {hhi_cross.get('hhi_name_credit', 0):,.0f}", "sub_class": _raroc_cls},
         {"label": "NAV DRAWDOWN PE", "value": f"{_drawdown:.1%}",
          "sub_text": f"Delta NAV : {format_euro(_delta_nav)}", "sub_class": _pe_cls},
-        {"label": "RAROC CREDIT", "value": f"{_raroc_val:.2%}",
-         "sub_text": f"HHI cross-cell : {hhi_cross.get('hhi_crosscell', 0):,}", "sub_class": _raroc_cls},
-        {"label": "RISK APPETITE", "value": _ra_signal.upper(),
-         "sub_text": f"{_ra_rouge} secteurs en rouge", "sub_class": _ra_cls},
     ])
 
     # ── CLASSIFICATION BADGES (FR47 : Stage + PE miroir) ──
@@ -435,20 +527,34 @@ def main() -> None:
         recommendations=analytics_state.recommendations,
     )
 
-    # ── TABS (8 onglets — FR48, FR55) ──
-    (tab_perf, tab_ecl, tab_pe, tab_staging,
-     tab_asym, tab_explain, tab_data, tab_cro) = st.tabs([
+    # ── SCENARIO CONTEXT BANNER ──
+    _scenario_name = st.session_state.get("scenario_selector", "Manuel")
+    _banner_items = [
+        f"Scenario : **{_scenario_name}**",
+        f"BCE : {interest_rate_bp:+.0f}bp",
+        f"Chomage : {unemployment_bipolar:+.1f}pp",
+        f"PIB : {gdp_pct:+.1f}%",
+        f"HPI : {hpi_pct:+.1f}%",
+        f"Inflation : {inflation_pct:.1f}%",
+    ]
+    st.markdown(
+        " | ".join(_banner_items),
+        help="Parametres macro du scenario courant (sidebar)",
+    )
+
+    # ── TABS (7 onglets — FR48, FR55) ──
+    (tab_cro, tab_ecl, tab_pe,
+     tab_asym, tab_perf, tab_explain, tab_data) = st.tabs([
+        "Synthese CRO",
+        "Risque Credit",
+        "Private Equity",
+        "Optimisation & Bilan",
         "Performance Modeles",
-        "Analyse ECL",
-        "Analyse PE",
-        "Staging & Transitions",
-        "Asymetries & Optimisation",
         "Explainabilite",
         "Donnees & Export",
-        "Analyse CRO",
     ])
 
-    # ── TAB 1 : Performance Modèles ──
+    # ── TAB 5 : Performance Modeles ──
     with tab_perf:
         render_section_title("Benchmark des Modèles PD")
 
@@ -462,27 +568,17 @@ def main() -> None:
 
         col1, col2 = st.columns(2)
         with col1:
-            st.plotly_chart(charts.plot_roc_curves(roc_data), use_container_width=True)
+            st.plotly_chart(charts.plot_roc_curves(roc_data), width="stretch")
         with col2:
             comparison_df = pd_suite.get_comparison_table()
-            st.plotly_chart(charts.plot_model_comparison(comparison_df), use_container_width=True)
-
-        # Courbe de calibration
-        render_section_title("Courbe de Calibration")
-        calib_predictions = {
-            name: res.y_pred_test for name, res in pd_suite.results.items()
-        }
-        st.plotly_chart(
-            charts.plot_calibration_curve(pd_suite.y_test, calib_predictions),
-            use_container_width=True,
-        )
+            st.plotly_chart(charts.plot_model_comparison(comparison_df), width="stretch")
 
         # Métriques détaillées
-        render_section_title("Métriques Détaillées")
+        render_section_title("Metriques Detaillees")
         comparison_styled = pd_suite.get_comparison_table()
         st.dataframe(
             comparison_styled,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -493,37 +589,59 @@ def main() -> None:
                 f"**{k}** = {v}" for k, v in sorted(params.items())
             )
             st.markdown(
-                f'<div style="color:#94A3B8;font-size:0.82rem;margin-top:0.5rem;">'
-                f'XGBoost — Hyperparamètres optimisés (RandomizedSearchCV) : '
+                f'<div style="color:{DASHBOARD_CONFIG.theme_text_muted};font-size:0.82rem;margin-top:0.5rem;">'
+                f'XGBoost — Hyperparametres optimises (RandomizedSearchCV) : '
                 f'{params_str}</div>',
                 unsafe_allow_html=True,
             )
 
-        col3, col4 = st.columns(2)
-        with col3:
-            feat_imp_df = pd_suite.get_feature_importance_table()
+        with st.expander("Calibration & Backtesting", expanded=False):
+            calib_predictions = {
+                name: res.y_pred_test for name, res in pd_suite.results.items()
+            }
             st.plotly_chart(
-                charts.plot_feature_importance(feat_imp_df, selected_model),
-                use_container_width=True,
+                charts.plot_calibration_curve(pd_suite.y_test, calib_predictions),
+                width="stretch",
             )
-        with col4:
-            iv_table = pd_suite.woe_binner.get_iv_table()
-            st.plotly_chart(charts.plot_iv_table(iv_table), use_container_width=True)
-
-        # Backtesting
-        render_section_title("Backtesting — Stabilité Temporelle")
-        selected_result = pd_suite.results[selected_model]
-        bt_metrics = ModelMetrics.compute_backtesting_metrics(
-            pd_suite.y_test, selected_result.y_pred_test, n_folds=6,
-        )
-        if not bt_metrics.empty:
-            st.plotly_chart(
-                charts.plot_backtesting_auc(bt_metrics),
-                use_container_width=True,
+            selected_result = pd_suite.results[selected_model]
+            bt_metrics = ModelMetrics.compute_backtesting_metrics(
+                pd_suite.y_test, selected_result.y_pred_test, n_folds=6,
             )
-            st.dataframe(bt_metrics, use_container_width=True, hide_index=True)
+            if not bt_metrics.empty:
+                st.plotly_chart(
+                    charts.plot_backtesting_auc(bt_metrics),
+                    width="stretch",
+                )
+                st.dataframe(bt_metrics, width="stretch", hide_index=True)
 
-    # ── TAB 2 : Analyse ECL (FR46) ──
+        with st.expander("Analyse des Features", expanded=False):
+            col3, col4 = st.columns(2)
+            with col3:
+                feat_imp_df = pd_suite.get_feature_importance_table()
+                st.plotly_chart(
+                    charts.plot_feature_importance(feat_imp_df, selected_model),
+                    width="stretch",
+                )
+            with col4:
+                iv_table = pd_suite.woe_binner.get_iv_table()
+                st.plotly_chart(charts.plot_iv_table(iv_table), width="stretch")
+
+        with st.expander("Scorecard Distribution", expanded=False):
+            lr_result = pd_suite.results.get("LR_WoE")
+            if lr_result and getattr(lr_result, "scorecard_params", None):
+                scores_test = pd_suite._pd_to_score(
+                    lr_result.y_pred_test, lr_result.scorecard_params,
+                )
+                st.plotly_chart(
+                    charts.plot_score_distribution(
+                        scores_test, pd_suite.y_test, lr_result.scorecard_params,
+                    ),
+                    width="stretch",
+                )
+            else:
+                st.info("Scorecard disponible uniquement pour le modele LR_WoE.")
+
+    # ── TAB 2 : Risque Credit (FR46) ──
     with tab_ecl:
         render_section_title("Décomposition ECL")
 
@@ -531,12 +649,12 @@ def main() -> None:
         with col5:
             st.plotly_chart(
                 charts.plot_ecl_by_segment(result_stressed),
-                use_container_width=True,
+                width="stretch",
             )
         with col6:
             st.plotly_chart(
                 charts.plot_ecl_coverage_scatter(result_stressed),
-                use_container_width=True,
+                width="stretch",
             )
 
         # HHI Concentration
@@ -548,22 +666,8 @@ def main() -> None:
 
         st.plotly_chart(
             charts.plot_hhi_gauge(hhi_seg, hhi_loan),
-            use_container_width=True,
+            width="stretch",
         )
-
-        col_hhi1, col_hhi2 = st.columns(2)
-        with col_hhi1:
-            if hhi_seg > 0.25:
-                st.warning(f"HHI Segments = {hhi_seg:.4f} — Concentration **ELEVEE**. Revoir la diversification.")
-            elif hhi_seg > 0.15:
-                st.info(f"HHI Segments = {hhi_seg:.4f} — Concentration **MODEREE**.")
-            else:
-                st.success(f"HHI Segments = {hhi_seg:.4f} — Portefeuille **diversifié**.")
-        with col_hhi2:
-            if hhi_loan > 0.25:
-                st.warning(f"HHI Prêts = {hhi_loan:.4f} — Concentration **ELEVEE** sur un type de produit.")
-            else:
-                st.success(f"HHI Prêts = {hhi_loan:.4f} — Mix produits acceptable.")
 
         # Waterfall
         render_section_title("Waterfall ECL (Base vs Stressé)")
@@ -576,34 +680,92 @@ def main() -> None:
         )
         st.plotly_chart(
             charts.plot_waterfall_ecl(waterfall_df),
-            use_container_width=True,
+            width="stretch",
         )
 
         # Résumé ECL
         render_section_title("Résumé ECL par Segment")
         ecl_summary = ecl_calc.compute_ecl_summary(result_stressed)
-        st.dataframe(ecl_summary, use_container_width=True, hide_index=True)
+        st.dataframe(ecl_summary, width="stretch", hide_index=True)
 
-    # ── TAB 3 : Analyse PE (FR48) ──
+        # Green Asset Ratio (ESG placeholder)
+        render_section_title("Green Asset Ratio (ESG)")
+        st.caption(
+            "GAR declaratif par secteur — placeholder conformite BCE 2024. "
+            "Les green_share sont estimatives, non auditees."
+        )
+        col_gar1, col_gar2, col_gar3 = st.columns(3)
+        with col_gar1:
+            st.metric("GAR Credit", f"{gar_result['gar_credit']:.1%}")
+        with col_gar2:
+            st.metric("GAR PE", f"{gar_result['gar_pe']:.1%}")
+        with col_gar3:
+            st.metric("GAR Total", f"{gar_result['gar_total']:.1%}")
+        st.dataframe(gar_result["details"], width="stretch", hide_index=True)
+
+        # ── STAGING & TRANSITIONS (merged from former Tab 4) ──
+        with st.expander("Staging & Transitions", expanded=True):
+            staging_engine = StagingEngine()
+            stage_summary = staging_engine.get_stage_summary(
+                result_stressed["stage"].values,
+                result_stressed["ead"].values,
+            )
+
+            col_stg1, col_stg2 = st.columns(2)
+            with col_stg1:
+                st.plotly_chart(
+                    charts.plot_stage_distribution(stage_summary),
+                    width="stretch",
+                )
+            with col_stg2:
+                render_section_title("Matrice de Transition (Base vs Stress)")
+                matrix = staging_engine.compute_transition_matrix(
+                    result_base["stage"].values,
+                    result_stressed["stage"].values,
+                )
+                st.plotly_chart(
+                    charts.plot_transition_matrix(matrix),
+                    width="stretch",
+                )
+
+            # Sankey migration diagram
+            st.plotly_chart(
+                charts.plot_stage_sankey(
+                    result_base["stage"].values,
+                    result_stressed["stage"].values,
+                ),
+                width="stretch",
+            )
+
+            render_section_title("Detail par Stage")
+            st.dataframe(stage_summary, width="stretch", hide_index=True)
+
+    # ── TAB 3 : Private Equity (FR48) ──
     with tab_pe:
         render_section_title("Portefeuille Private Equity — IFRS 13 Fair Value")
+
+        # Risk classification stacked bar (CVD-safe patterns)
+        st.plotly_chart(
+            charts.plot_pe_risk_stacked_bar(result_pe),
+            width="stretch",
+        )
 
         col_pe1, col_pe2 = st.columns(2)
         with col_pe1:
             st.plotly_chart(
                 charts.plot_pe_nav_by_sector(result_pe),
-                use_container_width=True,
+                width="stretch",
             )
         with col_pe2:
             st.plotly_chart(
                 charts.plot_pe_risk_categories(result_pe),
-                use_container_width=True,
+                width="stretch",
             )
 
         render_section_title("Performance PE — MOIC & Drawdown")
         st.plotly_chart(
             charts.plot_pe_moic_drawdown(result_pe),
-            use_container_width=True,
+            width="stretch",
         )
 
         # Tableau recapitulatif PE
@@ -623,7 +785,7 @@ def main() -> None:
             "MOIC Moyen", "IRR Moyen", "Drawdown Moyen",
             "EL PE Total", "RWA PE Total",
         ]
-        st.dataframe(pe_summary, use_container_width=True, hide_index=True)
+        st.dataframe(pe_summary, width="stretch", hide_index=True)
 
         # Parametres courants
         st.caption(
@@ -631,39 +793,7 @@ def main() -> None:
             f"Risk Weight PE : {rw_pe_selected}% (CRR3)"
         )
 
-    # ── TAB 4 : Staging & Transitions ──
-    with tab_staging:
-        render_section_title("Distribution des Stages")
-
-        staging_engine = StagingEngine()
-        stage_summary = staging_engine.get_stage_summary(
-            result_stressed["stage"].values,
-            result_stressed["ead"].values,
-        )
-
-        col7, col8 = st.columns(2)
-        with col7:
-            st.plotly_chart(
-                charts.plot_stage_distribution(stage_summary),
-                use_container_width=True,
-            )
-        with col8:
-            # Matrice de transition Base → Stressé
-            render_section_title("Matrice de Transition (Base vs Stress)")
-            matrix = staging_engine.compute_transition_matrix(
-                result_base["stage"].values,
-                result_stressed["stage"].values,
-            )
-            st.plotly_chart(
-                charts.plot_transition_matrix(matrix),
-                use_container_width=True,
-            )
-
-        # Détail par stage
-        render_section_title("Détail par Stage")
-        st.dataframe(stage_summary, use_container_width=True, hide_index=True)
-
-    # ── TAB 5 : Asymetries & Optimisation (FR55) ──
+    # ── TAB 4 : Optimisation & Bilan (FR55) ──
     with tab_asym:
         render_section_title("Matrice d'Asymetrie Credit vs PE")
 
@@ -671,12 +801,12 @@ def main() -> None:
         with col_as1:
             st.plotly_chart(
                 charts.plot_asymmetry_heatmap(asymmetry_matrix),
-                use_container_width=True,
+                width="stretch",
             )
         with col_as2:
             st.plotly_chart(
                 charts.plot_raroc_comparison(raroc_eva),
-                use_container_width=True,
+                width="stretch",
             )
 
         # Detail asymetrie
@@ -691,18 +821,17 @@ def main() -> None:
             "RWA Credit", "RWA PE", "Ratio RWA",
             "RAROC Credit", "RAROC PE", "Delta RAROC",
         ]
-        st.dataframe(asym_display, use_container_width=True, hide_index=True)
+        st.dataframe(asym_display, width="stretch", hide_index=True)
 
-        # CRR3 Sensitivity
-        render_section_title("Sensibilite CRR3 — Impact Risk Weight PE")
-        col_crr1, col_crr2 = st.columns([2, 1])
-        with col_crr1:
-            st.plotly_chart(
-                charts.plot_crr3_sensitivity(crr3_sensitivity),
-                use_container_width=True,
-            )
-        with col_crr2:
-            st.dataframe(crr3_sensitivity, use_container_width=True, hide_index=True)
+        with st.expander("Sensibilite CRR3 — Impact Risk Weight PE", expanded=False):
+            col_crr1, col_crr2 = st.columns([2, 1])
+            with col_crr1:
+                st.plotly_chart(
+                    charts.plot_crr3_sensitivity(crr3_sensitivity),
+                    width="stretch",
+                )
+            with col_crr2:
+                st.dataframe(crr3_sensitivity, width="stretch", hide_index=True)
 
         # Optimisation
         render_section_title("Optimisation Allocation (3 niveaux)")
@@ -735,7 +864,7 @@ def main() -> None:
                     "Poids Credit": [f"{v:.1%}" for v in weights_credit.values()],
                     "Poids PE": [f"{weights_pe.get(k, 0):.1%}" for k in weights_credit.keys()],
                 })
-                st.dataframe(weights_df, use_container_width=True, hide_index=True)
+                st.dataframe(weights_df, width="stretch", hide_index=True)
 
         # ── Drill-down sectoriel (FR54) ──
         render_section_title("Drill-down Sectoriel (FR54)")
@@ -746,24 +875,24 @@ def main() -> None:
             key="drill_sector",
         )
 
-        if _selected_sector and analytics_state.euler_contributions is not None:
+        if _selected_sector and analytics_state.proportional_contributions is not None:
             col_dd1, col_dd2 = st.columns(2)
 
             with col_dd1:
-                # Euler pour ce secteur
-                _euler = analytics_state.euler_contributions
-                _euler_sec = _euler[_euler["sector"] == _selected_sector]
-                if len(_euler_sec) > 0:
+                # Allocation proportionnelle pour ce secteur
+                _alloc = analytics_state.proportional_contributions
+                _alloc_sec = _alloc[_alloc["sector"] == _selected_sector]
+                if len(_alloc_sec) > 0:
                     st.markdown(f"**Allocation Proportionnelle — {_selected_sector}**")
-                    st.dataframe(_euler_sec[["canal", "risk_amount", "euler_share", "rwa"]],
-                                 use_container_width=True, hide_index=True)
+                    st.dataframe(_alloc_sec[["canal", "risk_amount", "proportional_share", "rwa"]],
+                                 width="stretch", hide_index=True)
 
                 # Factor attribution pour ce secteur
                 _factors = analytics_state.factor_attribution
                 if _factors is not None and len(_factors) > 0:
                     st.markdown(f"**Attribution Factorielle Macro**")
                     st.dataframe(_factors[["variable", "canal", "delta_from_base", "attribution"]],
-                                 use_container_width=True, hide_index=True)
+                                 width="stretch", hide_index=True)
 
             with col_dd2:
                 # Risk appetite pour ce secteur
@@ -772,7 +901,7 @@ def main() -> None:
                     _ra_sec = _ra[_ra["sector"] == _selected_sector] if "sector" in _ra.columns else _ra
                     if len(_ra_sec) > 0:
                         st.markdown(f"**Risk Appetite — {_selected_sector}**")
-                        st.dataframe(_ra_sec, use_container_width=True, hide_index=True)
+                        st.dataframe(_ra_sec, width="stretch", hide_index=True)
 
                 # Trajectoires pour ce secteur
                 _traj = analytics_state.trajectories
@@ -782,11 +911,11 @@ def main() -> None:
                     if "sector" in _traj_display.columns:
                         _traj_sec = _traj_display[_traj_display["sector"] == _selected_sector]
                         if len(_traj_sec) > 0:
-                            st.dataframe(_traj_sec, use_container_width=True, hide_index=True)
+                            st.dataframe(_traj_sec, width="stretch", hide_index=True)
                         else:
-                            st.dataframe(_traj_display, use_container_width=True, hide_index=True)
+                            st.dataframe(_traj_display, width="stretch", hide_index=True)
                     else:
-                        st.dataframe(_traj_display, use_container_width=True, hide_index=True)
+                        st.dataframe(_traj_display, width="stretch", hide_index=True)
 
     # ── TAB 6 : Explainabilite ──
     with tab_explain:
@@ -805,18 +934,18 @@ def main() -> None:
             if selected_model == "LR_WoE":
                 feature_names = pd_suite._woe_features
                 X_shap = pd_suite.X_test[feature_names].values
-                # Extraire la LogisticRegression du CalibratedClassifierCV
-                calibrated = model_result.model
-                if hasattr(calibrated, 'calibrated_classifiers_'):
-                    cc = calibrated.calibrated_classifiers_[0]
-                    # sklearn >= 1.2 : .estimator, plus ancien : .base_estimator
-                    inner_model = getattr(cc, 'estimator', getattr(cc, 'base_estimator', calibrated))
-                else:
-                    inner_model = calibrated
             else:
                 feature_names = pd_suite._raw_features
                 X_shap = pd_suite.X_test[feature_names].values
-                inner_model = model_result.model
+
+            # Extraire le modèle de base du CalibratedClassifierCV
+            # (tous les modeles sont wrappés dans CalibratedClassifierCV)
+            calibrated = model_result.model
+            if hasattr(calibrated, 'calibrated_classifiers_'):
+                cc = calibrated.calibrated_classifiers_[0]
+                inner_model = getattr(cc, 'estimator', getattr(cc, 'base_estimator', calibrated))
+            else:
+                inner_model = calibrated
 
             # Sous-échantillonner pour la performance
             n_sample = min(1000, len(X_shap))
@@ -831,13 +960,14 @@ def main() -> None:
             with col_s1:
                 st.plotly_chart(
                     charts.plot_shap_summary(shap_vals, feature_names),
-                    use_container_width=True,
+                    width="stretch",
                 )
             with col_s2:
                 st.plotly_chart(
                     charts.plot_shap_beeswarm(shap_vals, X_sample, feature_names),
-                    use_container_width=True,
+                    width="stretch",
                 )
+                st.caption("Couleur : rouge = valeur feature elevee, bleu = valeur feature basse")
 
             # SHAP individuel avec @st.fragment (FR49 — pas de recompute pipeline)
             render_section_title("Explication Entreprise Individuelle (FR49)")
@@ -867,7 +997,7 @@ def main() -> None:
                     charts.plot_shap_force_individual(
                         client_shap, client_features, _feature_names,
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 # Tableau detaille
@@ -876,7 +1006,7 @@ def main() -> None:
                     "SHAP Value": client_shap,
                     "Feature Value": client_features,
                 }).sort_values("SHAP Value", key=abs, ascending=False).head(10)
-                st.dataframe(client_df, use_container_width=True, hide_index=True)
+                st.dataframe(client_df, width="stretch", hide_index=True)
 
             _shap_individual_fragment(shap_vals, X_sample, feature_names, n_sample)
 
@@ -899,7 +1029,7 @@ def main() -> None:
             available_cols = [c for c in display_cols if c in result_stressed.columns]
             st.dataframe(
                 result_stressed[available_cols].head(100),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         with col10:
@@ -929,7 +1059,7 @@ def main() -> None:
         # ── Export Excel 8 feuilles (FR50) ──
         render_section_title("Export Multi-Sheet (FR50)")
 
-        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        col_exp1, col_exp2, col_exp3, col_exp4 = st.columns(4)
         with col_exp1:
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -955,16 +1085,16 @@ def main() -> None:
                     if selected_model == "LR_WoE":
                         _fn = pd_suite._woe_features
                         _Xs = pd_suite.X_test[_fn].values[:500]
-                        _cal = _mr.model
-                        if hasattr(_cal, 'calibrated_classifiers_'):
-                            _cc = _cal.calibrated_classifiers_[0]
-                            _im = getattr(_cc, 'estimator', getattr(_cc, 'base_estimator', _cal))
-                        else:
-                            _im = _cal
                     else:
                         _fn = pd_suite._raw_features
                         _Xs = pd_suite.X_test[_fn].values[:500]
-                        _im = _mr.model
+                    # Extraire le modèle de base du CalibratedClassifierCV
+                    _cal = _mr.model
+                    if hasattr(_cal, 'calibrated_classifiers_'):
+                        _cc = _cal.calibrated_classifiers_[0]
+                        _im = getattr(_cc, 'estimator', getattr(_cc, 'base_estimator', _cal))
+                    else:
+                        _im = _cal
                     _sv = compute_shap_values(_im, _Xs, _fn, selected_model)
                     _mean_abs = np.abs(_sv).mean(axis=0)
                     _top_idx = np.argsort(_mean_abs)[::-1][:10]
@@ -1002,12 +1132,13 @@ def main() -> None:
                 # Bonus: asymmetry matrix
                 asymmetry_matrix.to_excel(writer, sheet_name="8_Asymetrie", index=False)
 
-            st.download_button(
+            if st.download_button(
                 label="Export complet (Excel 8 feuilles)",
                 data=buffer.getvalue(),
                 file_name="ifrs9_cockpit_complet.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+            ):
+                st.toast("Export Excel genere avec succes", icon=":material/check_circle:")
 
         with col_exp2:
             # Export rapport CRO texte
@@ -1018,28 +1149,56 @@ def main() -> None:
                 unemployment_rate=unemployment_rate,
                 gdp_growth=gdp_growth,
             )
-            st.download_button(
+            if st.download_button(
                 label="Rapport CRO (TXT)",
                 data=cro_report,
                 file_name="rapport_cro.txt",
                 mime="text/plain",
-            )
+            ):
+                st.toast("Rapport CRO exporte", icon=":material/check_circle:")
 
         with col_exp3:
             # Export synthese AI Analyst
             _ai_narrative = analytics_state.narrative or ""
-            st.download_button(
+            if st.download_button(
                 label="Synthese AI Analyst (TXT)",
                 data=_ai_narrative,
                 file_name="ai_analyst_synthese.txt",
                 mime="text/plain",
                 key="export_ai_txt",
+            ):
+                st.toast("Synthese AI Analyst exportee", icon=":material/check_circle:")
+
+        with col_exp4:
+            # Export journal d'audit LaTeX
+            _latex_content = generate_audit_latex(
+                macro_params=macro_params,
+                selected_model=selected_model,
+                result_base=result_base,
+                result_stressed=result_stressed,
+                result_pe=result_pe,
+                advanced_metrics=advanced_metrics,
+                hhi_cross=hhi_cross,
+                raroc_eva=raroc_eva,
+                asymmetry_matrix=asymmetry_matrix,
+                optimization=optimization,
+                crr3_sensitivity=crr3_sensitivity,
+                analytics_state=analytics_state,
+                trans_matrix=trans_matrix,
             )
+            if st.download_button(
+                label="Journal d'Audit (LaTeX)",
+                data=_latex_content,
+                file_name="ifrs9_audit_trail.tex",
+                mime="application/x-tex",
+                key="export_latex",
+            ):
+                st.toast("Journal d'audit LaTeX exporte", icon=":material/check_circle:")
 
-        render_section_title("Rapport CRO (regles)")
-        st.code(cro_report, language=None)
+        with st.expander("Rapport CRO (regles)", expanded=False):
+            st.code(cro_report, language=None)
 
-    # ── TAB 8 : Analyse CRO — AI Analyst (FR55) ──
+    # ── TAB 1 : Synthese CRO — AI Analyst (FR55) ──
     with tab_cro:
         render_section_title("Analyse CRO — AI Analyst (2 passes)")
         st.caption(
@@ -1052,7 +1211,7 @@ def main() -> None:
         if analytics_state.risk_appetite_matrix is not None and len(analytics_state.risk_appetite_matrix) > 0:
             st.plotly_chart(
                 charts.plot_risk_appetite_matrix(analytics_state.risk_appetite_matrix),
-                use_container_width=True,
+                width="stretch",
             )
 
         # ── Regime detecte ──
@@ -1071,18 +1230,18 @@ def main() -> None:
         # ── Tipping Points ──
         if analytics_state.tipping_points is not None and len(analytics_state.tipping_points) > 0:
             render_section_title("Seuils de Basculement (Tipping Points)")
-            st.dataframe(analytics_state.tipping_points, use_container_width=True, hide_index=True)
+            st.dataframe(analytics_state.tipping_points, width="stretch", hide_index=True)
 
         # ── RST Distance + Scenario de rupture (FR54) ──
         if analytics_state.rst_distance > 0:
-            _rst_color = "#EF4444" if analytics_state.rst_distance < 1.0 else "#F59E0B" if analytics_state.rst_distance < 2.0 else "#06D6A0"
+            _rst_color = DASHBOARD_CONFIG.color_danger if analytics_state.rst_distance < 1.0 else DASHBOARD_CONFIG.color_warning if analytics_state.rst_distance < 2.0 else DASHBOARD_CONFIG.color_success
             _rst = analytics_state.rst_result or {}
             _rst_custom = " (cible personnalisee)" if rst_custom_enabled else ""
             st.markdown(
                 f'<div style="padding:0.5rem 1rem;border-left:3px solid {_rst_color};margin:0.5rem 0;">'
                 f'<b>Distance au point de rupture (RST){_rst_custom} :</b> '
                 f'<span style="color:{_rst_color};font-weight:700;">{analytics_state.rst_distance:.2f} sigma</span>'
-                f'<br/><span style="color:#94A3B8;font-size:0.85rem;">'
+                f'<br/><span style="color:{DASHBOARD_CONFIG.theme_text_muted};font-size:0.85rem;">'
                 f'Seuil ECL : {format_euro(_rst.get("ecl_breach_threshold", 0))} | '
                 f'Capital CET1 : {format_euro(_rst.get("capital_base", 0))}'
                 f'</span></div>',
@@ -1098,17 +1257,22 @@ def main() -> None:
                     "Baseline": f"{getattr(SCENARIO_BASE, var, 0.0):.2f}",
                     "Delta": f"{val - getattr(SCENARIO_BASE, var, 0.0):+.2f}",
                 } for var, val in _rst_scen.items()])
-                st.dataframe(rst_scen_df, use_container_width=True, hide_index=True)
+                st.dataframe(rst_scen_df, width="stretch", hide_index=True)
 
         # ── Trajectoires prospectives ──
         if analytics_state.trajectories is not None and len(analytics_state.trajectories) > 0:
             render_section_title("Trajectoires Prospectives (T+3 a T+12)")
-            st.dataframe(analytics_state.trajectories, use_container_width=True, hide_index=True)
+            st.plotly_chart(
+                charts.plot_trajectories_chart(analytics_state.trajectories),
+                width="stretch",
+            )
+            with st.expander("Donnees brutes trajectoires"):
+                st.dataframe(analytics_state.trajectories, width="stretch", hide_index=True)
 
         # ── Early Warning ──
         if analytics_state.early_warning is not None and len(analytics_state.early_warning) > 0:
             render_section_title("Indicateurs d'Alerte Precoce")
-            st.dataframe(analytics_state.early_warning, use_container_width=True, hide_index=True)
+            st.dataframe(analytics_state.early_warning, width="stretch", hide_index=True)
 
         # ── Narrative AI Analyst (synthese texte) ──
         render_section_title("Synthese Narrative (Passe {})".format(analytics_state.pass_number))

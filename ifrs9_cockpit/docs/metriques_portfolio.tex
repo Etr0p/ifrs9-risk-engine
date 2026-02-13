@@ -1,0 +1,1028 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- M\'etriques Portfolio}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+% ─── PAGE DE TITRE ────────────────────────────────────────
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries\color{darkblue} M\'etriques Portfolio\par}
+\vspace{0.5cm}
+{\LARGE\color{steelblue} Module Comparateur \& Indicateurs de Risque\par}
+\vspace{1.5cm}
+{\large\color{gray} IFRS 9 Risk Cockpit --- Documentation technique\par}
+\vspace{0.5cm}
+{\large\color{gray} \texttt{ifrs9\_cockpit/engine/comparator.py}\par}
+\vspace{2cm}
+{\normalsize
+\begin{tabular}{ll}
+\textbf{Module} & \texttt{PortfolioComparator} \\
+\textbf{Pipeline} & FR41 (HHI), FR42 (m\'etriques avanc\'ees), FR44 (RAROC/EVA) \\
+\textbf{R\'ef. r\'eglementaire} & CRR3 Art.\,133, B\^ale III, IFRS~9 \S5.5 \\
+\textbf{Version} & Phase 6 --- Post-calibration audit \\
+\end{tabular}
+}
+\vfill
+{\small\color{gray} Ce document d\'ecrit les m\'etriques de portefeuille telles qu'impl\'ement\'ees dans le code source.}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════
+\section{Introduction et architecture du comparateur}
+% ══════════════════════════════════════════════════════════
+
+Le module \texttt{comparator.py} constitue le c\oe{}ur analytique du cockpit IFRS~9 pour les m\'etriques de niveau portefeuille. Il re\c{c}oit en entr\'ee les r\'esultats des deux pipelines de calcul~:
+
+\begin{itemize}[nosep]
+    \item \textbf{Pipeline cr\'edit} (\texttt{ECLCalculator.calculate()})~: DataFrame avec colonnes \texttt{enterprise\_id}, \texttt{sector}, \texttt{pd\_12m}, \texttt{pd\_lifetime}, \texttt{lgd}, \texttt{ead}, \texttt{ecl\_weighted}, \texttt{stage}, \texttt{rwa\_credit}.
+    \item \textbf{Pipeline PE} (\texttt{PECalculator.calculate()})~: DataFrame avec colonnes \texttt{enterprise\_id}, \texttt{sector}, \texttt{nav}, \texttt{delta\_nav}, \texttt{expected\_loss\_pe}, \texttt{risk\_category}, \texttt{rwa\_pe}.
+\end{itemize}
+
+La classe \texttt{PortfolioComparator} orchestre sept familles de calculs~:
+
+\begin{enumerate}[nosep]
+    \item M\'etriques cr\'edit avanc\'ees (NPL, Cost of Risk, Texas ratio, coverage) --- FR42
+    \item Concentration HHI cross-cell (5 secteurs $\times$ 2 canaux) --- FR41
+    \item RAROC et EVA par cellule secteur$\times$canal --- FR44
+    \item Scores de r\'esilience cr\'edit et PE --- FR19
+    \item Matrice d'asym\'etrie cr\'edit vs PE --- FR20
+    \item Optimisation d'allocation 3 niveaux (softmax) --- FR22
+    \item Sensibilit\'e CRR3 et seuils de basculement --- FR23/FR24
+\end{enumerate}
+
+\begin{definitionbox}[Grille cross-cell]
+Le comparateur d\'ecoupe le portefeuille en $10$ cellules~: 5~secteurs (Technologie, Industrie, Sant\'e, Immobilier, Services) $\times$ 2~canaux (Cr\'edit, PE). Chaque m\'etrique est calcul\'ee par cellule, puis agr\'eg\'ee avec des lignes \textbf{Total} par canal.
+\end{definitionbox}
+
+\begin{warningbox}[Capital dynamique]
+L'ancien calcul statique \texttt{rwa\_budget $\times$ cet1\_target = 1{,}3\,\text{Md}} a \'et\'e remplac\'e. Le capital de base prudentiel est d\'esormais d\'eriv\'e \textbf{dynamiquement} du RWA r\'eel du portefeuille~: $\text{Capital} = \text{RWA}_{\text{r\'eel}} \times \text{CET1}_{\text{target}}$. Le RWA r\'eel du portefeuille synth\'etique est de l'ordre de $\sim$20\,Md\,EUR (10\,K entreprises $\times$ 2\,M\,EUR EAD moyen $\times$ RW\,1{,}0).
+\end{warningbox}
+
+% ══════════════════════════════════════════════════════════
+\section{Indice de concentration HHI}
+\label{sec:hhi}
+% ══════════════════════════════════════════════════════════
+
+\subsection{D\'efinition et formule g\'en\'erale}
+
+L'indice de Herfindahl-Hirschman (HHI) mesure la concentration d'un portefeuille. Plus le HHI est \'elev\'e, plus le portefeuille est concentr\'e sur un petit nombre de cellules.
+
+\begin{formulebox}[HHI --- Formule g\'en\'erale]
+Soit $N$ cellules avec des parts $s_i = \frac{\text{Exposition}_i}{\sum_j \text{Exposition}_j}$. L'indice HHI est~:
+\begin{equation}
+    \text{HHI} = \sum_{i=1}^{N} s_i^2 \times 10\,000
+    \label{eq:hhi_general}
+\end{equation}
+\end{formulebox}
+
+L'\'echelle est en \emph{points HHI} (multipli\'es par $10\,000$), de sorte que~:
+\begin{itemize}[nosep]
+    \item HHI $= 10\,000$ : portefeuille 100\,\% concentr\'e sur une seule cellule.
+    \item HHI $= N^{-1} \times 10\,000$ : parfaitement \'equipond\'er\'e entre $N$ cellules.
+    \item HHI $= 2\,000$ pour 5 cellules \'egales ; HHI $= 1\,000$ pour 10 cellules \'egales.
+\end{itemize}
+
+\subsection{Trois niveaux de HHI dans le code}
+
+Le module calcule trois variantes du HHI~:
+
+\subsubsection{HHI Cr\'edit (5 cellules)}
+Parts calcul\'ees sur l'EAD par secteur au sein du portefeuille cr\'edit uniquement~:
+\begin{equation}
+    s_i^{\text{cr\'edit}} = \frac{\text{EAD}_i}{\sum_{j=1}^{5}\text{EAD}_j}, \qquad
+    \text{HHI}_{\text{cr\'edit}} = \sum_{i=1}^{5} \left(s_i^{\text{cr\'edit}}\right)^2 \times 10\,000
+    \label{eq:hhi_credit}
+\end{equation}
+
+\subsubsection{HHI PE (5 cellules)}
+Parts calcul\'ees sur la NAV par secteur au sein du portefeuille PE uniquement~:
+\begin{equation}
+    s_i^{\text{PE}} = \frac{\text{NAV}_i}{\sum_{j=1}^{5}\text{NAV}_j}, \qquad
+    \text{HHI}_{\text{PE}} = \sum_{i=1}^{5} \left(s_i^{\text{PE}}\right)^2 \times 10\,000
+    \label{eq:hhi_pe}
+\end{equation}
+
+\subsubsection{HHI Cross-cell (10 cellules)}
+Parts calcul\'ees sur l'exposition totale (EAD + NAV) en consid\'erant les 10 cellules~:
+\begin{equation}
+    \text{Exposition}_{\text{totale}} = \sum_{i=1}^{5}\text{EAD}_i + \sum_{i=1}^{5}\text{NAV}_i
+    \label{eq:exposure_total}
+\end{equation}
+\begin{equation}
+    s_k = \frac{\text{Exposition}_k}{\text{Exposition}_{\text{totale}}}, \quad k \in \{1, \ldots, 10\}, \qquad
+    \text{HHI}_{\text{crosscell}} = \sum_{k=1}^{10} s_k^2 \times 10\,000
+    \label{eq:hhi_crosscell}
+\end{equation}
+
+\begin{interpretbox}[Interpr\'etation \'economique]
+Le HHI cross-cell est la m\'etrique la plus compl\`ete car elle capture \`a la fois la concentration sectorielle \emph{et} la concentration inter-canaux. Un portefeuille o\`u 80\,\% de l'exposition est en cr\'edit immobilier aura un HHI cross-cell \'elev\'e m\^eme si le cr\'edit est bien diversifi\'e internement (les 5 secteurs cr\'edit sont \'equilibr\'es mais le PE est n\'egligeable).
+\end{interpretbox}
+
+\subsection{HHI Name Level --- Concentration par contrepartie (ICAAP Pilier~2)}
+\label{subsec:hhi_name}
+
+\begin{warningbox}[Angle mort corrig\'e (RJ audit v3)]
+Le HHI sectoriel (5~cellules) ne capture pas la concentration \textbf{idiosyncratique}~: un portefeuille peut avoir 5~secteurs \'equilibr\'es mais une seule contrepartie pesant 20\,\% du total. Le HHI Name Level comble ce trou.
+\end{warningbox}
+
+\begin{formulebox}[HHI Name Level]
+Soit $M$ contreparties (identifi\'ees par \texttt{enterprise\_id}) avec des expositions $e_i$~:
+\begin{equation}
+    \text{HHI}_{\text{name}} = \sum_{i=1}^{M} \left(\frac{e_i}{\sum_{j=1}^{M} e_j}\right)^2 \times 10\,000
+    \label{eq:hhi_name}
+\end{equation}
+\end{formulebox}
+
+\begin{interpretbox}[Seuils ICAAP]
+\begin{itemize}[nosep]
+    \item $\text{HHI}_{\text{name}} < 30$ : granularit\'e satisfaisante (portefeuille bien diversifi\'e par contrepartie).
+    \item $30 \leq \text{HHI}_{\text{name}} < 50$ : vigilance --- quelques contreparties dominent.
+    \item $\text{HHI}_{\text{name}} \geq 50$ : \textbf{alerte concentration idiosyncratique}. Un auditeur BCE ou ICAAP demandera des mesures de rem\'ediation.
+\end{itemize}
+Le HHI Name est calcul\'e s\'epar\'ement pour le cr\'edit (sur EAD) et le PE (sur NAV).
+\end{interpretbox}
+
+\subsection{Cl\'e de retour}
+
+La m\'ethode \texttt{compute\_hhi\_crosscell()} retourne un dictionnaire~:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Cl\'e} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{hhi\_credit} & \texttt{float} & HHI du portefeuille cr\'edit (5 secteurs) \\
+\texttt{hhi\_pe} & \texttt{float} & HHI du portefeuille PE (5 secteurs) \\
+\texttt{hhi\_crosscell} & \texttt{float} & HHI des 10 cellules secteur $\times$ canal \\
+\texttt{hhi\_name\_credit} & \texttt{float} & HHI par contrepartie cr\'edit (ICAAP) \\
+\texttt{hhi\_name\_pe} & \texttt{float} & HHI par contrepartie PE (ICAAP) \\
+\texttt{shares} & \texttt{DataFrame} & Parts par cellule (sector, canal, exposure, share) \\
+\bottomrule
+\end{tabular}
+\caption{Structure du r\'esultat HHI (cl\'e \texttt{hhi\_crosscell}, sans underscore interm\'ediaire).}
+\label{tab:hhi_return}
+\end{table}
+
+% ══════════════════════════════════════════════════════════
+\section{RAROC --- Risk-Adjusted Return on Capital}
+\label{sec:raroc}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Principes g\'en\'eraux}
+
+Le RAROC mesure la rentabilit\'e ajust\'ee du risque du portefeuille. Il compare le profit net apr\`es charges op\'erationnelles, pertes attendues et imp\^ots au capital r\'eglementaire allou\'e.
+
+\begin{definitionbox}[Param\`etres \texttt{BaselConfig} utilis\'es]
+\begin{tabular}{llr}
+\toprule
+\textbf{Param\`etre} & \textbf{Description} & \textbf{Valeur} \\
+\midrule
+\texttt{cir} & Cost/Income Ratio & 0{,}45 \\
+\texttt{tax\_rate} & Taux d'imposition effectif & 0{,}25 \\
+\texttt{cet1\_target} & Ratio CET1 cible & 13\,\% \\
+\texttt{liquidity\_premium\_bps} & Prime de liquidit\'e & 50\,bps \\
+\texttt{commercial\_margin\_bps} & Marge commerciale bancaire & 150\,bps \\
+\bottomrule
+\end{tabular}
+\end{definitionbox}
+
+\subsection{RAROC Cr\'edit}
+
+\subsubsection{Revenu~: NII \`a l'origination (spread fixe)}
+
+\begin{warningbox}[Spread \`a l'origination, pas au stress courant]
+Le NII (Net Interest Income) est calcul\'e \`a partir d'un spread fix\'e \textbf{\`a l'origination} et non du spread Merton courant (stress\'e). La banque a factur\'e un spread bas\'e sur le risque initial du secteur au moment de l'octroi. En stress, seule la perte attendue (EL) change, ce qui fait varier le RAROC. Cette correction \'evite que le NII et l'EL bougent dans le m\^eme sens, ce qui rendait le RAROC insensible au stress (bug historique : RAROC stuck \`a $\sim$2{,}85\,\%).
+\end{warningbox}
+
+Le spread d'origination est calcul\'e via le mod\`ele de Merton appliqu\'e au risque de base du secteur~:
+
+\begin{formulebox}[Spread d'origination (Merton)]
+\begin{equation}
+    \text{cs}_{\text{orig}} = -\ln\!\bigl(1 - \text{PD}_{\text{base}} \times \text{LGD}_{\text{TTC}}\bigr) + \lambda_{\text{liq}} + \lambda_{\text{comm}}
+    \label{eq:cs_origination}
+\end{equation}
+o\`u~:
+\begin{itemize}[nosep]
+    \item $\text{PD}_{\text{base}}$ = \texttt{sector.base\_default\_rate} (taux de d\'efaut de base du secteur)
+    \item $\text{LGD}_{\text{TTC}}$ = \texttt{LGD\_CONFIG.lgd\_ttc\_mean} $= 0{,}35$
+    \item $\lambda_{\text{liq}}$ = \texttt{liquidity\_premium\_bps} $/\, 10\,000 = 0{,}0050$
+    \item $\lambda_{\text{comm}}$ = \texttt{commercial\_margin\_bps} $/\, 10\,000 = 0{,}0150$
+\end{itemize}
+Le spread est clip\'e dans l'intervalle $[0{,}50\,\% ;\; 20{,}00\,\%]$ pour \'eviter les valeurs extr\^emes.
+\end{formulebox}
+
+Le NII (Net Interest Income) pour un secteur donn\'e est alors~:
+\begin{equation}
+    \text{NII} = \text{EAD}_{\text{secteur}} \times \text{cs}_{\text{orig}}
+    \label{eq:nii}
+\end{equation}
+
+\subsubsection{Perte attendue annuelle (EL)}
+
+La perte attendue est calcul\'ee \`a la PD \textbf{courante} (stress\'ee), et c'est l\`a que le stress impacte le RAROC~:
+
+\begin{equation}
+    \text{EL}_{\text{annuel}} = \sum_{i \in \text{secteur}} \text{PD}_{12m,i} \times \text{LGD}_i \times \text{EAD}_i
+    \label{eq:annual_el}
+\end{equation}
+
+\begin{warningbox}[EL annuelle, pas ECL stock IFRS~9]
+La perte utilis\'ee dans le RAROC est l'EL \textbf{annuelle} ($\text{PD} \times \text{LGD} \times \text{EAD}$) et non l'ECL stock IFRS~9 (qui est une provision lifetime multi-ann\'ees). Utiliser l'ECL stock produisait un RAROC syst\'ematiquement nul (bug historique corrig\'e).
+\end{warningbox}
+
+\subsubsection{Formule RAROC compl\`ete (H5)}
+
+\begin{formulebox}[RAROC Cr\'edit --- Formule compl\`ete]
+\begin{align}
+    \text{Revenue}_{\text{net}} &= \text{NII} \times (1 - \text{CIR}) \label{eq:rev_net} \\
+    \text{Profit}_{\text{net}} &= \bigl(\text{Revenue}_{\text{net}} - \text{EL}_{\text{annuel}}\bigr) \times (1 - \tau) \label{eq:profit_net} \\
+    \text{Capital} &= \text{RWA}_{\text{cr\'edit}} \times \text{CET1}_{\text{target}} \label{eq:capital_credit} \\
+    \text{RAROC}_{\text{cr\'edit}} &= \frac{\text{Profit}_{\text{net}}}{\text{Capital}} \label{eq:raroc_credit}
+\end{align}
+avec $\text{CIR} = 0{,}45$ et $\tau = 0{,}25$.
+\end{formulebox}
+
+\subsection{RAROC PE}
+
+Le RAROC PE suit la m\^eme structure mais utilise l'IRR et la NAV~:
+
+\begin{formulebox}[RAROC PE]
+\begin{align}
+    \text{Revenue}_{\text{PE}} &= \text{NAV} \times \overline{\text{IRR}} \label{eq:rev_pe} \\
+    \text{Revenue}_{\text{net,PE}} &= \text{Revenue}_{\text{PE}} \times (1 - \text{CIR}) \label{eq:rev_net_pe} \\
+    \text{Profit}_{\text{net,PE}} &= \bigl(\text{Revenue}_{\text{net,PE}} - \text{EL}_{\text{PE}}\bigr) \times (1 - \tau) \label{eq:profit_net_pe} \\
+    \text{Capital}_{\text{PE}} &= \text{RWA}_{\text{PE}} \times \text{CET1}_{\text{target}} \label{eq:capital_pe} \\
+    \text{RAROC}_{\text{PE}} &= \frac{\text{Profit}_{\text{net,PE}}}{\text{Capital}_{\text{PE}}} \label{eq:raroc_pe}
+\end{align}
+o\`u $\overline{\text{IRR}}$ est le rendement interne moyen des positions PE du secteur.
+\end{formulebox}
+
+\subsection{Agr\'egation par canal (lignes Total)}
+
+Pour les lignes Total (une par canal), le RAROC est \textbf{recalcul\'e} \`a partir des sommes (et non moyenn\'e)~:
+\begin{equation}
+    \text{RAROC}_{\text{Total}} = \frac{\bigl(\sum \text{Rev} \times (1-\text{CIR}) - \sum \text{Loss}\bigr) \times (1-\tau)}{\sum \text{Capital}}
+    \label{eq:raroc_total}
+\end{equation}
+
+Le r\'esultat final contient 12 lignes~: 5 secteurs $\times$ Cr\'edit + 5 secteurs $\times$ PE + 1 Total Cr\'edit + 1 Total PE.
+
+\subsection{Sensibilit\'e au stress}
+
+Le m\'ecanisme de sensibilit\'e est le suivant~:
+\begin{itemize}[nosep]
+    \item \textbf{NII} (revenu) est \textbf{fixe} : il ne change pas avec le stress car il est bas\'e sur le spread d'origination.
+    \item \textbf{EL annuelle} est \textbf{variable} : la PD courante augmente en adverse ($\text{PD} \uparrow \Rightarrow \text{EL} \uparrow$).
+    \item \textbf{R\'esultat} : en sc\'enario adverse, le profit net diminue et le RAROC chute.
+\end{itemize}
+
+Comportement observ\'e apr\`es correction~: Base $\approx +4\,\%$, Adverse $\approx -21\,\%$, Reprise $\approx +8\,\%$.
+
+\begin{warningbox}[Hypoth\`ese de funding --- Taux fixe (RJ audit v3)]
+Le mod\`ele suppose implicitement des pr\^ets \`a \textbf{taux fixe} ou un funding parfaitement adoss\'e. Si les pr\^ets \'etaient \`a taux variable, le NII devrait bouger avec la courbe des taux (Euribor forward), m\^eme si le credit spread commercial est fixe. Mod\'eliser la courbe Euribor forward est hors scope de ce cockpit. Cette hypoth\`ese est document\'ee ici pour transparence.
+\end{warningbox}
+
+% ══════════════════════════════════════════════════════════
+\section{EVA --- Economic Value Added}
+\label{sec:eva}
+% ══════════════════════════════════════════════════════════
+
+\begin{definitionbox}[EVA --- D\'efinition]
+L'Economic Value Added mesure la cr\'eation de valeur \'economique au-del\`a du co\^ut du capital. Un EVA positif indique que le portefeuille g\'en\`ere un rendement sup\'erieur au co\^ut d'opportunit\'e du capital r\'eglementaire.
+\end{definitionbox}
+
+\begin{formulebox}[EVA]
+\begin{equation}
+    \text{EVA} = \bigl(\text{RAROC} - \text{CoE}\bigr) \times \text{Capital}
+    \label{eq:eva}
+\end{equation}
+o\`u $\text{CoE}$ (Cost of Equity) $= \text{CET1}_{\text{target}} = 13\,\%$.
+\end{formulebox}
+
+L'EVA est calcul\'ee pour chaque cellule secteur$\times$canal, de sorte que~:
+
+\begin{equation}
+    \text{EVA}_{\text{cellule}} = \bigl(\text{RAROC}_{\text{cellule}} - 0{,}13\bigr) \times \text{Capital}_{\text{cellule}}
+    \label{eq:eva_cell}
+\end{equation}
+
+\begin{interpretbox}[Interpr\'etation]
+\begin{itemize}[nosep]
+    \item $\text{EVA} > 0$ : la cellule cr\'ee de la valeur ; le rendement ajust\'e du risque d\'epasse le co\^ut du capital.
+    \item $\text{EVA} < 0$ : la cellule d\'etruit de la valeur ; il serait pr\'ef\'erable de r\'eduire l'exposition ou de r\'eallouer le capital.
+    \item L'EVA est exprim\'ee en EUR et permet d'agr\'eger directement les contributions des diff\'erentes cellules.
+\end{itemize}
+\end{interpretbox}
+
+% ══════════════════════════════════════════════════════════
+\section{Texas Ratio}
+\label{sec:texas}
+% ══════════════════════════════════════════════════════════
+
+\begin{definitionbox}[Texas Ratio \textbf{Synth\'etique} --- D\'efinition corrig\'ee (C3)]
+Le Texas Ratio mesure la capacit\'e de la banque \`a absorber les cr\'eances douteuses. \textbf{Correction C3} : le ratio porte exclusivement sur le \textbf{Stage~3} (d\'efauts av\'er\'es), et non sur le portefeuille total. Le d\'enominateur inclut les provisions Stage~3 \emph{et} la part de capital allou\'ee.
+\end{definitionbox}
+
+\begin{warningbox}[D\'enominateur non-standard (RJ audit v3)]
+Ce Texas Ratio est qualifi\'e de \textbf{synth\'etique} car son d\'enominateur utilise le \textbf{capital r\'eglementaire allou\'e} ($\text{RWA} \times \text{CET1}_{\text{target}}$) et non les fonds propres tangibles r\'eels (Tangible Common Equity). Le Texas Ratio classique bancaire utilise $\text{NPL} / (\text{R\'eserves} + \text{TCE})$. Dans le contexte de ce cockpit (outil de simulation sur donn\'ees synth\'etiques, sans acc\`es au bilan r\'eel), le capital r\'eglementaire constitue le meilleur proxy disponible. Le champ \texttt{texas\_ratio\_synth} est renomm\'e en cons\'equence.
+\end{warningbox}
+
+\subsection{Formule par secteur}
+
+\begin{formulebox}[Texas Ratio (Stage~3 uniquement)]
+\begin{equation}
+    \text{Texas}_s = \frac{\text{EAD}_{s,\text{Stage\,3}}}{\text{ECL}_{s,\text{Stage\,3}} + \text{Capital}_s}
+    \label{eq:texas_sector}
+\end{equation}
+o\`u la part de capital $\text{Capital}_s$ est allou\'ee proportionnellement \`a l'EAD~:
+\begin{equation}
+    \text{Capital}_s = \underbrace{\sum_{\text{all}} \text{RWA}_i \times \text{CET1}_{\text{target}}}_{\text{Capital total portefeuille}} \times \frac{\text{EAD}_s}{\sum_{\text{all}} \text{EAD}_i}
+    \label{eq:capital_share}
+\end{equation}
+\end{formulebox}
+
+\subsection{Formule totale}
+
+Pour la ligne Total, le capital est directement le capital total du portefeuille~:
+\begin{equation}
+    \text{Texas}_{\text{Total}} = \frac{\text{EAD}_{\text{Stage\,3,\,Total}}}{\text{ECL}_{\text{Stage\,3,\,Total}} + \text{RWA}_{\text{Total}} \times \text{CET1}_{\text{target}}}
+    \label{eq:texas_total}
+\end{equation}
+
+\begin{interpretbox}[Interpr\'etation du Texas Ratio]
+\begin{itemize}[nosep]
+    \item $\text{Texas} < 1$ : les provisions et le capital couvrent enti\`erement les cr\'eances Stage~3. Situation saine.
+    \item $\text{Texas} > 1$ : les cr\'eances Stage~3 d\'epassent les provisions plus le capital allou\'e. Signal de vuln\'erabilit\'e.
+    \item Le seuil d'alerte classique est $\text{Texas} = 1{,}0$. Au-del\`a, le risque de d\'efaut de la banque elle-m\^eme augmente significativement.
+\end{itemize}
+\end{interpretbox}
+
+\subsection{Autres m\'etriques cr\'edit avanc\'ees (FR42)}
+
+Le module \texttt{compute\_advanced\_credit\_metrics()} calcule \'egalement~:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{M\'etrique} & \textbf{Formule} \\
+\midrule
+\texttt{npl\_ratio} & $\text{EAD}_{\text{Stage\,3}} / \text{EAD}_{\text{total}}$ \\
+\texttt{cost\_of\_risk\_bps} & $\text{ECL} / (\text{EAD} \times T_{\text{moyen}}) \times 10\,000$ \\
+\texttt{coverage\_ratio} & $\text{ECL}_{\text{Stage\,3}} / \text{EAD}_{\text{Stage\,3}}$ \\
+\texttt{pd\_mean} & PD 12m moyenne du secteur \\
+\texttt{stage2\_pct} & $\text{EAD}_{\text{Stage\,2}} / \text{EAD}_{\text{total}}$ \\
+\texttt{rwa\_density} & $\text{RWA} / \text{EAD}$ \\
+\bottomrule
+\end{tabular}
+\caption{M\'etriques cr\'edit avanc\'ees.}
+\label{tab:advanced_metrics}
+\end{table}
+
+\subsubsection{Cost of Risk annualis\'e (M8)}
+
+Le Cost of Risk utilise un horizon EAD-pond\'er\'e par stage~:
+
+\begin{equation}
+    T_{\text{moyen}} = \frac{\text{EAD}_{\text{Stage\,1}} \times 1 + (\text{EAD}_{\text{total}} - \text{EAD}_{\text{Stage\,1}}) \times T_{\text{lifetime}}}{\text{EAD}_{\text{total}}}
+    \label{eq:t_moyen}
+\end{equation}
+
+avec $T_{\text{lifetime}} = \texttt{IFRS9\_CONFIG.lifetime\_horizon\_years} = 3$ ans. Le Stage~1 est \`a horizon 12 mois ($T=1$), les Stages~2 et~3 sont \`a horizon lifetime.
+
+% ══════════════════════════════════════════════════════════
+\section{Ad\'equation des fonds propres CRR3}
+\label{sec:crr3}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Score CRR3 composite pour le PE (Art.\,133)}
+
+Le Risk Weight PE n'est pas un 400\,\% fixe. La CRR3 (janvier 2025) pr\'evoit une grille gradu\'ee. Le module \texttt{compute\_crr3\_rw()} calcule un score composite par position PE, combinant 4~dimensions de risque.
+
+\begin{formulebox}[Score CRR3 composite (H8)]
+\begin{equation}
+    \text{Score} = 0{,}30 \times f_{\text{perf}} + 0{,}25 \times q_{\text{port}} + 0{,}25 \times r_{\text{lev}} + 0{,}20 \times e_{\text{macro}}
+    \label{eq:crr3_score}
+\end{equation}
+o\`u chaque composante est dans $[0, 1]$~:
+\end{formulebox}
+
+\subsubsection{Les 4 dimensions}
+
+\begin{enumerate}[nosep]
+    \item \textbf{Performance financi\`ere} ($f_{\text{perf}}$)~: bas\'ee sur le MOIC effectif.
+    \begin{equation}
+        \text{MOIC}_{\text{eff}} = \begin{cases} \text{MOIC} & \text{si MOIC} > 0 \\ \text{NAV} / \max(\text{NAV}_{\text{initial}}, 1) & \text{sinon} \end{cases}
+    \end{equation}
+    \begin{equation}
+        f_{\text{perf}} = \begin{cases} \text{clip}(1 - \text{MOIC}_{\text{eff}},\; 0,\; 1) & \text{si MOIC}_{\text{eff}} < 1{,}5 \\ 0 & \text{sinon} \end{cases}
+    \end{equation}
+
+    \item \textbf{Qualit\'e du portefeuille} ($q_{\text{port}}$)~: directement la probabilit\'e de distress, $P(\text{distress})$.
+
+    \item \textbf{Risque de levier} ($r_{\text{lev}}$)~: levier normalis\'e par le seuil 0{,}95.
+    \begin{equation}
+        r_{\text{lev}} = \text{clip}\!\left(\frac{\text{leverage}}{0{,}95},\; 0,\; 1\right)
+    \end{equation}
+
+    \item \textbf{Environnement macro} ($e_{\text{macro}}$)~: combinaison du levier et de la performance, distincte de $q_{\text{port}}$ pour \'eviter le double-comptage de $P(\text{distress})$.
+    \begin{equation}
+        e_{\text{macro}} = \text{clip}\!\left(0{,}5 \times r_{\text{lev}} + 0{,}5 \times f_{\text{perf}},\; 0,\; 1\right)
+    \end{equation}
+\end{enumerate}
+
+\subsection{Classification CRR3}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccl}
+\toprule
+\textbf{Score} & \textbf{Risk Weight} & \textbf{Cat\'egorie CRR3} \\
+\midrule
+$< 0{,}25$ & 190\,\% & IRB diversifi\'e \\
+$[0{,}25\,;\, 0{,}50[$ & 250\,\% & Equity g\'en\'eral \\
+$\geq 0{,}50$ & 400\,\% & Sp\'eculatif \\
+\bottomrule
+\end{tabular}
+\caption{Grille de classification CRR3 (Art.\,133 SA equity).}
+\label{tab:crr3_grid}
+\end{table}
+
+\subsection{Analyse de sensibilit\'e (FR23)}
+
+La m\'ethode \texttt{compute\_crr3\_sensitivity()} teste les 3~classifications fixes ($\text{RW} \in \{190, 250, 400\}\,\%$) plus le RW composite calcul\'e par \texttt{compute\_crr3\_rw()}.
+
+\begin{formulebox}[Capital et headroom CRR3]
+Pour chaque sc\'enario de RW PE~:
+\begin{align}
+    \text{RWA}_{\text{PE}} &= \text{NAV}_{\text{total}} \times \frac{\text{RW}}{100} \label{eq:rwa_pe} \\
+    \text{RWA}_{\text{total}} &= \text{RWA}_{\text{cr\'edit}} + \text{RWA}_{\text{PE}} \label{eq:rwa_total} \\
+    \text{Capital}_{\text{actuel}} &= \bigl(\text{RWA}_{\text{cr\'edit}} + \text{RWA}_{\text{PE,\,courant}}\bigr) \times \text{CET1}_{\text{target}} \label{eq:capital_actuel} \\
+    \text{CET1}_{\text{ratio}} &= \frac{\text{Capital}_{\text{actuel}}}{\text{RWA}_{\text{total}}} \label{eq:cet1_ratio} \\
+    \text{Headroom} &= \text{CET1}_{\text{ratio}} - \text{CET1}_{\text{target}} \label{eq:headroom}
+\end{align}
+\end{formulebox}
+
+\begin{definitionbox}[Flag \texttt{feasible}]
+Un sc\'enario est marqu\'e \texttt{feasible = True} si et seulement si $\text{Headroom} \geq 0$, c'est-\`a-dire si le ratio CET1 effectif reste sup\'erieur ou \'egal au CET1 cible de 13\,\%. Le headroom est arrondi avant le test de faisabilit\'e.
+\end{definitionbox}
+
+Le r\'esultat contient 4~lignes~: 3~sc\'enarios fixes (190\,\%, 250\,\%, 400\,\%) + 1~ligne composite CRR3 (RW moyen arrondi).
+
+% ══════════════════════════════════════════════════════════
+\section{Allocation Softmax et optimisation}
+\label{sec:softmax}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Optimisation 3 niveaux (FR22)}
+
+L'optimiseur d'allocation op\`ere en 3 niveaux hi\'erarchiques~:
+
+\begin{enumerate}
+    \item \textbf{Niveau 1} --- Rotation sectorielle cr\'edit~: poids optimaux des 5~secteurs dans le portefeuille cr\'edit.
+    \item \textbf{Niveau 2} --- Rotation sectorielle PE~: poids optimaux des 5~secteurs dans le portefeuille PE.
+    \item \textbf{Niveau 3} --- R\'eallocation inter-canal~: split optimal entre cr\'edit et PE.
+\end{enumerate}
+
+\subsection{Softmax \`a temp\'erature adaptative (M7)}
+
+Les poids sectoriels sont d\'etermin\'es par une fonction softmax appliqu\'ee aux RAROC, avec une temp\'erature adaptative.
+
+\begin{formulebox}[Softmax adaptative avec p\'enalit\'e de corr\'elation (RJ audit v3)]
+Soit $\{r_1, \ldots, r_5\}$ les RAROC des 5~secteurs d'un canal donn\'e.
+
+\textbf{Passe 1 --- Poids initiaux (Softmax na\"if)}~:
+
+\'Echelle adaptative~: $\beta = \text{clip}(1/\text{Var}(r),\; 2,\; 50)$.
+\begin{equation}
+    w_i^{(0)} = \frac{\exp(\beta \cdot r_i - \max_j \beta r_j)}{\sum_k \exp(\beta \cdot r_k - \max_j \beta r_j)}
+    \label{eq:softmax_raw}
+\end{equation}
+
+\textbf{Passe 2 --- Score p\'enalis\'e par la corr\'elation}~:
+\begin{equation}
+    \tilde{r}_i = r_i - \lambda \sum_{j \neq i} w_j^{(0)} \, \rho_{ij}
+    \label{eq:corr_penalty}
+\end{equation}
+o\`u $\rho_{ij}$ est la corr\'elation de consensus (matrice \texttt{\_EXPERT\_CORR}, 5$\times$5, sources FMI WEO / Phillips / Okun / Taylor) et $\lambda = \texttt{lambda\_correlation} = 0{,}5$.
+
+\textbf{Poids finaux}~: Softmax sur $\tilde{r}$, puis clip $[0{,}05\,;\, 0{,}40]$ et renormalisation.
+\begin{equation}
+    w_i = \frac{\text{clip}\!\bigl(\text{softmax}_\beta(\tilde{r}_i),\; 0{,}05,\; 0{,}40\bigr)}{\sum_k \text{clip}\!\bigl(\text{softmax}_\beta(\tilde{r}_k),\; 0{,}05,\; 0{,}40\bigr)}
+    \label{eq:softmax_clipped}
+\end{equation}
+\end{formulebox}
+
+\begin{warningbox}[Correction de l'angle mort de corr\'elation]
+Le Softmax original \'etait une fonction \textbf{s\'eparable}~: il regardait chaque secteur isol\'ement. Si Tech et Services avaient tous deux un RAROC \'elev\'e et \'etaient corr\'el\'es \`a 90\,\%, le portefeuille optimis\'e empilait le m\^eme risque sous deux noms diff\'erents.
+
+La p\'enalit\'e de corr\'elation (\'eq.~\ref{eq:corr_penalty}) r\'esout ce probl\`eme sans recourir \`a un Markowitz complet (surdimensionn\'e pour 5~secteurs). Le param\`etre $\lambda$ est configurable dans \texttt{BaselConfig.lambda\_correlation}.
+\end{warningbox}
+
+\begin{interpretbox}[R\^ole de la temp\'erature adaptative]
+\begin{itemize}[nosep]
+    \item Si $\text{Var}(\text{RAROC})$ est \textbf{faible} (secteurs similaires) $\Rightarrow$ $\beta$ grand $\Rightarrow$ petites diff\'erences de RAROC sont amplifi\'ees $\Rightarrow$ allocation diff\'erenci\'ee.
+    \item Si $\text{Var}(\text{RAROC})$ est \textbf{forte} (secteurs tr\`es diff\'erents) $\Rightarrow$ $\beta$ petit $\Rightarrow$ allocation plus prudente, \'evite de tout concentrer sur le meilleur secteur.
+    \item Le clipping $[2, 50]$ assure la stabilit\'e num\'erique.
+    \item La p\'enalit\'e de corr\'elation favorise les secteurs \textbf{d\'ecorr\'el\'es}, am\'eliorant la diversification du portefeuille.
+\end{itemize}
+\end{interpretbox}
+
+\subsection{Split inter-canal (Niveau 3)}
+
+Le split cr\'edit/PE utilise une heuristique bas\'ee sur les RAROC agr\'eg\'es~:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Condition} & \textbf{Allocation PE} & \textbf{Allocation Cr\'edit} \\
+\midrule
+$\text{RAROC}_{\text{Cr\'edit}} \leq 0$ et $\text{RAROC}_{\text{PE}} \leq 0$ & 5\,\% & 95\,\% \\
+$\text{RAROC}_{\text{PE}} > \text{RAROC}_{\text{Cr\'edit}}$ & $\min(30\,\%,\; \text{pe\_max\_alloc})$ & Compl\'ement \\
+Sinon & 10\,\% & 90\,\% \\
+\bottomrule
+\end{tabular}
+\caption{Heuristique de split inter-canal. \texttt{pe\_max\_allocation} $= 40\,\%$.}
+\label{tab:split}
+\end{table}
+
+\subsection{Contraintes de diversification}
+
+\begin{itemize}[nosep]
+    \item Poids sectoriel minimum~: 5\,\% (aucun secteur ne peut \^etre \'elimin\'e).
+    \item Poids sectoriel maximum~: 40\,\% (pas de sur-concentration).
+    \item Somme des poids~: exactement 1{,}0 apr\`es renormalisation.
+    \item PE maximum~: \texttt{pe\_max\_allocation} $= 40\,\%$ du portefeuille total.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════
+\section{R\`egles d'incoh\'erence macro}
+\label{sec:incoherence}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Objectif}
+
+Le module d\'efinit 4~r\`egles de coh\'erence macro\'economique (FR36) pour d\'etecter les combinaisons de variables de stress irr\'ealistes. Ces r\`egles sont \'evalu\'ees dans le dashboard lorsque l'analyste ajuste les sliders.
+
+\subsection{Structure d'une r\`egle}
+
+Chaque r\`egle est un \texttt{MacroIncoherenceRule} avec~:
+\begin{itemize}[nosep]
+    \item \texttt{name}~: identifiant court.
+    \item \texttt{description}~: message affich\'e \`a l'utilisateur.
+    \item \texttt{conditions}~: tuple de triplets $(\text{variable},\, \text{op},\, \text{seuil})$ o\`u \texttt{op} $\in \{\texttt{gt}, \texttt{lt}\}$.
+\end{itemize}
+
+Une r\`egle est d\'eclench\'ee si \textbf{toutes} ses conditions sont satisfaites simultan\'ement.
+
+\subsection{Les 4 r\`egles impl\'ement\'ees}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{3.5cm}p{4.5cm}p{5cm}}
+\toprule
+\textbf{R\`egle} & \textbf{Conditions} & \textbf{Incoh\'erence d\'etect\'ee} \\
+\midrule
+\texttt{gdp\_unemployment\_ crisis} &
+    \texttt{gdp\_pct} $> 3{,}0$ \newline \texttt{unemployment\_bipolar} $< -3{,}0$ &
+    PIB $> +3\,\%$ et ch\^omage crise $> +3$\,pp simultan\'ement. Forte croissance incompatible avec ch\^omage de crise. \\
+\midrule
+\texttt{gdp\_unemployment\_ tech} &
+    \texttt{gdp\_pct} $> 3{,}0$ \newline \texttt{unemployment\_bipolar} $> 3{,}0$ &
+    PIB $> +3\,\%$ et ch\^omage techno $> +3$\,pp simultan\'ement. Forte croissance incompatible avec ch\^omage technologique \'elev\'e. \\
+\midrule
+\texttt{deflation\_rates} &
+    \texttt{inflation\_pct} $< 0{,}0$ \newline \texttt{interest\_rate\_bp} $> 200{,}0$ &
+    D\'eflation avec taux directeur $> +200$\,bp. La banque centrale ne maintiendrait pas des taux \'elev\'es en d\'eflation. \\
+\midrule
+\texttt{hpi\_gdp} &
+    \texttt{hpi\_pct} $> 10{,}0$ \newline \texttt{gdp\_pct} $< -2{,}0$ &
+    HPI $> +10\,\%$ et PIB $< -2\,\%$. Hausse des prix immobiliers incoh\'erente avec une r\'ecession profonde. \\
+\bottomrule
+\end{tabular}
+\caption{R\`egles d'incoh\'erence macro\'economique (FR36).}
+\label{tab:incoherence_rules}
+\end{table}
+
+\begin{warningbox}[Convention ch\^omage bipolaire]
+Le slider \texttt{unemployment\_bipolar} utilise une convention sp\'eciale~:
+\begin{itemize}[nosep]
+    \item \textbf{Signe} = nature du choc~: $+$ = rupture technologique, $-$ = crise \'economique.
+    \item \textbf{Valeur absolue} = amplitude de hausse du ch\^omage en pp vs base.
+    \item \textbf{Les deux extr\^emes augmentent le ch\^omage}~: $\text{ch\^omage} = \text{base} + |\text{slider}|$.
+    \item L'impact diff\'erentiel se manifeste par canal~: le PE tech b\'en\'eficie de la rupture techno (sensibilit\'e PE n\'egative).
+\end{itemize}
+\end{warningbox}
+
+% ══════════════════════════════════════════════════════════
+\section{App\'etit au risque (Risk Appetite)}
+\label{sec:risk_appetite}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Cadre tricolore}
+
+Le Risk Appetite Framework (cadre FSB 2013) utilise un syst\`eme de feux tricolores pour \'evaluer la situation du portefeuille sur 4~dimensions. Les seuils sont d\'efinis dans \texttt{RiskAppetiteConfig}.
+
+\begin{definitionbox}[Convention tricolore]
+\begin{itemize}[nosep]
+    \item \textcolor{accentgreen}{\textbf{VERT}}~: m\'etrique dans la zone acceptable. Aucune action requise.
+    \item \textcolor{accentorange}{\textbf{AMBRE}}~: zone de vigilance. Surveillance renforc\'ee et plans d'action pr\'eventifs.
+    \item \textcolor{accentred}{\textbf{ROUGE}}~: breach de l'app\'etit au risque. Action corrective imm\'ediate requise.
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Seuils d\'etaill\'es}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{M\'etrique} & \textcolor{accentgreen}{\textbf{VERT}} & \textcolor{accentorange}{\textbf{AMBRE}} & \textcolor{accentred}{\textbf{ROUGE}} \\
+\midrule
+ECL/EAD & $< 2{,}0\,\%$ & $[2{,}0\,\% ;\; 4{,}0\,\%[$ & $\geq 4{,}0\,\%$ \\
+RAROC & $> 4{,}0\,\%$ & $[2{,}0\,\% ;\; 4{,}0\,\%]$ & $< 2{,}0\,\%$ \\
+HHI & $< 1\,500$ & $[1\,500 ;\; 2\,500[$ & $\geq 2\,500$ \\
+NAV Drawdown PE & $< 10\,\%$ & $[10\,\% ;\; 25\,\%[$ & $\geq 25\,\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Seuils de l'app\'etit au risque (calibr\'es pour un portefeuille corporate mid-market).}
+\label{tab:risk_appetite}
+\end{table}
+
+\subsection{Calibration des seuils}
+
+\begin{warningbox}[Calibration adapt\'ee au portefeuille corporate]
+Les seuils originaux \'etaient trop restrictifs pour un portefeuille corporate~:
+\begin{itemize}[nosep]
+    \item ECL/EAD vert~: 0{,}5\,\% $\rightarrow$ 2{,}0\,\% (corporate a un EL structurellement plus \'elev\'e que le retail)
+    \item ECL/EAD ambre~: 1{,}5\,\% $\rightarrow$ 4{,}0\,\%
+    \item RAROC vert~: 12\,\% $\rightarrow$ 4\,\% (un RAROC de 12\,\% est exceptionnel en corporate lending)
+    \item RAROC ambre~: 8\,\% $\rightarrow$ 2\,\%
+\end{itemize}
+Sans ces corrections, le Risk Appetite \'etait syst\'ematiquement ROUGE, m\^eme en sc\'enario de reprise.
+\end{warningbox}
+
+\subsection{Comportement par sc\'enario}
+
+Apr\`es calibration, le comportement observ\'e est~:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Sc\'enario} & \textbf{ECL/EAD} & \textbf{RAROC} & \textbf{Tendance globale} \\
+\midrule
+Reprise & \textcolor{accentgreen}{VERT} & \textcolor{accentgreen}{VERT} & Majoritairement vert \\
+Central (Base) & \textcolor{accentgreen}{VERT} / \textcolor{accentorange}{AMBRE} & \textcolor{accentgreen}{VERT} / \textcolor{accentorange}{AMBRE} & Mix\'e \\
+Adverse & \textcolor{accentorange}{AMBRE} / \textcolor{accentred}{ROUGE} & \textcolor{accentred}{ROUGE} & Majoritairement rouge \\
+\bottomrule
+\end{tabular}
+\caption{Comportement du Risk Appetite par sc\'enario (apr\`es calibration).}
+\label{tab:risk_appetite_behavior}
+\end{table}
+
+% ══════════════════════════════════════════════════════════
+\section{M\'etriques compl\'ementaires}
+\label{sec:complementary}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Scores de r\'esilience (FR19)}
+
+\subsubsection{R\'esilience cr\'edit}
+
+\begin{formulebox}[Score de r\'esilience cr\'edit]
+\begin{equation}
+    R_{\text{cr\'edit},s} = (1 - \text{NPL}_{s}) \times \left(1 - \frac{\text{CoR}_s}{\max_j \text{CoR}_j}\right) \times (1 - \text{Stage2}_{s})
+    \label{eq:resilience_credit}
+\end{equation}
+o\`u~:
+\begin{itemize}[nosep]
+    \item $\text{NPL}_s = \text{EAD}_{\text{Stage\,3},s} / \text{EAD}_s$ (ratio NPL)
+    \item $\text{CoR}_s = \text{ECL}_s / \text{EAD}_s$ (cost of risk)
+    \item $\text{Stage2}_s = \text{EAD}_{\text{Stage\,2},s} / \text{EAD}_s$ (part Stage~2)
+\end{itemize}
+Score dans $[0, 1]$. Plus proche de 1 $=$ plus r\'esilient.
+\end{formulebox}
+
+\subsubsection{R\'esilience PE}
+
+\begin{formulebox}[Score de r\'esilience PE]
+\begin{equation}
+    R_{\text{PE},s} = (1 - \overline{\text{drawdown}}_s) \times (1 - \text{distress\%}_s) \times \frac{\overline{\text{MOIC}}_s}{\max_j \overline{\text{MOIC}}_j}
+    \label{eq:resilience_pe}
+\end{equation}
+o\`u~:
+\begin{itemize}[nosep]
+    \item $\overline{\text{drawdown}}_s$ = NAV drawdown moyen du secteur
+    \item $\text{distress\%}_s$ = fraction des positions class\'ees \og Distressed \fg
+    \item Le MOIC est normalis\'e par le MOIC max du portefeuille
+\end{itemize}
+\end{formulebox}
+
+\subsection{Matrice d'asym\'etrie (FR20)}
+
+La matrice d'asym\'etrie compare syst\'ematiquement les canaux cr\'edit et PE pour chaque secteur~:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Colonne} & \textbf{Description} \\
+\midrule
+\texttt{loss\_ratio} & $\text{EL}_{\text{PE}} / \text{ECL}_{\text{cr\'edit}}$ (ratio d'asym\'etrie des pertes) \\
+\texttt{rwa\_ratio} & $\text{RWA}_{\text{PE}} / \text{RWA}_{\text{cr\'edit}}$ \\
+\texttt{raroc\_delta} & $\text{RAROC}_{\text{PE}} - \text{RAROC}_{\text{cr\'edit}}$ \\
+\texttt{resilience\_credit} & Score de r\'esilience du canal cr\'edit \\
+\texttt{resilience\_pe} & Score de r\'esilience du canal PE \\
+\bottomrule
+\end{tabular}
+\caption{Colonnes cl\'es de la matrice d'asym\'etrie (5 lignes, une par secteur).}
+\label{tab:asymmetry}
+\end{table}
+
+\subsection{Seuils de basculement (FR24)}
+
+La m\'ethode \texttt{find\_tipping\_points()} identifie, pour chaque secteur, le canal pr\'ef\'er\'e en termes de RAROC et le delta de basculement~:
+
+\begin{equation}
+    \text{Pr\'ef\'er\'e}_s = \begin{cases} \text{PE} & \text{si } \text{RAROC}_{\text{PE},s} > \text{RAROC}_{\text{cr\'edit},s} \\ \text{Cr\'edit} & \text{sinon} \end{cases}
+\end{equation}
+\begin{equation}
+    \Delta_{\text{switch},s} = \bigl|\text{RAROC}_{\text{PE},s} - \text{RAROC}_{\text{cr\'edit},s}\bigr|
+\end{equation}
+
+Un delta faible indique que les deux canaux sont proches en termes de rentabilit\'e ajust\'ee du risque, rendant la r\'eallocation potentiellement sensible \`a de petits changements de march\'e.
+
+% ══════════════════════════════════════════════════════════
+\section{Synth\`ese des param\`etres de configuration}
+\label{sec:config_summary}
+% ══════════════════════════════════════════════════════════
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llrl}
+\toprule
+\textbf{Param\`etre} & \textbf{Source} & \textbf{Valeur} & \textbf{Utilisation} \\
+\midrule
+\texttt{cet1\_target} & \texttt{BaselConfig} & 13\,\% & Capital, RAROC, EVA \\
+\texttt{rwa\_budget} & \texttt{BaselConfig} & 10\,Md\,EUR & R\'ef\'erence (non utilis\'e directement) \\
+\texttt{cir} & \texttt{BaselConfig} & 0{,}45 & Revenue net dans RAROC \\
+\texttt{tax\_rate} & \texttt{BaselConfig} & 0{,}25 & Profit net dans RAROC \\
+\texttt{liquidity\_premium\_bps} & \texttt{BaselConfig} & 50\,bps & Spread Merton \\
+\texttt{commercial\_margin\_bps} & \texttt{BaselConfig} & 150\,bps & NII d'origination \\
+\texttt{rw\_credit} & \texttt{BaselConfig} & 100\,\% & RWA cr\'edit (SA) \\
+\texttt{rw\_pe\_default} & \texttt{BaselConfig} & 250\,\% & RW PE par d\'efaut \\
+\texttt{rw\_pe\_options} & \texttt{BaselConfig} & (190, 250, 400) & Sensibilit\'e CRR3 \\
+\texttt{pe\_max\_allocation} & \texttt{BaselConfig} & 40\,\% & Contrainte optimiseur \\
+\texttt{hhi\_max} & \texttt{BaselConfig} & 2\,500 & Seuil concentration \\
+\texttt{lambda\_correlation} & \texttt{BaselConfig} & 0{,}5 & P\'enalit\'e corr\'elation Softmax \\
+\texttt{hhi\_name\_amber} & \texttt{RiskAppetiteConfig} & 50 & Seuil ICAAP Name Level \\
+\texttt{green\_share} & \texttt{SectorConfig} & 0{,}15--0{,}40 & GAR d\'eclaratif par secteur \\
+\texttt{lgd\_ttc\_mean} & \texttt{LGDConfig} & 0{,}35 & Spread d'origination \\
+\texttt{lifetime\_horizon} & \texttt{IFRS9Config} & 3\,ans & Cost of Risk ($T_{\text{moyen}}$) \\
+\bottomrule
+\end{tabular}
+\caption{Param\`etres de configuration utilis\'es par le comparateur.}
+\label{tab:config_params}
+\end{table}
+
+% ══════════════════════════════════════════════════════════
+\section{Diagramme de flux du comparateur}
+\label{sec:flow}
+% ══════════════════════════════════════════════════════════
+
+\begin{center}
+\begin{tikzpicture}[
+    node distance=1.2cm and 2.5cm,
+    input/.style={rectangle, draw=steelblue, fill=steelblue!10, rounded corners, minimum height=0.8cm, minimum width=3cm, font=\small},
+    process/.style={rectangle, draw=darkblue, fill=lightgray, minimum height=0.8cm, minimum width=3.5cm, font=\small},
+    output/.style={rectangle, draw=accentgreen!70!black, fill=accentgreen!10, rounded corners, minimum height=0.8cm, minimum width=3cm, font=\small},
+    arrow/.style={-{Stealth[length=2mm]}, thick, darkblue}
+]
+    % Inputs
+    \node[input] (rc) {result\_credit};
+    \node[input, right=3cm of rc] (rp) {result\_pe};
+
+    % Comparator
+    \node[process, below=1cm of $(rc)!0.5!(rp)$] (comp) {\textbf{PortfolioComparator}};
+
+    % Processes
+    \node[process, below left=1.5cm and 1cm of comp] (adv) {M\'etriques avanc\'ees};
+    \node[process, below=1.5cm of comp] (hhi) {HHI cross-cell};
+    \node[process, below right=1.5cm and 1cm of comp] (raroc) {RAROC / EVA};
+
+    % Outputs level 2
+    \node[process, below=1cm of raroc] (optim) {Softmax Allocation};
+    \node[process, below=1cm of hhi] (crr3) {CRR3 Sensibilit\'e};
+    \node[process, below=1cm of adv] (asym) {Asym\'etrie / R\'esilience};
+
+    % Final outputs
+    \node[output, below=1.5cm of $(asym)!0.5!(crr3)$] (dash) {Dashboard 8 onglets};
+
+    % Arrows
+    \draw[arrow] (rc) -- (comp);
+    \draw[arrow] (rp) -- (comp);
+    \draw[arrow] (comp) -- (adv);
+    \draw[arrow] (comp) -- (hhi);
+    \draw[arrow] (comp) -- (raroc);
+    \draw[arrow] (raroc) -- (optim);
+    \draw[arrow] (hhi) -- (crr3);
+    \draw[arrow] (adv) -- (asym);
+    \draw[arrow] (optim) -- (dash);
+    \draw[arrow] (crr3) -- (dash);
+    \draw[arrow] (asym) -- (dash);
+\end{tikzpicture}
+\end{center}
+
+% ══════════════════════════════════════════════════════════
+\section{Green Asset Ratio (ESG)}
+\label{sec:gar}
+% ══════════════════════════════════════════════════════════
+
+\begin{definitionbox}[Green Asset Ratio --- Placeholder d\'eclaratif (BCE 2024)]
+Le Green Asset Ratio (GAR) mesure la part des expositions align\'ees avec la taxonomie europ\'eenne des activit\'es durables (R\`eglement (UE) 2020/852). En 2026, un cockpit IFRS~9 / CRR3 sans m\'etrique climatique est r\'eglementairement incomplet.
+\end{definitionbox}
+
+\begin{warningbox}[Caract\`ere d\'eclaratif]
+Les \texttt{green\_share} par secteur sont des estimations de consensus (placeholder), \textbf{non audit\'ees}. Un GAR r\'eel n\'ecessiterait un mapping activit\'e par activit\'e sur la taxonomie EU (NACE codes), des donn\'ees de transition physique/climatique, et un audit externe. Le placeholder d\'emontre la prise en compte du risque climatique sans pr\'etendre au climat-washing.
+\end{warningbox}
+
+\subsection{Formule}
+
+\begin{formulebox}[Green Asset Ratio]
+\begin{equation}
+    \text{GAR}_{\text{cr\'edit}} = \frac{\sum_{i} \text{EAD}_i \times g_i}{\sum_{i} \text{EAD}_i}
+    \label{eq:gar_credit}
+\end{equation}
+o\`u $g_i = \texttt{SectorConfig.green\_share}$ du secteur de la contrepartie $i$.
+
+Pour le PE~: $\text{GAR}_{\text{PE}} = \sum \text{NAV}_i \cdot g_i / \sum \text{NAV}_i$.
+
+GAR total pond\'er\'e~:
+\begin{equation}
+    \text{GAR}_{\text{total}} = \frac{\text{GAR}_{\text{cr\'edit}} \times \text{EAD}_{\text{total}} + \text{GAR}_{\text{PE}} \times \text{NAV}_{\text{total}}}{\text{EAD}_{\text{total}} + \text{NAV}_{\text{total}}}
+    \label{eq:gar_total}
+\end{equation}
+\end{formulebox}
+
+\subsection{Green shares par secteur}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Secteur} & \textbf{Green share} & \textbf{Justification} \\
+\midrule
+Technologie & 40\,\% & SaaS, cloud, efficience \'energ\'etique num\'erique \\
+Industrie & 20\,\% & Transition lente, heavy manufacturing \\
+Sant\'e & 30\,\% & Med-tech, infrastructures vertes \\
+Immobilier & 15\,\% & Stock ancien, r\'enovation lente \\
+Services & 25\,\% & Faible empreinte carbone directe \\
+\bottomrule
+\end{tabular}
+\caption{Green shares d\'eclaratives par secteur (consensus simplifi\'e, non audit\'e).}
+\label{tab:green_shares}
+\end{table}
+
+% ══════════════════════════════════════════════════════════
+\section{R\'ef\'erences r\'eglementaires}
+\label{sec:references}
+% ══════════════════════════════════════════════════════════
+
+\begin{itemize}[nosep]
+    \item \textbf{IFRS~9} \S5.5.17~: pond\'eration des sc\'enarios ECL (3 sc\'enarios : 50/25/25).
+    \item \textbf{BCBS d424} (2017)~: cadre B\^ale III finalis\'e, exigences en fonds propres.
+    \item \textbf{CRR3 Art.\,133}~: pondération des expositions en actions (SA equity RW).
+    \item \textbf{CRR3 Art.\,155}~: m\'ethode IRB pour les expositions en actions.
+    \item \textbf{EBA GL/2019/03}~: guidelines LGD Downturn ($\text{LGD}_{\text{DT}} = \text{LGD}_{\text{TTC}} \times (1 + \rho \times |Z|)$).
+    \item \textbf{FSB 2013}~: principes pour un cadre d'app\'etit au risque effectif (Risk Appetite Framework).
+    \item \textbf{EBA 2023 benchmarks}~: benchmarks de marge commerciale corporate mid-market ($\sim$150\,bps).
+    \item \textbf{R\`eglement (UE) 2020/852}~: taxonomie europ\'eenne des activit\'es durables (Green Asset Ratio).
+    \item \textbf{BCE 2024}~: guide sur les risques li\'es au climat et \`a l'environnement (GAR disclosure).
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════
+\section*{Annexe~: R\'ecapitulatif des \'equations}
+\label{sec:annexe}
+% ══════════════════════════════════════════════════════════
+
+\begin{longtable}{clp{8cm}}
+\toprule
+\textbf{Eq.} & \textbf{M\'etrique} & \textbf{R\'esum\'e} \\
+\midrule
+\endhead
+(\ref{eq:hhi_general}) & HHI & $\sum s_i^2 \times 10\,000$ \\
+(\ref{eq:cs_origination}) & Spread origination & $-\ln(1 - \text{PD}_{\text{base}} \times \text{LGD}_{\text{TTC}}) + \lambda_{\text{liq}} + \lambda_{\text{comm}}$ \\
+(\ref{eq:annual_el}) & EL annuelle & $\sum \text{PD}_{12m} \times \text{LGD} \times \text{EAD}$ \\
+(\ref{eq:raroc_credit}) & RAROC cr\'edit & $\frac{(\text{NII} \times (1-\text{CIR}) - \text{EL}) \times (1-\tau)}{\text{RWA} \times \text{CET1}}$ \\
+(\ref{eq:eva}) & EVA & $(\text{RAROC} - \text{CoE}) \times \text{Capital}$ \\
+(\ref{eq:texas_sector}) & Texas Ratio & $\text{EAD}_{S3} / (\text{ECL}_{S3} + \text{Capital}_s)$ \\
+(\ref{eq:crr3_score}) & Score CRR3 & $0{,}30 f + 0{,}25 q + 0{,}25 r + 0{,}20 e$ \\
+(\ref{eq:hhi_name}) & HHI Name Level & $\sum (e_i/e_{\text{total}})^2 \times 10\,000$ \\
+(\ref{eq:corr_penalty}) & Score p\'enalis\'e & $r_i - \lambda \sum_{j \neq i} w_j \rho_{ij}$ \\
+(\ref{eq:gar_credit}) & GAR cr\'edit & $\sum \text{EAD}_i g_i / \sum \text{EAD}_i$ \\
+(\ref{eq:resilience_credit}) & R\'esilience cr\'edit & $(1-\text{NPL})(1-\text{CoR}_{\text{norm}})(1-\text{S2\%})$ \\
+(\ref{eq:resilience_pe}) & R\'esilience PE & $(1-\text{dd})(1-\text{distress\%})(\text{MOIC}_{\text{norm}})$ \\
+\bottomrule
+\end{longtable}
+
+\end{document}

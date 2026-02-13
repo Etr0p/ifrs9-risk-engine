@@ -10,6 +10,9 @@ import numpy as np
 import pandas as pd
 
 from ifrs9_cockpit.config import RANDOM_SEED
+from ifrs9_cockpit.utils.logging import get_logger
+
+_logger = get_logger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -37,7 +40,7 @@ def timer(func: F) -> F:
         start = time.perf_counter()
         result = func(*args, **kwargs)
         elapsed = time.perf_counter() - start
-        print(f"[TIMER] {func.__qualname__} : {elapsed:.3f}s")
+        _logger.info("timer", function=func.__qualname__, elapsed_s=f"{elapsed:.3f}")
         return result
     return wrapper  # type: ignore[return-value]
 

@@ -159,11 +159,16 @@ def reverse_stress_test(
     macro_params: Dict[str, float],
     regime: Optional[RegimeClassification] = None,
     target_ecl: Optional[float] = None,
+    capital_base: Optional[float] = None,
 ) -> Dict[str, object]:
     """Reverse Stress Test joint — scenario de rupture minimal (FR28, FR54).
 
     Cherche le facteur d'echelle minimal sur toutes les variables macro
     simultanement qui produit un breach CET1 (ECL_weighted > seuil).
+
+    Le seuil de rupture est le max entre :
+        - target_ecl (personnalise) ou 10% du capital CET1 (defaut)
+        - 1.5 × ECL baseline (garantit que le seuil est au-dessus du baseline)
 
     Distance : Mahalanobis (H6) — mesure la distance statistique entre
     le scenario de rupture et le baseline en tenant compte de la structure
@@ -174,15 +179,25 @@ def reverse_stress_test(
         macro_params: Variables macro actuelles.
         regime: Classification de regime (optionnel).
         target_ecl: Seuil ECL personnalise (EUR). Si None, utilise 10% du capital CET1.
+        capital_base: Capital CET1 reel en EUR. Si None, utilise rwa_budget × cet1_target.
 
     Returns:
         Dict avec rst_scenario, rst_ecl, rst_distance, breach.
     """
     base = SCENARIO_BASE
-    capital = BASEL_CONFIG.rwa_budget * BASEL_CONFIG.cet1_target
+    capital = capital_base if capital_base is not None else BASEL_CONFIG.rwa_budget * BASEL_CONFIG.cet1_target
 
     # ECL seuil de rupture (FR54 : personnalisable)
-    ecl_breach = target_ecl if target_ecl is not None else capital * 0.10
+    if target_ecl is not None:
+        # Cible personnalisee par l'utilisateur : on la respecte telle quelle.
+        ecl_breach = target_ecl
+    else:
+        # Seuil par defaut : 10% du capital CET1, mais garanti au-dessus du baseline.
+        # Sans le max, si l'ECL baseline > seuil, le RST retourne distance=0
+        # (breach immediat au facteur 1.0, aucun stress necessaire).
+        ecl_baseline = ecl_total_fn(macro_params)
+        _RST_MULTIPLIER = 1.5  # Le stress doit causer +50% d'ECL au minimum
+        ecl_breach = max(capital * 0.10, ecl_baseline * _RST_MULTIPLIER)
 
     # Balayage du facteur de stress avec pas fin (0.1) pour une detection
     # plus precise du point de breach.
@@ -240,8 +255,8 @@ if __name__ == "__main__":
 
     # ECL proxy logit (coherent avec ECLCalculator)
     # Reference EAD pour convertir ratio -> montant absolu (EUR)
-    _REF_EAD = 1_400_000_000_000.0  # ~1.4T EUR (portefeuille 10K entreprises)
-    _ECL_BASE_RATIO = 0.012  # 1.2% ECL/EAD baseline
+    _REF_EAD = 2_000_000_000_000.0  # ~2T EUR (portefeuille 30K entreprises)
+    _ECL_BASE_RATIO = 0.040  # ~4% ECL/EAD baseline (coherent avec le DGP v4.5)
     _LOGIT_BASE = float(logit(np.array(_ECL_BASE_RATIO)))
 
     def ecl_proxy(params: Dict[str, float]) -> float:
@@ -268,8 +283,10 @@ if __name__ == "__main__":
     }
 
     # Tipping points (seuil en montant absolu, coherent avec le proxy)
+    # Seuil = ECL baseline × 1.25 (cherche +25% d'augmentation par variable)
     print("\n[1/2] Seuils de basculement univaries...")
-    tipping_threshold_abs = RISK_APPETITE_CONFIG.ecl_ead_amber * _REF_EAD
+    _ecl_baseline = ecl_proxy(macro_params)
+    tipping_threshold_abs = _ecl_baseline * 1.25
     tipping = find_tipping_points(ecl_proxy, macro_params, ecl_threshold=tipping_threshold_abs)
     print(tipping.to_string(index=False))
 

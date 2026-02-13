@@ -1,0 +1,73 @@
+# ══════════════════════════════════════════════════════════
+# IFRS 9 Risk Cockpit — Docker Compose
+# ══════════════════════════════════════════════════════════
+#
+# Usage :
+#   docker compose up dashboard        # Dashboard seul
+#   docker compose up api              # API seule
+#   docker compose up                  # Dashboard + API
+#   docker compose run train           # Entrainement GPU
+#
+# ══════════════════════════════════════════════════════════
+
+services:
+  # ── Dashboard Streamlit (CPU) ──
+  dashboard:
+    build:
+      context: ..
+      dockerfile: ifrs9_cockpit/Dockerfile
+      target: serve
+    ports:
+      - "8501:8501"
+    volumes:
+      - models:/app/ifrs9_cockpit/training/models
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+    command: dashboard
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── API FastAPI (CPU) ──
+  api:
+    build:
+      context: ..
+      dockerfile: ifrs9_cockpit/Dockerfile
+      target: serve
+    ports:
+      - "8000:8000"
+    volumes:
+      - models:/app/ifrs9_cockpit/training/models
+    environment:
+      - API_PORT=8000
+      - API_WORKERS=2
+    command: api
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Entrainement Offline (GPU) ──
+  train:
+    build:
+      context: ..
+      dockerfile: ifrs9_cockpit/Dockerfile
+      target: train
+    volumes:
+      - models:/app/ifrs9_cockpit/training/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - training
+
+volumes:
+  models:
+    name: ifrs9-models

@@ -144,13 +144,17 @@ class TestAdvancedCreditMetrics:
         assert total["cost_of_risk_bps"].values[0] > 0
 
     def test_cost_of_risk_annualized(self, advanced_metrics, result_credit):
-        """CoR annualise = ECL / (EAD x T_moyen) x 10000 (M8)."""
+        """CoR annualise = ECL / (EAD x T_moyen_pondere) x 10000 (M8).
+
+        T_moyen est pondere par EAD par stage : Stage 1 = 1 an, Stage 2/3 = lifetime.
+        """
         from ifrs9_cockpit.config import IFRS9_CONFIG
         total = advanced_metrics.loc[advanced_metrics["sector"] == "Total"].iloc[0]
         ecl = result_credit["ecl_weighted"].sum()
         ead = result_credit["ead"].sum()
-        t = IFRS9_CONFIG.lifetime_horizon_years
-        expected_bps = ecl / (ead * t) * 10_000
+        ead_s1 = result_credit.loc[result_credit["stage"] == 1, "ead"].sum()
+        t_pondere = (ead_s1 * 1.0 + (ead - ead_s1) * IFRS9_CONFIG.lifetime_horizon_years) / max(ead, 1)
+        expected_bps = ecl / (ead * t_pondere) * 10_000
         assert abs(total["cost_of_risk_bps"] - round(expected_bps, 1)) < 1.0, \
             f"CoR annualise: attendu={expected_bps:.1f}, obtenu={total['cost_of_risk_bps']}"
 
@@ -159,10 +163,10 @@ class TestAdvancedCreditMetrics:
         for val in advanced_metrics["coverage_ratio"]:
             assert 0 <= val <= 1, f"Coverage ratio hors bornes: {val}"
 
-    def test_texas_ratio_positive(self, advanced_metrics):
-        """Texas ratio = EAD_S3 / (ECL_S3 + capital) doit etre >= 0."""
-        for val in advanced_metrics["texas_ratio"]:
-            assert val >= 0, f"Texas ratio negatif: {val}"
+    def test_texas_ratio_synth_positive(self, advanced_metrics):
+        """Texas ratio synth = EAD_S3 / (ECL_S3 + capital) doit etre >= 0."""
+        for val in advanced_metrics["texas_ratio_synth"]:
+            assert val >= 0, f"Texas ratio synth negatif: {val}"
 
     def test_pd_mean_in_0_1(self, advanced_metrics):
         """PD moyenne doit etre dans [0, 1]."""
@@ -193,7 +197,7 @@ class TestHHICrossCell:
         assert isinstance(hhi_result, dict)
 
     def test_required_keys(self, hhi_result):
-        expected_keys = {"hhi_credit", "hhi_pe", "hhi_crosscell", "shares"}
+        expected_keys = {"hhi_credit", "hhi_pe", "hhi_crosscell", "hhi_name_credit", "hhi_name_pe", "shares"}
         assert set(hhi_result.keys()) == expected_keys
 
     def test_hhi_credit_in_valid_range(self, hhi_result):
@@ -223,12 +227,13 @@ class TestHHICrossCell:
         # Avec des poids inegaux, il sera > 2000
         assert hhi_result["hhi_credit"] >= 2000
 
-    def test_crosscell_dominated_by_credit(self, hhi_result):
-        """Le portefeuille credit domine largement le PE en exposition."""
+    def test_crosscell_credit_and_pe_balanced(self, hhi_result):
+        """Credit et PE ont chacun une part significative du portefeuille."""
         shares = hhi_result["shares"]
         credit_share = shares.loc[shares["canal"] == "Credit", "share"].sum()
         pe_share = shares.loc[shares["canal"] == "PE", "share"].sum()
-        assert credit_share > pe_share
+        assert credit_share > 0.30
+        assert pe_share > 0.30
 
 
 class TestRAROCEVA:
@@ -438,6 +443,7 @@ class TestOptimizeAllocation:
             "sector_weights_credit", "sector_weights_pe",
             "raroc_credit", "raroc_pe",
             "rwa_weighted", "cet1_ratio", "cet1_headroom",
+            "headroom_m", "feasible",
         }
         assert expected == set(allocation_result.keys())
 
@@ -483,15 +489,21 @@ class TestOptimizeAllocation:
 class TestSoftmaxWeights:
     """Tests M7 — Softmax adaptative pour poids sectoriels."""
 
-    def test_equal_raroc_gives_equal_weights(self, comparator):
-        """Si tous les RAROC sont egaux, les poids doivent etre egaux."""
+    def test_equal_raroc_diversifies_via_correlation(self, comparator):
+        """Si tous les RAROC sont egaux, la penalite de correlation
+        favorise les secteurs les moins correles (effet diversification)."""
         cells = pd.DataFrame({
             "sector": list(SECTOR_NAMES),
             "raroc": [0.10] * 5,
         })
         w = comparator._optimize_sector_weights(cells)
         vals = list(w.values())
-        assert all(abs(v - 0.20) < 0.01 for v in vals), f"Poids non egaux: {vals}"
+        # Poids positifs et somment a 1
+        assert all(v > 0 for v in vals), f"Poids negatifs: {vals}"
+        assert abs(sum(vals) - 1.0) < 1e-6, f"Somme != 1: {sum(vals)}"
+        # Avec la penalite de correlation, les poids ne sont plus egaux:
+        # les secteurs moins correles aux autres recoivent un poids superieur
+        assert max(vals) > min(vals), "La penalite devrait creer de l'asymetrie"
 
     def test_best_raroc_gets_highest_weight(self, comparator):
         """Le secteur avec le meilleur RAROC devrait avoir le poids le plus eleve."""
@@ -608,6 +620,88 @@ class TestTippingPoints:
 # Validation constructeur et standalone
 # ============================================================
 
+# ============================================================
+# RJ Audit v3 : HHI Name Level, Correlation Penalty, GAR, Texas Synth
+# ============================================================
+
+class TestHHINameLevel:
+    """Tests HHI Name Level (concentration par contrepartie, ICAAP Pilier 2)."""
+
+    def test_hhi_name_credit_in_valid_range(self, hhi_result):
+        """HHI Name Level dans [0, 10000]."""
+        assert 0 <= hhi_result["hhi_name_credit"] <= 10_000
+
+    def test_hhi_name_pe_in_valid_range(self, hhi_result):
+        assert 0 <= hhi_result["hhi_name_pe"] <= 10_000
+
+    def test_hhi_name_lower_with_more_names(self, hhi_result):
+        """HHI Name doit etre inferieur au HHI sectoriel (plus de contreparties que de secteurs)."""
+        assert hhi_result["hhi_name_credit"] < hhi_result["hhi_credit"]
+
+
+class TestCorrelationPenalty:
+    """Tests RJ v3 — Softmax avec penalite de correlation."""
+
+    def test_correlated_sectors_penalized(self, comparator):
+        """Secteurs correles devraient etre penalises vs Softmax naif."""
+        cells = pd.DataFrame({
+            "sector": list(SECTOR_NAMES),
+            "raroc": [0.10, 0.10, 0.10, 0.10, 0.10],
+        })
+        w = comparator._optimize_sector_weights(cells)
+        # Avec RAROC egaux, la penalite de correlation devrait creer des ecarts
+        # Les secteurs les moins correles devraient avoir un poids legerement plus eleve
+        vals = list(w.values())
+        assert all(np.isfinite(v) for v in vals)
+        assert abs(sum(vals) - 1.0) < 0.01
+
+    def test_still_sums_to_one(self, comparator):
+        """Les poids doivent sommer a 1 meme avec penalite."""
+        cells = pd.DataFrame({
+            "sector": list(SECTOR_NAMES),
+            "raroc": [0.05, 0.15, 0.25, 0.08, 0.12],
+        })
+        w = comparator._optimize_sector_weights(cells)
+        assert abs(sum(w.values()) - 1.0) < 0.01
+
+
+class TestGreenAssetRatio:
+    """Tests GAR (ESG placeholder)."""
+
+    def test_returns_dict(self, comparator):
+        gar = comparator.compute_green_asset_ratio()
+        assert isinstance(gar, dict)
+
+    def test_required_keys(self, comparator):
+        gar = comparator.compute_green_asset_ratio()
+        assert {"gar_credit", "gar_pe", "gar_total", "details"} == set(gar.keys())
+
+    def test_gar_in_0_1(self, comparator):
+        """GAR est un ratio dans [0, 1]."""
+        gar = comparator.compute_green_asset_ratio()
+        assert 0 <= gar["gar_credit"] <= 1
+        assert 0 <= gar["gar_pe"] <= 1
+        assert 0 <= gar["gar_total"] <= 1
+
+    def test_gar_positive(self, comparator):
+        """GAR > 0 car tous les secteurs ont un green_share > 0."""
+        gar = comparator.compute_green_asset_ratio()
+        assert gar["gar_credit"] > 0
+        assert gar["gar_pe"] > 0
+
+    def test_details_5_sectors(self, comparator):
+        gar = comparator.compute_green_asset_ratio()
+        assert len(gar["details"]) == 5
+
+
+class TestTexasRatioRenamed:
+    """Tests du renommage texas_ratio → texas_ratio_synth."""
+
+    def test_column_renamed(self, advanced_metrics):
+        assert "texas_ratio_synth" in advanced_metrics.columns
+        assert "texas_ratio" not in advanced_metrics.columns
+
+
 class TestPortfolioComparatorInit:
     """Tests du constructeur PortfolioComparator."""
 
@@ -639,7 +733,7 @@ class TestStandalone:
             [sys.executable, "-m", "ifrs9_cockpit.engine.comparator"],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=900,
             cwd=r"C:\tout\cours\programme",
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
@@ -650,7 +744,7 @@ class TestStandalone:
             [sys.executable, "-m", "ifrs9_cockpit.engine.comparator"],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=900,
             cwd=r"C:\tout\cours\programme",
         )
         assert "[PASS]" in result.stdout

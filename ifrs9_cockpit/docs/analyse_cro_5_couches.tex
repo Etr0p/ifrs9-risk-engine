@@ -1,0 +1,1340 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- Analyse CRO}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries\color{darkblue} Analyse CRO --- 5 Couches\par}
+\vspace{0.8cm}
+{\Large\color{steelblue} AI Analyst / Virtual CRO\par}
+\vspace{1.5cm}
+{\large\color{gray} IFRS 9 Risk Cockpit\par}
+\vspace{2cm}
+{\large Pipeline analytique 2 passes : exploration, d\'etection de r\'egime,\\ conditionnement et synth\`ese narrative\par}
+\vspace{3cm}
+{\normalsize
+\begin{tabular}{ll}
+\textbf{Module} & \texttt{ifrs9\_cockpit.ai\_analyst} \\
+\textbf{Orchestrateur} & \texttt{orchestrator.py} --- classe \texttt{CROAnalyst} \\
+\textbf{Couches} & 5 modules Python (layer1 \`a layer5) \\
+\textbf{Sortie} & \texttt{AnalyticsState} (dataclass auto-document\'ee) \\
+\end{tabular}
+}
+\vfill
+{\small\color{gray} Document g\'en\'er\'e depuis le code source --- confidentiel}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ═══════════════════════════════════════════════════════════
+\section{Architecture 5 couches}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Vue d'ensemble}
+
+L'AI Analyst impl\'emente un pipeline analytique \`a 5 couches orchestr\'e en 2 passes
+par la classe \texttt{CROAnalyst} (fichier \texttt{orchestrator.py}). Chaque couche
+produit une composante de l'\'etat analytique \texttt{AnalyticsState}, un dataclass
+auto-document\'e consomm\'e par le dashboard Streamlit (onglet 8 : Analyse CRO).
+
+\begin{definitionbox}[Pipeline 2 passes]
+\begin{enumerate}[label=\textbf{Passe \arabic*},leftmargin=2.5cm]
+    \item \textbf{Exploration} (r\'egime inconnu) --- les 5 couches s'ex\'ecutent sans
+          conditionnement. La couche~4 d\'etecte le r\'egime macro actuel.
+    \item \textbf{Conditionnement} --- les 5 couches se r\'e-ex\'ecutent avec le r\'egime
+          d\'etect\'e en passe~1. L'attribution factorielle (couche~2) et les trajectoires
+          (couche~5) sont ajust\'ees par des multiplicateurs et drifts sp\'ecifiques au
+          r\'egime.
+\end{enumerate}
+Apr\`es la passe~2, l'orchestrateur g\'en\`ere les \textbf{recommandations explicables}
+(FR31) et la \textbf{synth\`ese narrative} (FR32).
+\end{definitionbox}
+
+\subsection{Diagramme d'architecture}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    layer/.style={
+        rectangle, rounded corners=6pt, minimum width=12cm, minimum height=1.4cm,
+        draw=steelblue, thick, fill=steelblue!8, font=\small\bfseries,
+        text=darkblue, align=center
+    },
+    sublabel/.style={
+        font=\scriptsize\color{gray}, align=center
+    },
+    orch/.style={
+        rectangle, rounded corners=8pt, minimum width=13.5cm, minimum height=1.2cm,
+        draw=darkblue, very thick, fill=darkblue!10, font=\normalsize\bfseries,
+        text=darkblue
+    },
+    synth/.style={
+        rectangle, rounded corners=6pt, minimum width=12cm, minimum height=1.2cm,
+        draw=accentgreen!70!black, thick, fill=accentgreen!8, font=\small\bfseries,
+        text=accentgreen!70!black
+    },
+    data/.style={
+        ellipse, draw=accentorange, thick, fill=accentorange!10,
+        font=\scriptsize, text=accentorange!80!black, align=center,
+        minimum width=2.8cm, minimum height=0.9cm
+    },
+    myarrow/.style={-{Stealth[length=5pt]}, thick, steelblue},
+    feedback/.style={-{Stealth[length=5pt]}, thick, accentred, dashed},
+]
+
+% Orchestrateur
+\node[orch] (orch) at (0, 8.5) {Orchestrateur CROAnalyst --- 2 Passes};
+
+% Couches
+\node[layer] (L1) at (0, 6.8) {Couche 1 --- Croisement \& Asym\'etries};
+\node[sublabel, below=-0.1cm of L1] (L1s) {\texttt{layer1\_crossing.py} --- 5 secteurs $\times$ 2 canaux, contributions marginales};
+
+\node[layer] (L2) at (0, 5.0) {Couche 2 --- Allocation Proportionnelle \& Attribution Factorielle};
+\node[sublabel, below=-0.1cm of L2] (L2s) {\texttt{layer2\_euler.py} --- allocation proportionnelle 10 cellules, deltas adaptatifs (M6)};
+
+\node[layer] (L3) at (0, 3.2) {Couche 3 --- Reverse Stress Testing};
+\node[sublabel, below=-0.1cm of L3] (L3s) {\texttt{layer3\_rst.py} --- tipping points univari\'es, RST joint Mahalanobis};
+
+\node[layer] (L4) at (0, 1.4) {Couche 4 --- D\'etection de R\'egime};
+\node[sublabel, below=-0.1cm of L4] (L4s) {\texttt{layer4\_regime.py} --- 5 r\'egimes canoniques, softmax sur similarit\'e cosinus};
+
+\node[layer] (L5) at (0, -0.4) {Couche 5 --- Trajectoires Prospectives};
+\node[sublabel, below=-0.1cm of L5] (L5s) {\texttt{layer5\_prospective.py} --- Ornstein-Uhlenbeck, risk appetite, early warning};
+
+% Synthese
+\node[synth] (synth) at (0, -2.2) {Synth\`ese : Recommandations (FR31) + Narrative (FR32)};
+
+% Fleches verticales
+\draw[myarrow] (orch.south) -- (L1.north);
+\draw[myarrow] (L1.south) -- ++(0,-0.2) -- (L2.north);
+\draw[myarrow] (L2.south) -- ++(0,-0.2) -- (L3.north);
+\draw[myarrow] (L3.south) -- ++(0,-0.2) -- (L4.north);
+\draw[myarrow] (L4.south) -- ++(0,-0.2) -- (L5.north);
+\draw[myarrow] (L5.south) -- ++(0,-0.2) -- (synth.north);
+
+% Feedback passe 2
+\draw[feedback] (L4.east) -- ++(2.2,0) node[midway, above, font=\scriptsize\color{accentred}] {r\'egime} |- (orch.east);
+
+% Donnees d'entree
+\node[data] (dc) at (-7.5, 6.8) {result\_credit\\(ECLCalculator)};
+\node[data] (dp) at (-7.5, 5.0) {result\_pe\\(PECalculator)};
+\node[data] (dm) at (-7.5, 3.2) {macro\_params\\(5 variables)};
+
+\draw[myarrow, accentorange] (dc.east) -- (L1.west);
+\draw[myarrow, accentorange] (dp.east) -- (L2.west);
+\draw[myarrow, accentorange] (dm.east) -- (L3.west);
+
+\end{tikzpicture}
+\caption{Architecture du pipeline AI Analyst --- 5 couches, 2 passes}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Donn\'ees d'entr\'ee}
+
+L'orchestrateur re\c{c}oit trois entr\'ees principales :
+
+\begin{itemize}
+    \item \texttt{result\_credit} : \texttt{DataFrame} produit par \texttt{ECLCalculator.calculate()},
+          contenant par ligne : \texttt{sector}, \texttt{ecl\_weighted}, \texttt{ead},
+          \texttt{rwa\_credit}, \texttt{pd\_12m}, \texttt{stage}.
+    \item \texttt{result\_pe} : \texttt{DataFrame} produit par \texttt{PECalculator.calculate()},
+          contenant : \texttt{sector}, \texttt{expected\_loss\_pe}, \texttt{rwa\_pe},
+          \texttt{nav}, \texttt{nav\_drawdown}, \texttt{risk\_category}.
+    \item \texttt{macro\_params} : dictionnaire des 5 variables macro\-\'economiques
+          (\texttt{unemployment\_rate}, \texttt{gdp\_growth}, \texttt{interest\_rate},
+          \texttt{hpi\_growth}, \texttt{inflation\_rate}).
+\end{itemize}
+
+\subsection{Structure de sortie : AnalyticsState}
+
+La sortie compl\`ete est port\'ee par le dataclass \texttt{AnalyticsState}
+(fichier \texttt{types.py}), qui expose des champs typ\'es pour chaque couche :
+
+\begin{table}[htbp]
+\centering
+\caption{Champs de \texttt{AnalyticsState} par couche}
+\begin{tabular}{clp{7.5cm}}
+\toprule
+\textbf{Couche} & \textbf{Champ} & \textbf{Description} \\
+\midrule
+1 & \texttt{asymmetry\_matrix} & DataFrame 5 secteurs : taux de perte credit vs PE, asym\'etrie \\
+1 & \texttt{marginal\_contributions} & 10 cellules (secteur $\times$ canal), contribution marginale \\
+2 & \texttt{proportional\_contributions} & Allocation proportionnelle 10 cellules (\texttt{proportional\_share}) \\
+2 & \texttt{factor\_attribution} & Attribution factorielle OAT, 5 vars $\times$ 2 canaux \\
+3 & \texttt{tipping\_points} & Seuils de basculement univari\'es (5 variables) \\
+3 & \texttt{rst\_result} & Sc\'enario de rupture RST (dict) \\
+3 & \texttt{rst\_distance} & Distance de Mahalanobis en $\sigma$ \\
+4 & \texttt{regime} & \texttt{RegimeClassification} (5 probabilit\'es + r\'egime dominant) \\
+5 & \texttt{trajectories} & 12 projections (3 trajectoires $\times$ 4 horizons) \\
+5 & \texttt{risk\_appetite\_matrix} & 10 cellules avec feux tricolores \\
+5 & \texttt{early\_warning} & Indicateurs d'alerte pr\'ecoce composites (5 secteurs) \\
+--- & \texttt{recommendations} & Liste de \texttt{Recommendation} (FR31) \\
+--- & \texttt{narrative} & Synth\`ese narrative CRO (FR32) \\
+\bottomrule
+\end{tabular}
+\label{tab:analytics_state}
+\end{table}
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Couche 1 : Analyse descriptive et croisements}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Objectif}
+
+La couche~1 (\texttt{layer1\_crossing.py}, fonction \texttt{analyze\_crossings})
+scanne les \textbf{asym\'etries credit vs Private Equity} par secteur et calcule
+les \textbf{contributions marginales} de chaque cellule (secteur $\times$ canal)
+au risque total du portefeuille.
+
+\subsection{Matrice d'asym\'etrie}
+
+Pour chaque secteur $s \in \{1, \ldots, 5\}$, on calcule :
+
+\begin{formulebox}[Taux de perte normalis\'e]
+\begin{equation}
+    \ell_s^{\text{Credit}} = \frac{\text{ECL}_s}{\text{EAD}_s}, \qquad
+    \ell_s^{\text{PE}} = \frac{\text{EL\_PE}_s}{\text{NAV}_s}
+    \label{eq:loss_rates}
+\end{equation}
+\begin{equation}
+    \text{Asym\'etrie}_s = \ell_s^{\text{PE}} - \ell_s^{\text{Credit}}
+    \label{eq:asymmetry}
+\end{equation}
+\end{formulebox}
+
+Une asym\'etrie positive indique que le canal PE est plus risqu\'e que le canal credit
+pour ce secteur. L'intensit\'e de stress par secteur est calcul\'ee comme la somme pond\'er\'ee
+des \'ecarts macro par les sensibilit\'es sectorielles :
+
+\begin{equation}
+    I_s = \sum_{v=1}^{5} \left| X_v - X_v^{\text{base}} \right| \cdot \gamma_{s,v}^{\text{credit}}
+    \label{eq:stress_intensity}
+\end{equation}
+
+o\`u $\gamma_{s,v}^{\text{credit}}$ est la sensibilit\'e du secteur $s$ \`a la variable $v$,
+d\'efinie dans \texttt{SectorConfig}.
+
+\subsection{Contributions marginales}
+
+Les contributions marginales reposent sur une allocation proportionnelle simple :
+
+\begin{equation}
+    c_{s,k} = \frac{R_{s,k}}{R_{\text{total}}}, \quad
+    R_{\text{total}} = \sum_s \text{ECL}_s + \sum_s \text{EL\_PE}_s
+    \label{eq:marginal}
+\end{equation}
+
+o\`u $k \in \{\text{Credit}, \text{PE}\}$ et $R_{s,k}$ est le montant de risque
+de la cellule $(s, k)$. La propri\'et\'e de full allocation est garantie :
+$\sum_{s,k} c_{s,k} = 1$.
+
+\subsection{Risk Appetite --- Cadre tricolore}
+
+Le cadre d'app\'etit au risque s'applique par cellule via la fonction
+\texttt{compute\_risk\_appetite} (couche~5). Les seuils sont d\'efinis dans
+\texttt{RiskAppetiteConfig} :
+
+\begin{table}[htbp]
+\centering
+\caption{Seuils de l'app\'etit au risque (cadre FSB 2013)}
+\begin{tabular}{lccc}
+\toprule
+\textbf{M\'etrique} & \textcolor{accentgreen}{\textbf{Vert}} & \textcolor{accentorange}{\textbf{Ambre}} & \textcolor{accentred}{\textbf{Rouge}} \\
+\midrule
+ECL/EAD (Credit) & $< 2{,}0\%$ & $[2{,}0\% ; 4{,}0\%[$ & $\geq 4{,}0\%$ \\
+NAV Drawdown (PE) & $< 10\%$ & $[10\% ; 25\%[$ & $\geq 25\%$ \\
+RAROC & $> 4\%$ & $[2\% ; 4\%]$ & $< 2\%$ \\
+HHI & $< 1\,500$ & $[1\,500 ; 2\,500[$ & $\geq 2\,500$ \\
+\bottomrule
+\end{tabular}
+\label{tab:risk_appetite}
+\end{table}
+
+\subsection{Indicateurs d'alerte pr\'ecoce (Early Warning)}
+
+La fonction \texttt{compute\_early\_warning} calcule un score composite par secteur
+via une pond\'eration de type AHP simplifi\'ee :
+
+\begin{formulebox}[Score d'alerte pr\'ecoce]
+\begin{equation}
+    \text{EW}_s = 0{,}25 \cdot \widetilde{\text{PD}}_s
+    + 0{,}15 \cdot \widetilde{\text{S2}}_s
+    + 0{,}15 \cdot \widetilde{\text{S3}}_s
+    + 0{,}20 \cdot \widetilde{\text{DD}}_s
+    + 0{,}10 \cdot \widetilde{\text{Dist}}_s
+    + 0{,}15 \cdot \widetilde{M}
+    \label{eq:early_warning}
+\end{equation}
+o\`u chaque composante est normalis\'ee par sa valeur de r\'ef\'erence maximale :
+$\widetilde{\text{PD}}_s = \min(1, \text{PD}_s / 0{,}20)$, \quad
+$\widetilde{\text{S2}}_s = \min(1, \%\text{Stage2} / 0{,}20)$, etc.
+\end{formulebox}
+
+Les poids (somme~$= 1$) sont calibr\'es par jugement d'expert :
+PD moyenne (0,25), Stage~2 (0,15), Stage~3 (0,15), drawdown PE (0,20),
+distress PE (0,10), stress macro global (0,15).
+Le signal est vert si $\text{EW} < 0{,}25$, ambre si $< 0{,}50$, rouge sinon.
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Couche 2 : Allocation proportionnelle du risque}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Objectif}
+
+La couche~2 (\texttt{layer2\_euler.py}, fonction \texttt{decompose\_proportional})
+d\'ecompose le risque total en contributions par cellule (secteur $\times$ canal)
+et attribue les variations de risque aux 5 variables macro\-\'economiques.
+
+\begin{warningbox}[Allocation proportionnelle (ex-``Euler'')]
+\textbf{Audit RJ} : l'ancienne terminologie <<~Euler~>> a \'et\'e remplac\'ee par
+<<~allocation proportionnelle~>>. La m\'ethode n'utilise \textbf{pas} de d\'eriv\'ees
+partielles (Euler-Tasche, 1999) mais une simple r\`egle de trois :
+\[
+    \text{contribution}_i = \frac{\text{ECL}_i}{\text{ECL}_{\text{total}}}
+\]
+qui garantit la propri\'et\'e de \textbf{full allocation}
+($\sum_i \text{contribution}_i = 1$) par construction.
+L'alias \texttt{decompose\_euler} reste disponible pour la compatibilit\'e ascendante.
+\end{warningbox}
+
+\subsection{Allocation proportionnelle (10 cellules)}
+
+Pour les 5 secteurs et 2 canaux (Credit, PE), le risque total est d\'efini comme :
+
+\begin{equation}
+    R_{\text{total}} = \underbrace{\sum_{s=1}^{5} \text{ECL}_s}_{\text{Credit}}
+    + \underbrace{\sum_{s=1}^{5} \text{EL\_PE}_s}_{\text{Private Equity}}
+    \label{eq:total_risk}
+\end{equation}
+
+La contribution proportionnelle de chaque cellule est :
+
+\begin{formulebox}[Contribution proportionnelle]
+\begin{equation}
+    w_{s}^{\text{Credit}} = \frac{\text{ECL}_s}{R_{\text{total}}}, \qquad
+    w_{s}^{\text{PE}} = \frac{\text{EL\_PE}_s}{R_{\text{total}}}
+    \label{eq:proportional}
+\end{equation}
+Propri\'et\'e : $\displaystyle\sum_{s=1}^{5} \left( w_s^{\text{Credit}} + w_s^{\text{PE}} \right) = 1$
+\end{formulebox}
+
+Le DataFrame retourn\'e contient pour chaque cellule :
+\texttt{sector}, \texttt{canal}, \texttt{risk\_amount} (montant ECL ou EL en EUR),
+\texttt{proportional\_share} (contribution normalis\'ee), et \texttt{rwa} (RWA associ\'e).
+
+\subsection{Attribution factorielle OAT}
+
+L'attribution factorielle mesure la sensibilit\'e du risque \`a chaque variable
+macro\-\'economique par la m\'ethode One-At-a-Time (OAT) avec des
+\textbf{deltas adaptatifs} (correction M6).
+
+\subsubsection{Deltas adaptatifs (M6)}
+
+Plut\^ot qu'un delta fixe de 1~point de pourcentage pour toutes les variables,
+chaque delta est calibr\'e \`a 1\% de la fourchette de chaque variable :
+
+\begin{table}[htbp]
+\centering
+\caption{Deltas adaptatifs par variable (1\% de la fourchette)}
+\begin{tabular}{lccr}
+\toprule
+\textbf{Variable} & \textbf{Fourchette} & \textbf{Delta adaptatif} \\
+\midrule
+\texttt{unemployment\_rate} & $[4 ; 15]$ & 0,11 \\
+\texttt{gdp\_growth} & $[-5 ; 5]$ & 0,10 \\
+\texttt{interest\_rate} & $[0 ; 10]$ & 0,10 \\
+\texttt{hpi\_growth} & $[-10 ; 10]$ & 0,20 \\
+\texttt{inflation\_rate} & $[0 ; 8]$ & 0,08 \\
+\bottomrule
+\end{tabular}
+\label{tab:adaptive_deltas}
+\end{table}
+
+\subsubsection{Formule d'attribution}
+
+Pour chaque variable $v$ et canal $k$, l'attribution est :
+
+\begin{formulebox}[Attribution factorielle normalis\'ee]
+\begin{equation}
+    A_{v}^{k} = \sum_{s=1}^{5}
+    \frac{|\Delta_v|}{\delta_v^{\text{adapt}}}
+    \cdot \gamma_{s,v}^{k}
+    \cdot \frac{R_{s}^{k}}{R_{\text{total}}^{k}}
+    \label{eq:attribution}
+\end{equation}
+o\`u :
+\begin{itemize}[nosep]
+    \item $\Delta_v = X_v^{\text{current}} - X_v^{\text{base}}$ est l'\'ecart au baseline,
+    \item $\delta_v^{\text{adapt}}$ est le delta adaptatif (Table~\ref{tab:adaptive_deltas}),
+    \item $\gamma_{s,v}^{k}$ est la sensibilit\'e du secteur $s$ \`a la variable $v$ pour le canal $k$.
+\end{itemize}
+\end{formulebox}
+
+\subsubsection{Ajustement r\'egime (passe 2)}
+
+En passe~2, l'attribution factorielle est multipli\'ee par un facteur r\'egime
+$m_{v,r}$ qui amplifie les variables dominantes du r\'egime d\'etect\'e $r$ :
+
+\begin{equation}
+    A_{v}^{k,\text{ajust}} = A_{v}^{k} \cdot m_{v,r}
+    \label{eq:regime_mult}
+\end{equation}
+
+\begin{table}[htbp]
+\centering
+\caption{Multiplicateurs de r\'egime (extraits de \texttt{\_regime\_multiplier})}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{R\'egime} & \texttt{unemp} & \texttt{gdp} & \texttt{rate} & \texttt{hpi} & \texttt{infl} \\
+\midrule
+Crise financi\`ere & 1,5 & 1,3 & 1,0 & 1,4 & 1,0 \\
+Stagflation & 1,0 & 1,3 & 1,2 & 1,0 & 1,5 \\
+Rupture techno & 1,2 & 1,4 & 1,0 & 1,0 & 1,0 \\
+Resserrement & 1,0 & 1,0 & 1,5 & 1,3 & 1,0 \\
+Reprise & 0,8 & 0,8 & 1,0 & 1,0 & 1,0 \\
+\bottomrule
+\end{tabular}
+\label{tab:regime_mult}
+\end{table}
+
+\begin{interpretbox}[Interpr\'etation]
+En r\'egime de \textbf{crise financi\`ere}, le ch\^omage ($\times 1{,}5$),
+les prix immobiliers ($\times 1{,}4$) et le PIB ($\times 1{,}3$) sont amplifi\'es,
+refl\'etant la dynamique observ\'ee lors de la GFC 2008--09.
+En \textbf{reprise}, les multiplicateurs sont $< 1$ (att\'enuation de l'attribution),
+coh\'erent avec un risque en d\'ecroissance.
+\end{interpretbox}
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Couche 3 : Reverse Stress Testing}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Objectif}
+
+La couche~3 (\texttt{layer3\_rst.py}) remplit deux fonctions compl\'ementaires :
+
+\begin{enumerate}
+    \item \textbf{Seuils de basculement univari\'es} : pour chaque variable macro, identifier
+          la valeur qui fait basculer l'ECL au-del\`a du seuil ambre.
+    \item \textbf{Reverse Stress Test joint} : trouver le sc\'enario de rupture
+          \textbf{minimal} (au sens de Mahalanobis) qui provoque un breach CET1.
+\end{enumerate}
+
+\subsection{Proxy ECL logit}
+
+Le RST utilise un proxy rapide de l'ECL total (plutot que le recalcul complet
+\texttt{ECLCalculator}) pour permettre le balayage param\'etrique en temps r\'eel :
+
+\begin{formulebox}[Proxy ECL logit]
+\begin{equation}
+    \text{stress}_{\text{sum}} = \sum_{v=1}^{5}
+    \frac{\Delta_v}{100} \cdot \bar{\gamma}_v \cdot
+    \begin{cases}
+        -1 & \text{si } v \in \{\texttt{gdp}, \texttt{hpi}\} \\
+        +1 & \text{sinon}
+    \end{cases}
+    \label{eq:stress_sum}
+\end{equation}
+\begin{equation}
+    \text{ECL}_{\text{proxy}} = \sigma\!\left(\text{logit}(r_{\text{base}})
+    + \text{stress}_{\text{sum}} \cdot \Lambda\right) \cdot \text{EAD}_{\text{total}}
+    \label{eq:ecl_proxy}
+\end{equation}
+o\`u $\sigma$ est la fonction logistique (expit), $r_{\text{base}} = \text{ECL} / \text{EAD}$,
+$\Lambda = 6{,}0$ (\texttt{LOGIT\_AMPLITUDE}), et $\bar{\gamma}_v$ est la sensibilit\'e
+moyenne pond\'er\'ee par la proportion sectorielle.
+\end{formulebox}
+
+Le retour est en \textbf{montant absolu EUR} (ratio $\times$ EAD), coh\'erent
+avec le seuil de rupture du capital.
+
+\subsection{Seuils de basculement univari\'es}
+
+La fonction \texttt{find\_tipping\_points} balaye chaque variable dans sa direction
+adverse avec un pas de 0,5~pp :
+
+\begin{algorithm}[htbp]
+\caption{Recherche de seuils de basculement univari\'es}
+\label{alg:tipping}
+\begin{algorithmic}[1]
+\Require $f_{\text{ECL}}$ : proxy ECL, $\mathbf{X}$ : variables macro, $\tau$ : seuil ECL
+\Ensure DataFrame de 5 tipping points
+\For{chaque variable $v \in \{1, \ldots, 5\}$}
+    \State $x_0 \gets X_v$ \Comment{valeur courante}
+    \State $d \gets$ direction adverse de $v$ \Comment{+1 ou $-1$}
+    \For{$x \gets x_0,\; x_0 + d \cdot 0{,}5,\; x_0 + d \cdot 1{,}0,\; \ldots$}
+        \If{$x \notin [\text{min}_v, \text{max}_v]$}
+            \State \textbf{break} \Comment{hors fourchette}
+        \EndIf
+        \State $\mathbf{X}' \gets \mathbf{X}$ avec $X_v' = x$
+        \If{$f_{\text{ECL}}(\mathbf{X}') > \tau$}
+            \State \Return tipping\_value $= x$, distance $= |x - x_0|$
+        \EndIf
+    \EndFor
+    \State tipping\_value $= \varnothing$ (pas de basculement dans la fourchette)
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Le seuil $\tau$ par d\'efaut est le seuil ambre en montant absolu :
+$\tau = \texttt{ecl\_ead\_amber} \times \text{EAD}_{\text{total}}$.
+Le param\`etre \texttt{ecl\_threshold} (FR54) permet de le personnaliser.
+
+\begin{table}[htbp]
+\centering
+\caption{Fourchettes de balayage par variable}
+\begin{tabular}{lcccl}
+\toprule
+\textbf{Variable} & \textbf{Min} & \textbf{Max} & \textbf{Pas} & \textbf{Direction adverse} \\
+\midrule
+\texttt{unemployment\_rate} & 4,0 & 15,0 & 0,5 & $\uparrow$ \\
+\texttt{gdp\_growth} & $-5{,}0$ & 5,0 & 0,5 & $\downarrow$ \\
+\texttt{interest\_rate} & 0,0 & 10,0 & 0,5 & $\uparrow$ \\
+\texttt{hpi\_growth} & $-10{,}0$ & 10,0 & 0,5 & $\downarrow$ \\
+\texttt{inflation\_rate} & 0,0 & 8,0 & 0,5 & $\uparrow$ \\
+\bottomrule
+\end{tabular}
+\label{tab:sweep_ranges}
+\end{table}
+
+\subsection{Reverse Stress Test joint}
+
+La fonction \texttt{reverse\_stress\_test} cherche le facteur d'\'echelle
+minimal $\alpha \in [1{,}0 ; 10{,}0]$ (pas de 0,1) tel que toutes les variables
+sont stress\'ees simultan\'ement et l'ECL d\'epasse le seuil de rupture CET1.
+
+\subsubsection{Construction du sc\'enario stress\'e}
+
+Pour un facteur $\alpha$, les variables stress\'ees sont :
+
+\begin{equation}
+    X_v^{\text{stress}}(\alpha) = X_v^{\text{base}}
+    + \frac{(X_v^{\max} - X_v^{\text{base}}) \cdot d_v \cdot (\alpha - 1)}{5}
+    \label{eq:stress_params}
+\end{equation}
+
+o\`u $d_v \in \{+1, -1\}$ est la direction adverse de la variable $v$.
+
+\subsubsection{Seuil de rupture}
+
+Le seuil ECL de rupture est calibr\'e \`a 10\% du capital CET1 r\'eel :
+
+\begin{equation}
+    \text{ECL}_{\text{breach}} = \underbrace{\text{RWA}_{\text{credit}} \times \text{CET1}_{\text{target}}}_{\text{Capital CET1 r\'eel}} \times 0{,}10
+    \label{eq:breach}
+\end{equation}
+
+Le param\`etre \texttt{target\_ecl} permet de personnaliser ce seuil (FR54).
+Le capital est calcul\'e dynamiquement depuis le portefeuille r\'eel
+(pas de constante statique).
+
+\subsubsection{Distance de Mahalanobis (H6)}
+
+\begin{definitionbox}[Distance de Mahalanobis]
+La distance de Mahalanobis mesure la distance statistique entre le sc\'enario
+de rupture et le baseline, en tenant compte de la structure de corr\'elation
+des variables macro :
+\begin{equation}
+    d_M = \sqrt{\mathbf{x}^\top \boldsymbol{\Sigma}^{-1} \mathbf{x}}
+    \label{eq:mahalanobis}
+\end{equation}
+o\`u $\mathbf{x} = \mathbf{X}^{\text{stress}} - \mathbf{X}^{\text{base}}$
+est le vecteur d'\'ecart (5 dimensions) et $\boldsymbol{\Sigma}$ est la matrice
+de covariance $5 \times 5$ construite \`a partir d'une corr\'elation de consensus expert
+et de volatilit\'es historiques (cf.\ section~\ref{tab:scenarios}).
+\end{definitionbox}
+
+L'impl\'ementation dans \texttt{\_compute\_mahalanobis} utilise
+\texttt{np.linalg.solve} au lieu de l'inversion explicite
+$\boldsymbol{\Sigma}^{-1} \mathbf{x}$ pour une meilleure stabilit\'e num\'erique :
+
+\begin{formulebox}[Impl\'ementation num\'erique stable]
+Au lieu de calculer $\boldsymbol{\Sigma}^{-1} \mathbf{x}$ directement, on r\'esout
+le syst\`eme lin\'eaire $\boldsymbol{\Sigma} \mathbf{y} = \mathbf{x}$ pour obtenir
+$\mathbf{y} = \boldsymbol{\Sigma}^{-1} \mathbf{x}$, puis :
+\begin{equation}
+    d_M = \sqrt{\mathbf{x}^\top \mathbf{y}}
+    \label{eq:solve}
+\end{equation}
+En cas de singularit\'e de $\boldsymbol{\Sigma}$ (exception \texttt{LinAlgError}),
+un fallback diagonal (distance euclidienne normalis\'ee) est utilis\'e :
+\begin{equation}
+    d_M^{\text{fallback}} = \sqrt{\sum_{i=1}^{5} \frac{x_i^2}{\sigma_{ii}^2}}
+    \label{eq:fallback}
+\end{equation}
+\end{formulebox}
+
+La matrice $\boldsymbol{\Sigma}$ est construite dans \texttt{config.py} par la fonction
+\texttt{\_build\_macro\_covariance()} \`a partir d'une matrice de corr\'elation de consensus
+(\textit{Expert Judgment}) et de volatilit\'es historiques ($\Sigma_{ij} = \rho_{ij} \sigma_i \sigma_j$).
+L'ordre des variables est fix\'e par \texttt{MACRO\_VARIABLES\_ORDER} :
+(\texttt{unemployment\_rate}, \texttt{gdp\_growth}, \texttt{interest\_rate},
+\texttt{hpi\_growth}, \texttt{inflation\_rate}).
+
+\begin{interpretbox}[Interpr\'etation de la distance RST]
+\begin{itemize}[nosep]
+    \item $d_M < 2\sigma$ : rupture \`a proximit\'e --- risque \'elev\'e, confiance \textbf{low}
+    \item $2\sigma \leq d_M < 5\sigma$ : rupture mod\'er\'ement \'eloign\'ee --- confiance \textbf{medium}
+    \item $d_M \geq 5\sigma$ : rupture tr\`es \'eloign\'ee --- confiance \textbf{high}
+\end{itemize}
+Cette grille est utilis\'ee directement par l'orchestrateur pour g\'en\'erer le
+niveau de confiance des recommandations.
+\end{interpretbox}
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Couche 4 : D\'etection de r\'egime}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Objectif}
+
+La couche~4 (\texttt{layer4\_regime.py}, fonction \texttt{classify\_regime})
+classifie le r\'egime macro\-\'economique actuel avec des \textbf{probabilit\'es continues}
+sur 5 r\'egimes canoniques, via un softmax appliqu\'e aux scores de similarit\'e.
+
+\subsection{Les 5 r\'egimes canoniques}
+
+\begin{definitionbox}[R\'egimes canoniques]
+Cinq r\'egimes couvrent l'ensemble des configurations macro\-\'economiques pertinentes
+pour le risque de cr\'edit :
+\begin{enumerate}[nosep]
+    \item \textbf{Crise financi\`ere} --- calibr\'e sur la GFC 2008--09
+          (ch\^omage $+3$, PIB $-3$, taux $-1$, immobilier $-5$)
+    \item \textbf{Stagflation} --- calibr\'e sur les ann\'ees 1970
+          (ch\^omage $+2$, PIB $-2$, taux $+2$, inflation $+3$)
+    \item \textbf{Rupture techno} --- sc\'enario hypoth\'etique
+          (ch\^omage $+1$, PIB $-1{,}5$)
+    \item \textbf{Resserrement} --- calibr\'e sur 2022--23
+          (taux $+3$, immobilier $-3$, inflation $+1{,}5$)
+    \item \textbf{Reprise} --- calibr\'e sur 2021
+          (ch\^omage $-2$, PIB $+2$, immobilier $+2$)
+\end{enumerate}
+Source : BCE Statistical Data Warehouse, calibration p\'edagogique.
+\end{definitionbox}
+
+\subsection{Vecteur de stress}
+
+Le vecteur de stress est calcul\'e comme l'\'ecart entre les variables macro
+actuelles et le baseline, avec une \textbf{convention d'inversion} pour le PIB
+et les prix immobiliers (une baisse correspond \`a un stress positif) :
+
+\begin{equation}
+    \mathbf{s} = \begin{pmatrix}
+        X_{\text{unemp}} - X_{\text{unemp}}^{\text{base}} \\
+        X_{\text{gdp}}^{\text{base}} - X_{\text{gdp}} \\
+        X_{\text{rate}} - X_{\text{rate}}^{\text{base}} \\
+        X_{\text{hpi}}^{\text{base}} - X_{\text{hpi}} \\
+        X_{\text{infl}} - X_{\text{infl}}^{\text{base}}
+    \end{pmatrix}
+    \label{eq:stress_vector}
+\end{equation}
+
+\subsection{Classification par produit scalaire + softmax}
+
+Le score de chaque r\'egime $r$ est le \textbf{produit scalaire} entre le vecteur
+de stress actuel et la signature du r\'egime :
+
+\begin{equation}
+    z_r = \mathbf{s} \cdot \boldsymbol{\sigma}_r = \sum_{i=1}^{5} s_i \cdot \sigma_{r,i}
+    \label{eq:dot_product}
+\end{equation}
+
+o\`u $\boldsymbol{\sigma}_r$ est le vecteur-signature du r\'egime $r$
+(Table~\ref{tab:signatures}).
+
+Les probabilit\'es sont obtenues par softmax avec temp\'erature $T = 2{,}0$
+(\texttt{\_SOFTMAX\_SCALE}) :
+
+\begin{formulebox}[Softmax avec temp\'erature]
+\begin{equation}
+    P(r) = \frac{\exp(T \cdot z_r)}{\displaystyle\sum_{r'=1}^{5} \exp(T \cdot z_{r'})}
+    \label{eq:softmax}
+\end{equation}
+Le r\'egime d\'etect\'e est $r^* = \arg\max_r P(r)$.
+Pour la stabilit\'e num\'erique, le calcul utilise le trick standard
+$\exp(T z_r - \max_j(T z_j))$ avant normalisation.
+\end{formulebox}
+
+\begin{table}[htbp]
+\centering
+\caption{Signatures des 5 r\'egimes (espace stress)}
+\label{tab:signatures}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{R\'egime} & \texttt{unemp} & \texttt{gdp} & \texttt{rate} & \texttt{hpi} & \texttt{infl} \\
+\midrule
+Crise financi\`ere & $+3{,}0$ & $+3{,}0$ & $-1{,}0$ & $+5{,}0$ & $0{,}0$ \\
+Stagflation & $+2{,}0$ & $+2{,}0$ & $+2{,}0$ & $+1{,}0$ & $+3{,}0$ \\
+Rupture techno & $+1{,}0$ & $+1{,}5$ & $+0{,}5$ & $0{,}0$ & $+0{,}5$ \\
+Resserrement & $+0{,}5$ & $+0{,}5$ & $+3{,}0$ & $+3{,}0$ & $+1{,}5$ \\
+Reprise & $-2{,}0$ & $-2{,}0$ & $0{,}0$ & $-2{,}0$ & $-0{,}5$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{interpretbox}[Interpr\'etation]
+\begin{itemize}[nosep]
+    \item En l'absence de stress ($\mathbf{s} \approx \mathbf{0}$), les scores
+          sont proches et les probabilit\'es quasi-uniformes ($\sim 20\%$ chacun).
+    \item Sous stress de type \emph{Stagflation} (ch\^omage $+3$, PIB $-1$,
+          inflation $+5$, taux $+5{,}5$), la signature Stagflation domine par
+          produit scalaire et la probabilit\'e associ\'ee peut d\'epasser 80\%.
+    \item La temp\'erature $T = 2{,}0$ offre un bon compromis entre discrimination
+          (haute temp\'erature $\to$ winner-takes-all) et incertitude
+          (basse temp\'erature $\to$ uniforme).
+\end{itemize}
+\end{interpretbox}
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Couche 5 : Trajectoires prospectives}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Objectif}
+
+La couche~5 (\texttt{layer5\_prospective.py}) projette les variables macro
+\`a T+3, T+6, T+9 et T+12 mois selon 3 sc\'enarios (favorable, central, adverse)
+via un processus \textbf{d'Ornstein-Uhlenbeck} discret (mean-reversion).
+
+\subsection{Processus d'Ornstein-Uhlenbeck (H10)}
+
+\begin{definitionbox}[Processus O-U continu]
+Le processus d'Ornstein-Uhlenbeck mod\'elise le retour \`a la moyenne d'une variable :
+\begin{equation}
+    \mathrm{d}X_t = \kappa\,(\theta - X_t)\,\mathrm{d}t + \sigma\,\mathrm{d}W_t
+    \label{eq:ou_continuous}
+\end{equation}
+o\`u $\kappa > 0$ est la vitesse de retour \`a la moyenne, $\theta$ est l'\'equilibre
+de long terme, $\sigma$ est la volatilit\'e annualis\'ee, et $W_t$ est un mouvement
+brownien standard.
+\end{definitionbox}
+
+L'impl\'ementation utilise la discr\'etisation d'Euler avec un pas mensuel
+$\Delta t = 1/12$ :
+
+\begin{formulebox}[Discr\'etisation O-U (pas mensuel)]
+\begin{equation}
+    X_{t+1} = X_t + \kappa \cdot (\theta - X_t) \cdot \Delta t
+    + \sigma \cdot \sqrt{\Delta t} \cdot \varepsilon
+    \label{eq:ou_discrete}
+\end{equation}
+o\`u $\varepsilon \in \{-1{,}5 ;\; 0 ;\; +1{,}5\}$ est un choc \textbf{d\'eterministe}
+d\'efinissant les 3 sc\'enarios :
+\begin{itemize}[nosep]
+    \item \textbf{Favorable} : $\varepsilon = -1{,}5$ (am\'elioration)
+    \item \textbf{Central} : $\varepsilon = 0$ (neutre, retour \`a la moyenne pur)
+    \item \textbf{Adverse} : $\varepsilon = +1{,}5$ (d\'et\'erioration)
+\end{itemize}
+\end{formulebox}
+
+\subsection{Param\`etres O-U par variable}
+
+Les param\`etres $(\kappa, \sigma, \theta)$ sont d\'efinis dans
+\texttt{MACRO\_MEAN\_REVERSION} (fichier \texttt{config.py}).
+
+\begin{warningbox}[Audit RJ -- d\'ecouplage $\theta$ / baseline]
+$\theta$ repr\'esente l'\textbf{\'equilibre structurel de long terme}, ind\'ependant de la
+conjoncture actuelle (\texttt{SCENARIO\_BASE}). Les valeurs sont calibr\'ees sur le consensus
+OCDE/FMI long terme et les estimations structurelles (NAIRU, $r^*$ Laubach-Williams,
+cible BCE). Le dictionnaire \texttt{MACRO\_STRUCTURAL\_EQUILIBRIUM} porte ces valeurs.
+\end{warningbox}
+
+\begin{table}[htbp]
+\centering
+\caption{Param\`etres Ornstein-Uhlenbeck par variable macro}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Variable} & $\kappa$ (vitesse) & $\sigma$ (vol.) & $\theta$ (\'equilibre structurel) & Source \\
+\midrule
+\texttt{unemployment\_rate} & 0,5 & 0,8 & 6,5\% & NAIRU zone euro \\
+\texttt{gdp\_growth} & 1,0 & 1,2 & 1,5\% & Potentiel UE \\
+\texttt{interest\_rate} & 0,3 & 0,5 & 2,5\% & $r^*$ Laubach-Williams \\
+\texttt{hpi\_growth} & 0,7 & 2,0 & 2,0\% & Inflation + productivit\'e \\
+\texttt{inflation\_rate} & 0,8 & 0,6 & 2,0\% & Cible BCE \\
+\bottomrule
+\end{tabular}
+\label{tab:ou_params}
+\end{table}
+
+\begin{interpretbox}[Lecture des param\`etres]
+\begin{itemize}[nosep]
+    \item Le \textbf{PIB} a la vitesse de retour la plus \'elev\'ee ($\kappa = 1{,}0$)
+          et la volatilit\'e la plus forte ($\sigma = 1{,}2$), coh\'erent avec les cycles
+          conjoncturels courts.
+    \item Le \textbf{taux directeur} a la vitesse la plus faible ($\kappa = 0{,}3$),
+          refl\'etant l'inertie de la politique mon\'etaire.
+    \item L'\textbf{immobilier} est le plus volatil en niveau ($\sigma = 2{,}0$) avec
+          une vitesse de retour mod\'er\'ee ($\kappa = 0{,}7$).
+\end{itemize}
+\end{interpretbox}
+
+\subsection{Ajustement r\'egime en passe 2}
+
+En passe~2, un \textbf{drift additionnel} d\'ependant du r\'egime d\'etect\'e est ajout\'e
+aux projections :
+
+\begin{equation}
+    X_v^{\text{proj, ajust}}(T) = X_v^{\text{proj}}(T) + \delta_{v,r} \cdot \frac{T}{12}
+    \label{eq:regime_drift}
+\end{equation}
+
+o\`u $\delta_{v,r}$ est le drift par an du r\'egime $r$ sur la variable $v$.
+
+\begin{table}[htbp]
+\centering
+\caption{Drifts additionnels par r\'egime (par an)}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{R\'egime} & \texttt{unemp} & \texttt{gdp} & \texttt{rate} & \texttt{hpi} & \texttt{infl} \\
+\midrule
+Crise financi\`ere & $+0{,}5$ & $-0{,}5$ & --- & $-1{,}0$ & --- \\
+Stagflation & --- & $-0{,}3$ & $+0{,}3$ & --- & $+0{,}5$ \\
+Rupture techno & $+0{,}3$ & $-0{,}2$ & --- & --- & --- \\
+Resserrement & --- & --- & $+0{,}5$ & $-0{,}5$ & --- \\
+Reprise & $-0{,}3$ & $+0{,}3$ & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\label{tab:regime_drifts}
+\end{table}
+
+\subsection{Format de sortie}
+
+La fonction retourne un DataFrame de 12 lignes :
+3 trajectoires $\times$ 4 horizons (T+3, T+6, T+9, T+12),
+avec les colonnes \texttt{trajectory}, \texttt{horizon\_months}, et les 5 variables
+macro projet\'ees.
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Orchestration : combinaison des 5 couches}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Classe CROAnalyst}
+
+La classe \texttt{CROAnalyst} (fichier \texttt{orchestrator.py}) pilote le pipeline
+complet. Son constructeur re\c{c}oit les r\'esultats credit et PE, les variables macro,
+et un seuil ECL optionnel pour le RST personnalis\'e (FR54).
+
+\begin{verbatim}
+class CROAnalyst:
+    def __init__(self, result_credit, result_pe, macro_params,
+                 target_ecl=None)
+    def analyze(self) -> AnalyticsState
+\end{verbatim}
+
+\subsection{Flux d'ex\'ecution}
+
+L'appel \`a \texttt{analyze()} d\'eclenche le pipeline suivant :
+
+\begin{enumerate}[label=\textbf{\arabic*.}]
+    \item \textbf{Passe 1} --- \texttt{\_run\_layers(regime=None, pass=1)} :
+    \begin{itemize}[nosep]
+        \item Couche~1 : \texttt{analyze\_crossings} $\to$ asym\'etries + contributions
+        \item Couche~2 : \texttt{decompose\_proportional} $\to$ allocation proportionnelle + facteurs
+        \item Couche~3 : Construction du proxy ECL logit, puis \texttt{find\_tipping\_points}
+              et \texttt{reverse\_stress\_test}
+        \item Couche~4 : \texttt{classify\_regime} $\to$ r\'egime d\'etect\'e
+        \item Couche~5 : \texttt{project\_trajectories}, \texttt{compute\_risk\_appetite},
+              \texttt{compute\_early\_warning}
+    \end{itemize}
+
+    \item \textbf{D\'etection du r\'egime} --- extraction du r\'egime d\'etect\'e en passe~1
+          (\texttt{state\_p1.regime}).
+
+    \item \textbf{Passe 2} --- \texttt{\_run\_layers(regime=regime\_p1, pass=2)} :
+    \begin{itemize}[nosep]
+        \item Identique \`a la passe~1, mais le r\'egime conditionne :
+        \begin{itemize}[nosep]
+            \item Couche~2 : multiplicateurs r\'egime ($m_{v,r}$) sur l'attribution factorielle
+            \item Couche~5 : drifts additionnels ($\delta_{v,r}$) sur les trajectoires O-U
+        \end{itemize}
+    \end{itemize}
+
+    \item \textbf{Synth\`ese} --- apr\`es la passe~2 :
+    \begin{itemize}[nosep]
+        \item \texttt{\_generate\_recommendations} $\to$ liste de \texttt{Recommendation}
+        \item \texttt{\_generate\_narrative} $\to$ synth\`ese texte structur\'ee
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Construction du proxy ECL dans l'orchestrateur}
+
+Le proxy ECL est construit au sein de \texttt{\_run\_layers} \`a partir du portefeuille
+r\'eel (pas de constantes hardcod\'ees) :
+
+\begin{enumerate}[nosep]
+    \item $\text{ECL}_{\text{base}} = \sum_i \text{ecl\_weighted}_i$ depuis \texttt{result\_credit}
+    \item $\text{EAD}_{\text{total}} = \sum_i \text{ead}_i$
+    \item $r_{\text{base}} = \text{ECL}_{\text{base}} / \text{EAD}_{\text{total}}$
+    \item $\text{logit}_{\text{base}} = \text{logit}(\text{clip}(r_{\text{base}}, 10^{-6}, 0{,}99))$
+    \item Mapping variable $\to$ attribut \texttt{SectorConfig} :
+          \texttt{unemployment\_rate} $\to$ \texttt{unemployment\_sensitivity\_credit}, etc.
+    \item Variables invers\'ees : \texttt{gdp\_growth} et \texttt{hpi\_growth}
+          (baisse = stress positif)
+\end{enumerate}
+
+Le seuil de breach pour le RST utilise le capital r\'eel :
+$\text{Capital} = \text{RWA}_{\text{credit}} \times \text{CET1}_{\text{target}}$
+(coh\'erent avec \texttt{comparator.py}).
+
+\subsection{G\'en\'eration des recommandations (FR31)}
+
+La m\'ethode \texttt{\_generate\_recommendations} construit une cha\^ine de raisonnement
+compl\`ete :
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    step/.style={
+        rectangle, rounded corners=4pt, minimum width=2.6cm, minimum height=0.8cm,
+        draw=steelblue, thick, fill=steelblue!10, font=\scriptsize\bfseries,
+        text=darkblue, align=center
+    },
+    arr/.style={-{Stealth[length=4pt]}, thick, steelblue},
+]
+\node[step] (reg) at (0,0) {R\'egime\\d\'etect\'e};
+\node[step] (tri) at (3,0) {D\'eclencheur\\(risk appetite)};
+\node[step] (eul) at (6,0) {Driver\\proportionnel};
+\node[step] (mac) at (9,0) {Facteur\\macro};
+\node[step] (rst) at (12,0) {Distance\\RST ($\sigma$)};
+\node[step] (con) at (15,0) {Confiance\\(H/M/L)};
+
+\draw[arr] (reg) -- (tri);
+\draw[arr] (tri) -- (eul);
+\draw[arr] (eul) -- (mac);
+\draw[arr] (mac) -- (rst);
+\draw[arr] (rst) -- (con);
+\end{tikzpicture}
+\caption{Cha\^ine de raisonnement des recommandations}
+\label{fig:reco_chain}
+\end{figure}
+
+Le statut risk appetite pr\'edominant est d\'etermin\'e par le nombre de secteurs en rouge :
+
+\begin{itemize}[nosep]
+    \item $> 3$ secteurs rouge $\Rightarrow$ statut \textcolor{accentred}{\textbf{rouge}} :
+          r\'eduire l'exposition + renforcer les provisions
+    \item $1$--$3$ secteurs rouge $\Rightarrow$ statut \textcolor{accentorange}{\textbf{ambre}} :
+          surveiller les indicateurs + plan de contingence
+    \item $0$ secteur rouge $\Rightarrow$ statut \textcolor{accentgreen}{\textbf{vert}} :
+          maintenir l'allocation actuelle
+\end{itemize}
+
+Chaque \texttt{Recommendation} porte :
+\texttt{action}, \texttt{regime}, \texttt{trigger}, \texttt{proportional\_driver},
+\texttt{macro\_factor}, \texttt{risk\_appetite\_status}, \texttt{rst\_distance},
+\texttt{confidence}, et \texttt{alternatives}.
+
+\subsection{G\'en\'eration de la synth\`ese narrative (FR32)}
+
+La synth\`ese narrative est produite par \texttt{\_generate\_narrative} et inclut :
+
+\begin{enumerate}[nosep]
+    \item R\'egime d\'etect\'e avec sa probabilit\'e
+    \item Top~3 des asym\'etries sectorielles
+    \item Driver proportionnel dominant (share du risque total)
+    \item Distance RST en $\sigma$ (Mahalanobis)
+    \item Recommandation principale avec son niveau de confiance
+\end{enumerate}
+
+\begin{warningbox}[Performance]
+Le pipeline complet (2 passes) s'ex\'ecute en $\sim 1{,}1$~s gr\^ace au proxy ECL logit.
+Sans proxy, le recalcul complet d'\texttt{ECLCalculator} pour chaque point du balayage RST
+(90 it\'erations $\times$ 5 variables pour les tipping points + 90 it\'erations pour le RST
+joint) rendrait l'analyse interactive impossible.
+\end{warningbox}
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Module de commentaire : LocalCROAnalyst}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{R\^ole et positionnement}
+
+Le module \texttt{analytics/ai\_analyst.py} impl\'emente la classe
+\texttt{LocalCROAnalyst}, un moteur d'analyse statistique embarqu\'e (sans d\'ependance
+externe, pas d'API) qui produit un rapport CRO narratif de niveau Direction des Risques.
+
+Contrairement au pipeline 5 couches (qui produit des m\'etriques structur\'ees dans
+\texttt{AnalyticsState}), le \texttt{LocalCROAnalyst} g\'en\`ere :
+
+\begin{itemize}
+    \item Un \textbf{rapport complet} en Markdown structur\'e (8 sections), via
+          \texttt{generate\_full\_report()}.
+    \item Un \textbf{briefing ex\'ecutif} en prose professionnelle, via
+          \texttt{generate\_executive\_briefing()}.
+\end{itemize}
+
+\subsection{Architecture du rapport (8 sections)}
+
+\begin{table}[htbp]
+\centering
+\caption{Sections du rapport CRO et contenu}
+\begin{tabular}{clp{8cm}}
+\toprule
+\textbf{N} & \textbf{Section} & \textbf{Contenu} \\
+\midrule
+1 & Synth\`ese ex\'ecutive & Niveau de risque (score 0--10), ECL total,
+    coverage, points d'attention \\
+2 & Analyse ECL & D\'ecomposition waterfall, attribution par driver
+    et segment \\
+3 & Sensibilit\'e macro & Tableau des 5 variables, canaux de transmission,
+    effets combin\'es \\
+4 & Qualit\'e de cr\'edit & Distribution staging, matrice de transition,
+    vuln\'erabilit\'e par segment \\
+5 & Gouvernance mod\`eles & AUC/Gini/KS par mod\`ele, PSI, backtesting
+    walk-forward, SHAP \\
+6 & Concentration & HHI segments et produits, contribution ECL par
+    segment \\
+7 & Forward-looking & Risques \'emergents, pipeline Stage~2,
+    sc\'enarios prospectifs \\
+8 & Recommandations & Recommandations prioris\'ees (HAUTE/MOYENNE/STANDARD)
+    avec KPI de suivi \\
+\bottomrule
+\end{tabular}
+\label{tab:report_sections}
+\end{table}
+
+\subsection{Scoring du risque global}
+
+Le scoring agrege 4 dimensions sur un total de 10 points :
+
+\begin{formulebox}[Score de risque global (0--10)]
+\begin{equation}
+    S = S_{\text{ECL}} + S_{\text{Stage2}} + S_{\text{PSI}} + S_{\text{Macro}}
+    \label{eq:risk_score}
+\end{equation}
+\begin{itemize}[nosep]
+    \item $S_{\text{ECL}} \in \{0, 1, 3\}$ : 3 si $|\Delta\text{ECL}| > 15\%$, 1 si $> 5\%$
+    \item $S_{\text{Stage2}} \in \{0, 1, 2\}$ : 2 si $\%\text{S2} > 20\%$, 1 si $> 15\%$
+    \item $S_{\text{PSI}} \in \{0, 1, 2\}$ : 2 si PSI $> 0{,}25$, 1 si $> 0{,}10$
+    \item $S_{\text{Macro}} \in \{0, 1, 2\}$ : 2 si $\geq 3$ variables adverses, 1 si $\geq 1$
+\end{itemize}
+Classification : $S \geq 5$ = \textcolor{accentred}{ELEVE}, $S \geq 2$ = \textcolor{accentorange}{MODERE}, sinon \textcolor{accentgreen}{BON}.
+\end{formulebox}
+
+\subsection{\'Elasticit\'es macro-cr\'edit}
+
+Le \texttt{LocalCROAnalyst} calcule les \'elasticit\'es macro-cr\'edit par segment
+et identifie les canaux de transmission dominants. Pour chaque segment $s$
+et variable macro $v$ :
+
+\begin{equation}
+    \text{mult}_{\text{PD}} = 1 + \frac{\max(0, \Delta_v^{\text{adverse}})}{100}
+    \cdot \gamma_{s,v} \cdot 10
+    \label{eq:pd_mult}
+\end{equation}
+
+Le driver macro dominant d'un segment est la variable avec le plus grand
+multiplicateur de PD.
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Synth\`ese math\'ematique}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{R\'ecapitulatif des formules cl\'es}
+
+\begin{longtable}{clp{8cm}}
+\caption{Formules cl\'es de l'AI Analyst par couche} \\
+\toprule
+\textbf{Couche} & \textbf{Formule} & \textbf{R\'ef\'erence} \\
+\midrule
+\endfirsthead
+\midrule
+\textbf{Couche} & \textbf{Formule} & \textbf{R\'ef\'erence} \\
+\midrule
+\endhead
+1 & $\text{Asym}_s = \ell_s^{\text{PE}} - \ell_s^{\text{Credit}}$ & \'Eq.\,(\ref{eq:asymmetry}) \\
+1 & $c_{s,k} = R_{s,k} / R_{\text{total}}$ & \'Eq.\,(\ref{eq:marginal}) \\
+1 & $\text{EW}_s = \sum_j w_j \cdot \tilde{x}_{s,j}$ & \'Eq.\,(\ref{eq:early_warning}) \\
+\midrule
+2 & $w_s^k = R_s^k / R_{\text{total}}$ (full allocation) & \'Eq.\,(\ref{eq:proportional}) \\
+2 & $A_v^k = \sum_s (|\Delta_v| / \delta_v) \cdot \gamma_{s,v}^k \cdot R_s^k / R^k$ & \'Eq.\,(\ref{eq:attribution}) \\
+2 & $A_v^{k,\text{ajust}} = A_v^k \cdot m_{v,r}$ & \'Eq.\,(\ref{eq:regime_mult}) \\
+\midrule
+3 & $\text{ECL}_{\text{proxy}} = \sigma(\text{logit}(r) + \Lambda \cdot \text{stress}) \cdot \text{EAD}$ & \'Eq.\,(\ref{eq:ecl_proxy}) \\
+3 & $d_M = \sqrt{\mathbf{x}^\top \boldsymbol{\Sigma}^{-1} \mathbf{x}}$ (Mahalanobis) & \'Eq.\,(\ref{eq:mahalanobis}) \\
+\midrule
+4 & $z_r = \mathbf{s} \cdot \boldsymbol{\sigma}_r$ (produit scalaire) & \'Eq.\,(\ref{eq:dot_product}) \\
+4 & $P(r) = \exp(T z_r) / \sum \exp(T z_{r'})$ (softmax) & \'Eq.\,(\ref{eq:softmax}) \\
+\midrule
+5 & $X_{t+1} = X_t + \kappa(\theta - X_t)\Delta t + \sigma\sqrt{\Delta t}\,\varepsilon$ (O-U) & \'Eq.\,(\ref{eq:ou_discrete}) \\
+5 & $X^{\text{ajust}} = X^{\text{proj}} + \delta_{v,r} \cdot T/12$ & \'Eq.\,(\ref{eq:regime_drift}) \\
+\bottomrule
+\end{longtable}
+
+\subsection{Flux de donn\'ees complet}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    box/.style={
+        rectangle, rounded corners=3pt, minimum width=3cm, minimum height=0.7cm,
+        draw=steelblue, fill=steelblue!8, font=\scriptsize, text=darkblue, align=center
+    },
+    arr/.style={-{Stealth[length=4pt]}, thick, gray},
+]
+% Inputs
+\node[box, fill=accentorange!15, draw=accentorange] (in1) at (0,3) {ECLCalculator};
+\node[box, fill=accentorange!15, draw=accentorange] (in2) at (0,2) {PECalculator};
+\node[box, fill=accentorange!15, draw=accentorange] (in3) at (0,1) {macro\_params};
+
+% Orchestrateur
+\node[box, minimum width=4cm, fill=darkblue!15, draw=darkblue] (orc) at (5,2) {CROAnalyst\\orchestrator.py};
+
+% Couches
+\node[box] (c1) at (10,4) {Couche 1\\Croisements};
+\node[box] (c2) at (10,3) {Couche 2\\Allocation};
+\node[box] (c3) at (10,2) {Couche 3\\RST};
+\node[box] (c4) at (10,1) {Couche 4\\R\'egime};
+\node[box] (c5) at (10,0) {Couche 5\\Prospective};
+
+% Output
+\node[box, fill=accentgreen!15, draw=accentgreen!70!black, minimum width=3.5cm] (out) at (15,2) {AnalyticsState\\+ Narrative\\+ Recommendations};
+
+% Arrows
+\draw[arr] (in1) -- (orc);
+\draw[arr] (in2) -- (orc);
+\draw[arr] (in3) -- (orc);
+
+\draw[arr] (orc) -- (c1);
+\draw[arr] (orc) -- (c2);
+\draw[arr] (orc) -- (c3);
+\draw[arr] (orc) -- (c4);
+\draw[arr] (orc) -- (c5);
+
+\draw[arr] (c1) -- (out);
+\draw[arr] (c2) -- (out);
+\draw[arr] (c3) -- (out);
+\draw[arr] (c4) -- (out);
+\draw[arr] (c5) -- (out);
+
+\end{tikzpicture}
+\caption{Flux de donn\'ees du pipeline CRO}
+\label{fig:dataflow}
+\end{figure}
+
+
+\newpage
+% ═══════════════════════════════════════════════════════════
+\section{Annexes}
+% ═══════════════════════════════════════════════════════════
+
+\subsection{Sc\'enarios pr\'ed\'efinis}
+
+Les 5 sc\'enarios pr\'ed\'efinis (dropdown dans le dashboard) sont d\'efinis dans
+\texttt{PREDEFINED\_SCENARIOS} (fichier \texttt{config.py}) :
+
+\begin{table}[htbp]
+\centering
+\caption{Sc\'enarios pr\'ed\'efinis (\texttt{config.py})}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Sc\'enario} & \textbf{Taux (bp)} & \textbf{Ch\^omage*} & \textbf{PIB (\%)} & \textbf{HPI (\%)} & \textbf{Infl. (\%)} \\
+\midrule
+Central & +50 & 0 & 1,2 & 2,0 & 2,5 \\
+Crise financi\`ere & +200 & $-4$ & $-3{,}0$ & $-15{,}0$ & $-1{,}0$ \\
+Stagflation & +300 & $-2$ & $-1{,}0$ & $-5{,}0$ & 6,0 \\
+Rupture techno & 0 & $+3$ & 2,0 & 5,0 & 1,0 \\
+Reprise & $-100$ & 0 & 3,0 & 8,0 & 2,0 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3cm}
+\footnotesize
+* Convention bipolaire : signe = nature ($+$ rupture techno, $-$ crise \'eco),
+$|$valeur$|$ = amplitude de hausse du ch\^omage en pp vs base.
+Les deux extr\^emes augmentent le taux de ch\^omage : base $+ |$slider$|$.
+\label{tab:scenarios}
+\end{table}
+
+\subsection{Matrice de covariance macro}
+
+\begin{warningbox}[Audit RJ v2 -- matrice de consensus expert]
+\textbf{Correction critique} : l'ancienne impl\'ementation g\'en\'erait 60 mois d'historique
+synth\'etique via des processus AR(1) \textbf{ind\'ependants}, puis estimait $\hat{\Sigma}$
+via Ledoit-Wolf. Probl\`eme de circularit\'e : des AR(1) ind\'ependants produisent une
+covariance quasi-diagonale --- la r\'e-estimation est inutile.
+
+La matrice de covariance est d\'esormais construite directement \`a partir de :
+\begin{itemize}[nosep]
+    \item une \textbf{matrice de corr\'elation de consensus} (\textit{Expert Judgment})
+          calibr\'ee sur la litt\'erature macro-financi\`ere (loi d'Okun, courbe de Phillips,
+          r\`egle de Taylor, corr\'elations FMI WEO 2000--2024) ;
+    \item des \textbf{volatilit\'es historiques} par variable ($\sigma_i$ en pp, sources BCE/Eurostat) ;
+    \item la formule $\Sigma_{ij} = \rho_{ij} \times \sigma_i \times \sigma_j$ ;
+    \item une \textbf{r\'egularisation} (r\'etractation 10\% vers la cible diagonale)
+          pour garantir la d\'efinie-positivit\'e num\'erique.
+\end{itemize}
+Impl\'ementation : \texttt{\_build\_macro\_covariance()} dans \texttt{config.py}.
+\end{warningbox}
+
+L'ordre des variables dans $\boldsymbol{\Sigma}$ est :
+
+\begin{enumerate}[nosep]
+    \item \texttt{unemployment\_rate}
+    \item \texttt{gdp\_growth}
+    \item \texttt{interest\_rate}
+    \item \texttt{hpi\_growth}
+    \item \texttt{inflation\_rate}
+\end{enumerate}
+
+Cette matrice capture les corr\'elations historiques entre les variables macro
+(par exemple : ch\^omage/PIB n\'egativement corr\'el\'es, taux/inflation positivement
+corr\'el\'es), permettant \`a la distance de Mahalanobis de p\'enaliser les sc\'enarios
+incoh\'erents o\`u les variables \'evoluent dans des directions contraires \`a leurs
+corr\'elations historiques.
+
+\subsection{Fichiers source}
+
+\begin{table}[htbp]
+\centering
+\caption{Correspondance fichiers/fonctions}
+\begin{tabular}{lll}
+\toprule
+\textbf{Fichier} & \textbf{Fonction principale} & \textbf{Couche} \\
+\midrule
+\texttt{layer1\_crossing.py} & \texttt{analyze\_crossings()} & 1 \\
+\texttt{layer2\_euler.py} & \texttt{decompose\_proportional()} & 2 \\
+\texttt{layer3\_rst.py} & \texttt{find\_tipping\_points()}, \texttt{reverse\_stress\_test()} & 3 \\
+\texttt{layer4\_regime.py} & \texttt{classify\_regime()} & 4 \\
+\texttt{layer5\_prospective.py} & \texttt{project\_trajectories()}, \texttt{compute\_risk\_appetite()}, \texttt{compute\_early\_warning()} & 5 \\
+\texttt{orchestrator.py} & \texttt{CROAnalyst.analyze()} & Orchestrateur \\
+\texttt{types.py} & \texttt{AnalyticsState}, \texttt{Recommendation}, \texttt{RegimeClassification} & Types \\
+\texttt{analytics/ai\_analyst.py} & \texttt{LocalCROAnalyst.generate\_full\_report()} & Commentaire \\
+\texttt{config.py} & \texttt{MACRO\_MEAN\_REVERSION}, \texttt{MACRO\_COVARIANCE}, etc. & Config \\
+\bottomrule
+\end{tabular}
+\label{tab:source_files}
+\end{table}
+
+\subsection{Constantes cl\'es}
+
+\begin{table}[htbp]
+\centering
+\caption{Constantes de configuration utilis\'ees par l'AI Analyst}
+\begin{tabular}{llr}
+\toprule
+\textbf{Constante} & \textbf{Description} & \textbf{Valeur} \\
+\midrule
+\texttt{LOGIT\_AMPLITUDE} & Amplitude du stress logit (calibr\'ee EBA) & $\approx 4{,}94$ \\
+\texttt{\_SOFTMAX\_SCALE} & Temp\'erature softmax r\'egime & 2,0 \\
+\texttt{cet1\_target} & Ratio CET1 cible & 13\% \\
+\texttt{rwa\_budget} & Budget RWA & 10 Md EUR \\
+\texttt{ecl\_ead\_green} & Seuil vert ECL/EAD & 2,0\% \\
+\texttt{ecl\_ead\_amber} & Seuil ambre ECL/EAD & 4,0\% \\
+\texttt{nav\_drawdown\_green} & Seuil vert drawdown PE & 10\% \\
+\texttt{nav\_drawdown\_amber} & Seuil ambre drawdown PE & 25\% \\
+\bottomrule
+\end{tabular}
+\label{tab:constants}
+\end{table}
+
+\end{document}

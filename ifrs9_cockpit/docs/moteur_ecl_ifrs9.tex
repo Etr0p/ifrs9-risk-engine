@@ -1,0 +1,1196 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── PACKAGES ─────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+
+\geometry{margin=2.5cm}
+
+% ─── COULEURS ─────────────────────────────────────────────
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{2C3E50}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{27AE60}
+\definecolor{accentorange}{HTML}{E67E22}
+\definecolor{accentred}{HTML}{E74C3C}
+
+% ─── STYLE ────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=steelblue,
+    citecolor=steelblue,
+    urlcolor=steelblue,
+}
+
+\titleformat{\section}
+    {\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{steelblue!80}}{\thesubsubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}IFRS 9 Risk Cockpit --- Moteur ECL}
+\fancyhead[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── ENCADRES ─────────────────────────────────────────────
+\newtcolorbox{definitionbox}[1][]{
+    colback=steelblue!5,
+    colframe=steelblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{formulebox}[1][]{
+    colback=lightgray,
+    colframe=darkblue,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{interpretbox}[1][]{
+    colback=accentgreen!5,
+    colframe=accentgreen!70!black,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+\newtcolorbox{warningbox}[1][]{
+    colback=accentorange!5,
+    colframe=accentorange,
+    title=#1,
+    fonttitle=\bfseries,
+    rounded corners,
+    boxrule=0.8pt,
+}
+
+% ─── DOCUMENT ─────────────────────────────────────────────
+\begin{document}
+
+% ─── PAGE DE TITRE ────────────────────────────────────────
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+
+{\Huge\bfseries\color{darkblue} Moteur de Calcul ECL\\[0.3cm] IFRS 9}
+
+\vspace{1cm}
+{\Large\color{steelblue} Expected Credit Loss --- Documentation Technique}
+
+\vspace{2cm}
+{\large IFRS 9 Risk Cockpit}
+
+\vspace{0.5cm}
+{\normalsize Module \texttt{engine/ecl\_calculator.py}}
+
+\vspace{3cm}
+
+\begin{tabular}{ll}
+\textbf{Modules couverts :} & \texttt{ecl\_calculator.py}, \texttt{staging.py}, \texttt{lgd\_model.py} \\
+\textbf{Configuration :}    & \texttt{config.py} (IFRS9Config, SICRConfig, LGDConfig) \\
+\textbf{Version :}          & Post-Phase~6 --- Audit de rigueur math\'ematique \\
+\end{tabular}
+
+\vfill
+{\small\color{gray} Document g\'en\'er\'e depuis le code source --- r\'ef\'erence unique de v\'erit\'e}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════
+\section{Introduction --- Le cadre IFRS 9 pour les pertes de cr\'edit}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Du mod\`ele IAS 39 au mod\`ele IFRS 9}
+
+La norme IFRS 9 (entr\'ee en vigueur le 1\textsuperscript{er} janvier 2018) remplace le mod\`ele de perte av\'er\'ee (\textit{incurred loss}) d'IAS~39 par un mod\`ele prospectif de perte de cr\'edit attendue (\textit{expected credit loss}, ECL). Ce changement de paradigme exige que les \'etablissements de cr\'edit reconnaissent les pertes \emph{avant} qu'elles ne se mat\'erialisent, en int\'egrant des informations \textit{forward-looking} dans l'estimation.
+
+\begin{definitionbox}[D\'efinition --- Expected Credit Loss (ECL)]
+L'ECL est la valeur actualis\'ee pond\'er\'ee en probabilit\'e des d\'eficits de tr\'esorerie (\textit{cash shortfalls}) sur la dur\'ee de vie d'un instrument financier, calcul\'ee en int\'egrant des informations raisonnables et \'etay\'ees sur les \'ev\'enements pass\'es, les conditions actuelles et les pr\'evisions macro\'economiques (IFRS~9 \S5.5.17).
+\end{definitionbox}
+
+\subsection{Le mod\`ele \`a trois stages}
+
+IFRS~9 introduit une classification en trois stages qui d\'etermine l'horizon de calcul de l'ECL :
+
+\begin{center}
+\begin{tikzpicture}[
+    stage/.style={rectangle, rounded corners=6pt, minimum width=4.2cm, minimum height=1.8cm, text centered, font=\small\bfseries},
+    arrow/.style={-{Stealth[length=3mm]}, thick, color=gray!70},
+]
+    \node[stage, fill=accentgreen!20, draw=accentgreen!60] (s1) {Stage 1\\[3pt]\normalfont\small Performing\\ECL 12 mois};
+    \node[stage, fill=accentorange!20, draw=accentorange!60, right=1.8cm of s1] (s2) {Stage 2\\[3pt]\normalfont\small SICR d\'etect\'e\\ECL lifetime};
+    \node[stage, fill=accentred!20, draw=accentred!60, right=1.8cm of s2] (s3) {Stage 3\\[3pt]\normalfont\small D\'efaut av\'er\'e\\ECL lifetime, PD=100\%};
+
+    \draw[arrow] (s1) -- node[above, font=\scriptsize, color=gray] {SICR} (s2);
+    \draw[arrow] (s2) -- node[above, font=\scriptsize, color=gray] {D\'efaut} (s3);
+    \draw[arrow, bend left=30] (s2) to node[below, font=\scriptsize, color=gray] {Am\'elioration} (s1);
+    \draw[arrow, bend left=30] (s3) to node[below, font=\scriptsize, color=gray] {Cure} (s2);
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}[leftmargin=2cm]
+    \item[\textbf{Stage 1}] --- \textbf{Performing} : aucune augmentation significative du risque de cr\'edit (SICR) depuis l'origination. L'ECL est calcul\'e sur un horizon de \textbf{12 mois}.
+    \item[\textbf{Stage 2}] --- \textbf{SICR d\'etect\'e} : augmentation significative du risque, mais pas encore de d\'efaut. L'ECL est calcul\'e sur la \textbf{dur\'ee de vie r\'esiduelle} (\textit{lifetime}).
+    \item[\textbf{Stage 3}] --- \textbf{D\'efaut av\'er\'e} : PD~=~100\%, ECL lifetime avec LGD potentiellement en mode \textit{downturn}.
+\end{itemize}
+
+\begin{interpretbox}[Intuition \'economique]
+Le passage de Stage~1 \`a Stage~2 provoque un saut d'ECL consid\'erable (``\textit{cliff effect}'') car l'horizon passe de 1~an \`a la dur\'ee de vie compl\`ete. C'est la raison pour laquelle la d\'etection SICR est le param\`etre le plus sensible du mod\`ele.
+\end{interpretbox}
+
+\subsection{Architecture du moteur ECL dans le Cockpit}
+
+Le moteur ECL est impl\'ement\'e dans la classe \texttt{ECLCalculator} (module \texttt{engine/ecl\_calculator.py}). Le pipeline de calcul suit 5 \'etapes :
+
+\begin{enumerate}
+    \item \textbf{Stress macro} : ajustement des PD par sc\'enario dans l'espace logit.
+    \item \textbf{Staging} : affectation aux 3 stages via le score SICR multi-facteurs (\texttt{StagingEngine}).
+    \item \textbf{PD par horizon} : PD 12 mois (Stage~1) ou PD lifetime via hazard rate (Stage~2/3).
+    \item \textbf{LGD et EAD} : LGD TTC ou Downturn selon le sc\'enario, EAD de base ou stress\'ee.
+    \item \textbf{ECL et pond\'eration} : $\text{ECL} = \text{PD} \times \text{LGD} \times \text{EAD} \times \text{DF}$, puis pond\'eration multi-sc\'enarios (50/25/25).
+\end{enumerate}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Staging SICR --- Classification multi-facteurs}
+\label{sec:staging}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Principes g\'en\'eraux}
+
+Le SICR (\textit{Significant Increase in Credit Risk}) est le m\'ecanisme central d'IFRS~9 qui d\'eclenche le passage de Stage~1 \`a Stage~2. Notre impl\'ementation utilise un \textbf{score multi-facteurs} conforme \`a IFRS~9 \S B5.5.17, qui recommande de consid\'erer plusieurs indicateurs quantitatifs et qualitatifs.
+
+Le module \texttt{engine/staging.py} impl\'emente la classe \texttt{StagingEngine} et les fonctions \texttt{compute\_sicr\_score()} et \texttt{compute\_macro\_z()}.
+
+\subsection{Score SICR composite}
+
+\begin{formulebox}[Formule --- Score SICR multi-facteurs (H1)]
+Le score SICR combine 4 facteurs avec des poids calibr\'es :
+\begin{equation}
+\label{eq:sicr}
+S_{\text{SICR}} = w_1 \cdot R_{\text{PD}} + w_2 \cdot \Delta_{\text{PD}} + w_3 \cdot D_{\text{DPD}} + w_4 \cdot Z_{\text{macro}}
+\end{equation}
+o\`u :
+\begin{align}
+R_{\text{PD}} &= \min\!\left(\frac{\text{PD}_{\text{current}}}{\text{PD}_{\text{origination}}} - 1,\; 5.0\right) & &\text{Ratio PD relatif (cap\'e)} \label{eq:pd_ratio} \\[4pt]
+\Delta_{\text{PD}} &= \max\!\left(0,\; \text{PD}_{\text{current}} - \text{PD}_{\text{origination}}\right) & &\text{Delta PD absolu} \\[4pt]
+D_{\text{DPD}} &= \frac{\text{DPD}}{30} & &\text{DPD normalis\'e (unit\'e = 30 jours)} \\[4pt]
+Z_{\text{macro}} &= \text{Z-score macro composite} & &\text{(cf. \S\ref{subsec:zscore})}
+\end{align}
+\end{formulebox}
+
+Les poids sont d\'efinis dans \texttt{SICRConfig} (\texttt{config.py}) :
+
+\begin{center}
+\begin{tabular}{llcl}
+\toprule
+\textbf{Facteur} & \textbf{Poids} & \textbf{Valeur} & \textbf{Justification} \\
+\midrule
+$w_1$ --- Ratio PD relatif     & \texttt{w\_pd\_ratio} & 0.40 & Facteur le plus pr\'edictif \\
+$w_2$ --- Delta PD absolu       & \texttt{w\_pd\_delta} & 0.20 & Compl\'ement absolu \\
+$w_3$ --- DPD normalis\'e       & \texttt{w\_dpd}       & 0.25 & Information comportementale \\
+$w_4$ --- Z-score macro          & \texttt{w\_macro}     & 0.15 & Forward-looking \\
+\midrule
+\textbf{Total} & & \textbf{1.00} & Invariant de configuration \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}[Cap du ratio PD \`a 5.0]
+Le ratio PD relatif est born\'e \`a 5.0 dans le code :
+\begin{verbatim}
+pd_ratio = np.clip(pd_current / np.maximum(pd_origination, 1e-6) - 1,
+                   0.0, 5.0)
+\end{verbatim}
+Ce cap emp\^eche une sensibilit\'e perverse sur les cr\'edits \`a PD d'origination tr\`es basse (ex. : PD $0{,}1\% \to 0{,}5\%$ donne un ratio de~4, ce qui est raisonnable, mais PD $0{,}01\% \to 0{,}1\%$ donnerait un ratio de~9 sans cap).
+\end{warningbox}
+
+\subsection{Z-score macro composite}
+\label{subsec:zscore}
+
+Le Z-score macro int\`egre la composante \textit{forward-looking} exig\'ee par IFRS~9. Il mesure la d\'eviation des conditions macro-\'economiques courantes par rapport au sc\'enario de base.
+
+\begin{formulebox}[Formule --- Z-score macro normalis\'e]
+\begin{equation}
+\label{eq:zscore}
+Z_{\text{macro}} = \frac{1}{5} \sum_{v \in \mathcal{V}} \frac{\delta_v}{\text{Norm}_v}
+\end{equation}
+o\`u $\mathcal{V} = \{\text{ch\^omage, PIB, taux, HPI, inflation}\}$ et :
+\begin{align}
+\delta_{\text{ch\^omage}} &= \text{Chomage}_{\text{courant}} - \text{Chomage}_{\text{base}} & &\text{(hausse = adverse)} \\
+\delta_{\text{PIB}} &= \text{PIB}_{\text{base}} - \text{PIB}_{\text{courant}} & &\text{(baisse = adverse)} \\
+\delta_{\text{taux}} &= \text{Taux}_{\text{courant}} - \text{Taux}_{\text{base}} & &\text{(hausse = adverse)} \\
+\delta_{\text{HPI}} &= \text{HPI}_{\text{base}} - \text{HPI}_{\text{courant}} & &\text{(baisse = adverse)} \\
+\delta_{\text{inflation}} &= \text{Inflation}_{\text{courant}} - \text{Inflation}_{\text{base}} & &\text{(hausse = adverse)}
+\end{align}
+\end{formulebox}
+
+Les plages de normalisation $\text{Norm}_v$ sont d\'eriv\'ees de l'\'ecart adverse--base, et \'evitent que les variables \`a grande \'echelle (HPI $\sim 10$pp) ne dominent les variables \`a petite \'echelle (taux $\sim 1{,}5$pp) :
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Variable} & \textbf{Norm} & \textbf{Origine (Adverse -- Base)} \\
+\midrule
+Ch\^omage         & 3.0  & $10{,}5\% - 7{,}5\%$ \\
+PIB               & 2.7  & $1{,}2\% - (-1{,}5\%)$ \\
+Taux directeur    & 1.5  & $5{,}0\% - 3{,}5\%$ \\
+HPI               & 10.0 & $2{,}0\% - (-8{,}0\%)$ \\
+Inflation         & 3.0  & $5{,}5\% - 2{,}5\%$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La division par~5 dans l'\'equation~\eqref{eq:zscore} produit un Z-score unitaire : $Z \approx 0$ en conditions de base, $Z \approx 1$ en adverse, $Z \approx -1$ en favorable.
+
+\subsection{Algorithme d'affectation aux stages}
+
+\begin{algorithm}[H]
+\caption{Affectation aux stages IFRS 9 (\texttt{StagingEngine.assign\_stages})}
+\label{alg:staging}
+\begin{algorithmic}[1]
+\Require $\text{PD}_{\text{current}}$, $\text{PD}_{\text{origination}}$, $\text{DPD}$, $\text{default\_flag}$, $\text{macro\_params}$ (optionnel)
+\Ensure $\text{stages} \in \{1, 2, 3\}^n$
+\State $\text{stages} \gets \mathbf{1}_n$ \Comment{Par d\'efaut : Stage 1}
+\State $S_{\text{SICR}} \gets \textsc{ComputeSICRScore}(\text{PD}_{\text{current}}, \text{PD}_{\text{origination}}, \text{DPD}, \text{macro\_params})$
+\For{$i = 1, \ldots, n$}
+    \If{$S_{\text{SICR},i} > \tau_{\text{SICR}}$} \Comment{$\tau_{\text{SICR}} = 0{,}50$ (SICRConfig.threshold)}
+        \State $\text{stages}[i] \gets 2$
+    \EndIf
+\EndFor
+\For{$i = 1, \ldots, n$} \Comment{Stage 3 a priorit\'e sur Stage 2}
+    \If{$\text{default\_flag}[i] = 1$ \textbf{ou} $\text{DPD}[i] \geq 90$ \textbf{ou} $\text{PD}_{\text{current}}[i] \geq 0{,}30$}
+        \State $\text{stages}[i] \gets 3$
+    \EndIf
+\EndFor
+\State \Return stages
+\end{algorithmic}
+\end{algorithm}
+
+Les seuils Stage~3 sont configur\'es dans \texttt{IFRS9Config} :
+
+\begin{itemize}
+    \item \texttt{stage3\_dpd\_threshold} $= 90$ jours (norme prudentielle b\^aloise)
+    \item \texttt{stage3\_pd\_threshold} $= 30\%$ (PD seuil de d\'efaut pr\'esum\'e)
+    \item \texttt{sicr\_threshold} $= 0{,}50$ (calibr\'e pour $\sim$10\% de Stage~2)
+\end{itemize}
+
+\begin{interpretbox}[Pourquoi un score multi-facteurs plut\^ot qu'un simple seuil PD$\times$2 ?]
+L'ancienne r\`egle ``PD courante $\geq 2\times$ PD origination'' (IAS~39 style) souffre de deux d\'efauts : (1)~elle ignore l'information comportementale (DPD) et (2)~elle ne satisfait pas l'exigence IFRS~9 d'int\'egrer des informations \textit{forward-looking}. Le score composite pond\`ere ces quatre dimensions et produit un staging plus robuste et conforme.
+\end{interpretbox}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{PD Lifetime --- Conversion via Hazard Rate}
+\label{sec:pd_lifetime}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Le probl\`eme de la conversion PD 12 mois $\to$ PD lifetime}
+
+Le mod\`ele PD produit une estimation \`a 12 mois ($\text{PD}_{12\text{m}}$). Pour le calcul ECL en Stage~2/3, il faut convertir cette PD en une PD cumulative sur l'horizon r\'esiduel $T$ (en ann\'ees).
+
+\subsection{Approche Bernoulli et \'equivalence avec le Hazard Rate}
+
+L'approche dite ``Bernoulli'' suppose des ann\'ees ind\'ependantes :
+\begin{equation}
+\text{PD}_{\text{lifetime}}^{\text{Bernoulli}} = 1 - (1 - \text{PD}_{12\text{m}})^T
+\end{equation}
+
+\begin{warningbox}[\'Equivalence alg\'ebrique --- pourquoi choisir le Hazard Rate ?]
+Avec un hazard rate constant $h = -\ln(1 - \text{PD}_{12\text{m}})$, la formule donne :
+\[
+1 - e^{-hT} = 1 - e^{\ln(1-p) \cdot T} = 1 - (1-p)^T
+\]
+Les deux formulations sont donc \textbf{alg\'ebriquement identiques} pour un hazard rate constant. Le choix du cadre hazard rate est n\'eanmoins pr\'ef\'er\'e pour trois raisons :
+\begin{enumerate}
+    \item \textbf{Cadre th\'eorique} : le hazard rate s'inscrit dans la th\'eorie des processus de survie (analyse de dur\'ee), fondement math\'ematique du risque de cr\'edit. Il fournit une intensit\'e instantan\'ee $h$ interpr\'etable.
+    \item \textbf{G\'en\'eralisabilit\'e} : le cadre hazard rate se g\'en\'eralise naturellement vers des intensit\'es non constantes $h(t)$ (\textit{term structure} de PD, Cox 1972), ce que le mod\`ele Bernoulli discret ne permet pas sans refonte.
+    \item \textbf{Coh\'erence DF} : le facteur d'actualisation PD-marginal weighted (\S\ref{sec:discount}) utilise la fonction de survie $S(t) = e^{-ht}$ ; le formalisme hazard rate rend le pipeline PD--DF coh\'erent.
+\end{enumerate}
+\end{warningbox}
+
+\subsection{Approche retenue : Hazard Rate constant (C1)}
+
+\begin{formulebox}[Formule --- PD Lifetime via Hazard Rate (C1)]
+On mod\'elise le d\'efaut comme un processus de Poisson homog\`ene avec un taux de hasard (\textit{hazard rate}) constant $h$ :
+\begin{align}
+h &= -\ln(1 - \text{PD}_{12\text{m}}) \label{eq:hazard} \\[6pt]
+\text{PD}_{\text{lifetime}} &= 1 - \exp(-h \times T) \label{eq:pd_lifetime}
+\end{align}
+o\`u $T$ est l'horizon r\'esiduel en ann\'ees :
+\[
+T = \begin{cases}
+1 & \text{Stage 1 (12 mois)} \\
+\texttt{lifetime\_horizon\_years} = 3 & \text{Stage 2/3 (lifetime)}
+\end{cases}
+\]
+\end{formulebox}
+
+L'impl\'ementation dans \texttt{ecl\_calculator.py} borne la PD avant le calcul du hazard rate pour \'eviter $\ln(0)$ :
+
+\begin{verbatim}
+_PD_CLIP_MAX = 0.9999
+
+h = -np.log(1 - np.clip(pd_12m, 0, _PD_CLIP_MAX))
+pd_lifetime = 1 - np.exp(-h * t_residuel)
+\end{verbatim}
+
+\begin{interpretbox}[Intuition --- Hazard Rate vs Bernoulli]
+Le hazard rate $h$ repr\'esente l'intensit\'e instantan\'ee de d\'efaut. Pour une PD annuelle de 5\% :
+\begin{align*}
+h &= -\ln(1 - 0{,}05) = 0{,}0513 \\
+\text{PD}_{3\text{ans}} &= 1 - e^{-0{,}0513 \times 3} = 14{,}26\%
+\end{align*}
+Par Bernoulli : $1 - (1-0{,}05)^3 = 14{,}26\%$ --- les deux co\"incident pour les PD faibles car $-\ln(1-p) \approx p$ quand $p \ll 1$. La diff\'erence appara\^it pour les PD \'elev\'ees o\`u le hazard rate est plus rigoureux.
+\end{interpretbox}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Mod\`ele LGD --- Loss Given Default}
+\label{sec:lgd}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Architecture du mod\`ele}
+
+Le mod\`ele LGD (\texttt{models/lgd\_model.py}, classe \texttt{LGDModel}) produit deux estimations :
+\begin{itemize}
+    \item \textbf{LGD TTC} (\textit{Through-The-Cycle}) : estimation moyenne long terme.
+    \item \textbf{LGD Downturn} : estimation stress\'ee pour les sc\'enarios adverses (conforme EBA GL/2019/03).
+\end{itemize}
+
+\subsection{LGD TTC --- Distribution Beta}
+
+\subsubsection{LGD de base (d\'eterministe)}
+
+La LGD de base est calcul\'ee \`a partir de trois facteurs :
+
+\begin{formulebox}[Formule --- LGD de base]
+\begin{equation}
+\label{eq:lgd_base}
+\text{LGD}_{\text{base},i} = \mu_{\text{secteur}} \times m_{\text{pr\^et}} + \alpha_{\text{score},i}
+\end{equation}
+o\`u :
+\begin{itemize}
+    \item $\mu_{\text{secteur}}$ est la LGD moyenne calibr\'ee sur les d\'efauts observ\'es par secteur (d\'efaut : $\texttt{lgd\_ttc\_mean} = 0{,}35$),
+    \item $m_{\text{pr\^et}} = \begin{cases} 1{,}15 & \text{Revolving (recouvrement plus difficile)} \\ 0{,}90 & \text{Term (collat\'eral plus structur\'e)} \end{cases}$
+    \item $\alpha_{\text{score},i} = \text{clip}\!\left(\frac{650 - \text{score}_i}{2 \times 100},\; -0{,}10,\; 0{,}10\right) \times 0{,}20$
+\end{itemize}
+\end{formulebox}
+
+L'ajustement par score de cr\'edit est calibr\'e (correction M1) : le score m\'edian est 650, l'\'ecart-type 100, et le facteur d'\'echelle 0,20 traduit un impact maximal de $\pm 2\%$ sur la LGD.
+
+\subsubsection{Dispersion Beta (stochastique)}
+
+Autour de la LGD de base, une dispersion stochastique est appliqu\'ee via la distribution Beta.
+
+\begin{formulebox}[Formule --- Param\'etrisation Beta (m\'ethode des moments)]
+\'Etant donn\'ee une moyenne $\mu$ et un \'ecart-type cible $\sigma$ :
+\begin{align}
+\kappa &= \max\!\left(\frac{\mu(1-\mu)}{\sigma^2} - 1,\; 1{,}05\right) \label{eq:kappa} \\
+\alpha &= \max(\mu \cdot \kappa,\; 0{,}1) \\
+\beta &= \max((1-\mu) \cdot \kappa,\; 0{,}1) \\
+\text{LGD}_{\text{TTC},i} &\sim \text{Beta}(\alpha_i, \beta_i) \label{eq:beta_sample}
+\end{align}
+o\`u $\sigma = \texttt{lgd\_ttc\_std} \times 0{,}5 = 0{,}075$ pour la dispersion de pr\'ediction.
+\end{formulebox}
+
+\begin{warningbox}[Plancher $\kappa \geq 1{,}05$]
+Le param\`etre $\kappa$ est born\'e inf\'erieurement \`a $1{,}05$ (et non $1{,}0$). Statistiquement, $\kappa > 1$ est n\'ecessaire pour que la variance $\text{Var}[\text{Beta}] = \frac{\mu(1-\mu)}{\kappa+1}$ soit strictement inf\'erieure \`a $\mu(1-\mu)$, condition requise pour une distribution Beta bien d\'efinie sur $]0, 1[$. Le plancher $1{,}05$ ajoute une marge de s\'ecurit\'e num\'erique.
+\end{warningbox}
+
+\begin{interpretbox}[D\'eterminisme cross-sc\'enario]
+Le g\'en\'erateur al\'eatoire (RNG) est \textbf{r\'einitialis\'e} \`a \texttt{seed + 1} avant chaque appel \`a la dispersion Beta. Cela garantit que le m\^eme portefeuille re\c{c}oit exactement les m\^emes LGD de base, ind\'ependamment du nombre de sc\'enarios \'evalu\'es. Sans cette r\'einitialisation, les tirages Beta d\'erivent d'un sc\'enario \`a l'autre, rendant les comparaisons non d\'eterministes.
+\end{interpretbox}
+
+\subsection{LGD Downturn --- Corr\'elation cycle (H3)}
+
+\begin{formulebox}[Formule --- LGD Downturn (EBA GL/2019/03)]
+\begin{equation}
+\label{eq:lgd_dt}
+\text{LGD}_{\text{DT}} = \text{LGD}_{\text{TTC}} \times \left(1 + \rho_{\text{LGD}} \times |Z_{\text{stress}}|\right)
+\end{equation}
+o\`u :
+\begin{itemize}
+    \item $\rho_{\text{LGD}}$ est la corr\'elation LGD-cycle, sp\'ecifique au secteur (attribut \texttt{rho\_lgd\_cycle} de \texttt{SectorConfig}).
+    \item $Z_{\text{stress}}$ est le nombre de sigma du stress : $0$ pour base, $2{,}0$ pour adverse, $-1{,}0$ pour favorable.
+    \item La valeur absolue $|Z_{\text{stress}}|$ garantit l'invariant $\text{LGD}_{\text{DT}} \geq \text{LGD}_{\text{TTC}}$ pour $Z \geq 0$.
+\end{itemize}
+\end{formulebox}
+
+Les corr\'elations LGD-cycle calibr\'ees par secteur sont :
+
+\begin{center}
+\begin{tabular}{lcl}
+\toprule
+\textbf{Secteur} & $\rho_{\text{LGD}}$ & \textbf{Justification} \\
+\midrule
+Technologie & 0.25 & Actifs incorporels, recouvrement incertain \\
+Industrie   & 0.30 & Actifs industriels, cyclique \\
+Sant\'e     & 0.10 & D\'efensif, demande in\'elastique \\
+Immobilier  & 0.35 & Collat\'eral immobilier, forte corr\'elation HPI \\
+Services    & 0.20 & Actifs l\'egers, r\'esilience mod\'er\'ee \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Exemple num\'erique} : pour le secteur Immobilier ($\rho = 0{,}35$) en sc\'enario adverse ($Z = 2{,}0$) avec $\text{LGD}_{\text{TTC}} = 40\%$ :
+\[
+\text{LGD}_{\text{DT}} = 0{,}40 \times (1 + 0{,}35 \times 2{,}0) = 0{,}40 \times 1{,}70 = 68\%
+\]
+
+\subsection{Effet HPI bidirectionnel}
+
+Le prix de l'immobilier (HPI) impacte la LGD via le canal collat\'eral. L'effet est \textbf{bidirectionnel} : une baisse du HPI augmente la LGD (d\'evaluation du collat\'eral), et une hausse la r\'eduit.
+
+\begin{formulebox}[Formule --- Ajustement HPI sur la LGD]
+\begin{equation}
+\label{eq:lgd_hpi}
+\text{LGD}_{\text{ajust\'ee},i} = \text{LGD}_i + \frac{2{,}0 - \text{HPI}_{\text{override}}}{100} \times \text{sens}^{\text{HPI}}_{\text{secteur}}
+\end{equation}
+o\`u $\text{sens}^{\text{HPI}}_{\text{secteur}}$ est la sensibilit\'e HPI du canal cr\'edit (\texttt{hpi\_sensitivity\_credit}), et $2{,}0\%$ est le HPI de base (\texttt{SCENARIO\_BASE.hpi\_growth}).
+\end{formulebox}
+
+La LGD finale est born\'ee dans $[\texttt{recovery\_rate\_floor},\, 0{,}95]$, soit $[5\%, 95\%]$, garantissant un recouvrement minimal de 5\%.
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Mod\`ele EAD --- Exposure At Default}
+\label{sec:ead}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Architecture du mod\`ele}
+
+Le mod\`ele EAD (\texttt{models/ead\_model.py}, classe \texttt{EADModel}) estime l'exposition au moment du d\'efaut en distinguant deux types de produits. Le module \texttt{config.py} d\'efinit la classe \texttt{EADConfig} avec les param\`etres de calibration.
+
+\subsection{Formule EAD par type de pr\^et}
+
+\begin{formulebox}[Formule --- EAD avec Credit Conversion Factor (CCF)]
+\begin{equation}
+\label{eq:ead}
+\text{EAD}_i = \begin{cases}
+\text{Drawn}_i + \text{CCF} \times \text{Undrawn}_i & \text{si Revolving} \\[4pt]
+\text{Loan Amount}_i & \text{si Term Loan}
+\end{cases}
+\end{equation}
+o\`u, pour les lignes revolving :
+\begin{align}
+\text{Drawn}_i &= \text{Loan Amount}_i \times \text{Utilization Rate}_i \\
+\text{Undrawn}_i &= \text{Loan Amount}_i \times (1 - \text{Utilization Rate}_i)
+\end{align}
+\end{formulebox}
+
+\begin{interpretbox}[Intuition --- CCF]
+Le CCF (\textit{Credit Conversion Factor}) repr\'esente la fraction de la ligne non tir\'ee (\textit{undrawn}) qui sera consomm\'ee avant le d\'efaut. Pour un CCF de 75\%, une entreprise disposant d'une ligne revolving de 10\,M\euro{} tir\'ee \`a 50\% aura une EAD de $5 + 0{,}75 \times 5 = 8{,}75$\,M\euro{}, et non 5\,M\euro{} (encours courant) ni 10\,M\euro{} (engagement total). Pour un pr\^et \`a terme, le CCF est implicitement 100\% car l'int\'egralit\'e du capital est d\'ej\`a tir\'ee.
+\end{interpretbox}
+
+\subsection{Stress EAD en sc\'enario adverse}
+
+En sc\'enario adverse, l'EAD est stress\'ee par deux m\'ecanismes :
+
+\begin{formulebox}[Formule --- EAD stress\'ee]
+\begin{equation}
+\label{eq:ead_stress}
+\text{EAD}_{\text{stress},i} = \left(\text{Drawn}_i + \text{CCF}_{\text{stress}} \times \text{Undrawn}_i\right) \times m_{\text{secteur}}
+\end{equation}
+o\`u :
+\begin{align}
+\text{CCF}_{\text{stress}} &= \min\!\left(\text{CCF}_{\text{base}} + \Delta_{\text{CCF}},\; 1{,}0\right) = \min(0{,}75 + 0{,}20,\; 1{,}0) = 0{,}95 \\[4pt]
+m_{\text{secteur}} &= \begin{cases}
+1{,}05 & \text{si } \text{sens}^{\text{ch\^omage}}_{\text{cr\'edit}} > 1{,}5 \text{ (secteur fragile)} \\
+1{,}00 & \text{sinon}
+\end{cases}
+\end{align}
+\end{formulebox}
+
+Les secteurs fragiles (sensibilit\'e ch\^omage $> 1{,}5$) sont \textbf{Technologie} (2,5) et \textbf{Industrie} (1,8). En stress, ils subissent un surco\^ut EAD de 5\% refl\'etant un tirage acc\'el\'er\'e des lignes (\textit{drawdown acceleration}).
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Sc\'enario} & \textbf{CCF Revolving} & \textbf{Secteurs fragiles} & \textbf{Term Loan} \\
+\midrule
+Base / Favorable & 0,75 & $\times 1{,}00$ & EAD = Loan Amount \\
+Adverse          & 0,95 & $\times 1{,}05$ & EAD = Loan Amount \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}[Dispersion r\'ealiste]
+Une dispersion al\'eatoire $\mathcal{N}(1{,}0;\, 0{,}02)$ est appliqu\'ee multiplicativement \`a toutes les EAD pour \'eviter des valeurs artificiellement identiques entre entreprises du m\^eme profil. L'EAD finale est born\'ee \`a $\geq 0$.
+\end{warningbox}
+
+\subsection{Param\`etres de configuration}
+
+\begin{center}
+\begin{tabular}{llcl}
+\toprule
+\textbf{Param\`etre} & \textbf{Attribut} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+CCF Revolving          & \texttt{ccf\_revolving}           & 75\%  & BCB\footnote{Conforme \`a CRR3 Art.~111(1) pour les engagements hors bilan en approche standard, fourchette 20--100\% selon le type de facilit\'e. La valeur de 75\% est repr\'esentative des lignes corporate confirm\'ees.} \\
+CCF Term Loan          & \texttt{ccf\_term\_loan}           & 100\% & Int\'egralement tir\'e \\
+Stress tirage          & \texttt{utilization\_draw\_stress} & +20pp & Hausse CCF en adverse \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Facteur d'Actualisation --- PD-Marginal Weighted}
+\label{sec:discount}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Probl\'ematique}
+
+L'ECL doit \^etre actualis\'e au taux d'int\'er\^et effectif (EIR, IFRS~9 \S B5.5.44). Pour les expositions lifetime (Stage~2/3), la question est : comment actualiser des flux de pertes qui se produisent \`a diff\'erents moments sur l'horizon ?
+
+\subsection{Approche na\"ive : moyenne arithm\'etique (rejet\'ee)}
+
+L'approche simpliste consiste \`a prendre la moyenne arithm\'etique des facteurs d'actualisation :
+\[
+\text{DF}^{\text{na\"if}} = \frac{1}{T} \sum_{t=1}^{T} \frac{1}{(1+r)^t}
+\]
+
+Cette approche attribue le m\^eme poids \`a chaque ann\'ee, ind\'ependamment de la probabilit\'e de d\'efaut \`a cette ann\'ee. Elle est incorrecte car les pertes ne sont pas uniform\'ement distribu\'ees dans le temps.
+
+\subsection{Approche retenue : pond\'eration par PD marginale (C2)}
+
+\begin{formulebox}[Formule --- Facteur d'actualisation PD-marginal weighted (C2)]
+Pour les expositions lifetime (Stage~2/3) :
+\begin{align}
+S(t) &= \exp(-h \times t) & &\text{Fonction de survie} \label{eq:survival} \\
+\text{PM}(t) &= S(t-1) - S(t) & &\text{PD marginale ann\'ee } t \label{eq:marginal_pd} \\
+\text{DF}(t) &= \frac{1}{(1+r)^t} & &\text{Facteur d'actualisation ann\'ee } t \\[8pt]
+\text{DF}_{\text{weighted}} &= \frac{\displaystyle\sum_{t=1}^{T} \text{PM}(t) \times \text{DF}(t)}{\displaystyle\sum_{t=1}^{T} \text{PM}(t)} \label{eq:df_weighted}
+\end{align}
+o\`u $h = -\ln(1 - \text{PD}_{12\text{m}})$ est le hazard rate et $r = \texttt{discount\_rate} = 4{,}5\%$.
+
+\medskip
+Pour Stage~1 : $\text{DF} = \frac{1}{1+r}$ (actualisation simple sur 1~an).
+\end{formulebox}
+
+\begin{interpretbox}[Intuition --- Pourquoi pond\'erer par la PD marginale ?]
+La PD marginale $\text{PM}(t)$ repr\'esente la probabilit\'e de faire d\'efaut sp\'ecifiquement \`a l'ann\'ee $t$ (ayant survécu jusqu'\`a $t-1$). Le DF pond\'er\'e concentre l'actualisation sur les ann\'ees o\`u le d\'efaut est le plus probable. Pour une exposition \`a PD \'elev\'ee, le d\'efaut est plus probable en d\'ebut de p\'eriode, donc le DF pond\'er\'e sera plus proche de $\frac{1}{1+r}$ (moins actualis\'e). Pour une PD faible, le d\'efaut est r\'eparti plus uniform\'ement, et le DF s'approche de la moyenne arithm\'etique. Cette approche est conforme \`a IFRS~9 IE24.
+\end{interpretbox}
+
+\textbf{Exemple num\'erique} : PD 12m = 8\%, horizon $T = 3$, taux $r = 4{,}5\%$.
+\begin{align*}
+h &= -\ln(1 - 0{,}08) = 0{,}0834 \\
+S(0) &= 1{,}000,\quad S(1) = 0{,}920,\quad S(2) = 0{,}846,\quad S(3) = 0{,}778 \\
+\text{PM}(1) &= 0{,}080,\quad \text{PM}(2) = 0{,}074,\quad \text{PM}(3) = 0{,}068 \\
+\text{DF}(1) &= 0{,}957,\quad \text{DF}(2) = 0{,}916,\quad \text{DF}(3) = 0{,}876 \\[4pt]
+\text{DF}_{\text{weighted}} &= \frac{0{,}080 \times 0{,}957 + 0{,}074 \times 0{,}916 + 0{,}068 \times 0{,}876}{0{,}080 + 0{,}074 + 0{,}068} = \frac{0{,}2044}{0{,}2222} = 0{,}920
+\end{align*}
+
+Compar\'e \`a la moyenne arithm\'etique : $\frac{0{,}957 + 0{,}916 + 0{,}876}{3} = 0{,}916$. La diff\'erence est faible ici (PD mod\'er\'ee) mais s'amplifie pour les PD \'elev\'ees.
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Calcul ECL --- Formule par exposition}
+\label{sec:ecl}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Formule fondamentale}
+
+\begin{formulebox}[Formule --- ECL par exposition]
+\begin{equation}
+\label{eq:ecl}
+\boxed{\text{ECL}_i = \text{PD}_{\text{eff},i} \times \text{LGD}_i \times \text{EAD}_i \times \text{DF}_i}
+\end{equation}
+o\`u la PD effective d\'epend du stage :
+\begin{equation}
+\text{PD}_{\text{eff},i} = \begin{cases}
+\text{PD}_{12\text{m},i} & \text{si Stage 1} \\
+\text{PD}_{\text{lifetime},i} = 1 - e^{-h_i \times T} & \text{si Stage 2} \\
+1{,}0 & \text{si Stage 3 (d\'efaut av\'er\'e)}
+\end{cases}
+\end{equation}
+\end{formulebox}
+
+\subsection{Pond\'eration multi-sc\'enarios}
+
+Conform\'ement \`a IFRS~9 \S5.5.17, l'ECL est calcul\'e sous trois sc\'enarios macro\'economiques ind\'ependants, puis pond\'er\'e :
+
+\begin{formulebox}[Formule --- ECL pond\'er\'e multi-sc\'enarios]
+\begin{equation}
+\label{eq:ecl_weighted}
+\text{ECL}_{\text{pond\'er\'e}} = \sum_{s \in \mathcal{S}} w_s \times \text{ECL}_s
+\end{equation}
+o\`u $\mathcal{S} = \{\text{Base}, \text{Adverse}, \text{Favorable}\}$ avec les pond\'erations $w$ :
+\end{formulebox}
+
+\begin{center}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Sc\'enario} & \textbf{Poids} & \textbf{PIB} & \textbf{Ch\^omage} & \textbf{Taux} & \textbf{HPI} & \textbf{Inflation} \\
+\midrule
+Base       & 50\% & $+1{,}2\%$ & $7{,}5\%$ & $3{,}5\%$ & $+2{,}0\%$ & $2{,}5\%$ \\
+Adverse    & 25\% & $-1{,}5\%$ & $10{,}5\%$ & $5{,}0\%$ & $-8{,}0\%$ & $5{,}5\%$ \\
+Favorable  & 25\% & $+2{,}5\%$ & $5{,}5\%$ & $2{,}0\%$ & $+5{,}0\%$ & $1{,}5\%$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Chaque sc\'enario affecte l'ECL via trois canaux :
+\begin{enumerate}
+    \item \textbf{PD} : ajust\'ee dans l'espace logit (cf. \S\ref{sec:stress}).
+    \item \textbf{LGD} : TTC pour Base/Favorable, Downturn pour Adverse ; HPI impacte le collat\'eral.
+    \item \textbf{EAD} : base pour Base/Favorable, stress\'ee pour Adverse (tirage suppl\'ementaire via CCF).
+\end{enumerate}
+
+\begin{warningbox}[Le staging est unique, pas par sc\'enario]
+Le staging est calcul\'e \textbf{une seule fois} sur la PD stress\'ee de r\'ef\'erence (sc\'enario Base avec overrides), puis appliqu\'e \`a tous les sc\'enarios. Cette d\'ecision \'evite des oscillations de stage entre sc\'enarios et refl\`ete la pratique : le stage est une d\'ecision de gestion, pas un r\'esultat de simulation.
+\end{warningbox}
+
+\begin{interpretbox}[Justification des poids 50/25/25]
+La pond\'eration 50\% Base / 25\% Adverse / 25\% Favorable refl\`ete le consensus prudentiel europ\'een :
+\begin{itemize}
+    \item L'EBA (\textit{IFRS 9 Implementation Report}, 2018) et la BCE (TRIM, 2019) recommandent un minimum de 3 sc\'enarios avec un sc\'enario central pond\'er\'e majoritairement.
+    \item IFRS~9 \S5.5.18 exige que les pond\'erations refl\`etent une ``estimation non biais\'ee'' de la probabilit\'e d'occurrence de chaque sc\'enario, sans sur-repr\'esenter les sc\'enarios adverses.
+    \item La sym\'etrie adverse/favorable (25\%/25\%) garantit une esp\'erance non biais\'ee autour du sc\'enario central (propri\'et\'e de martingale).
+    \item En pratique, les banques europ\'eennes utilisent typiquement des poids dans l'intervalle $[40\%\text{--}60\%]$ pour le central et $[15\%\text{--}30\%]$ par sc\'enario alternatif (BCE, \textit{Supervisory Banking Statistics}, 2023).
+\end{itemize}
+Ces poids sont configur\'es par sc\'enario dans \texttt{PREDEFINED\_SCENARIOS} et peuvent \^etre ajust\'es sans modification du code.
+\end{interpretbox}
+
+\subsection{R\'esum\'e ECL et coverage ratio}
+
+La m\'ethode \texttt{compute\_ecl\_summary()} agr\`ege les r\'esultats par stage et secteur :
+\begin{equation}
+\text{Coverage Ratio} = \frac{\sum_i \text{ECL}_{\text{weighted},i}}{\sum_i \text{EAD}_i}
+\end{equation}
+
+Ce ratio repr\'esente le taux de provisionnement moyen du portefeuille, typiquement entre 1\% et 5\% pour un portefeuille corporate sain.
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Waterfall de variation ECL}
+\label{sec:waterfall}
+% ══════════════════════════════════════════════════════════
+
+La m\'ethode \texttt{compute\_waterfall()} d\'ecompose la variation d'ECL entre deux dates en composantes explicatives :
+
+\begin{formulebox}[D\'ecomposition Waterfall]
+\begin{equation}
+\Delta \text{ECL} = \text{ECL}_{\text{cl\^oture}} - \text{ECL}_{\text{ouverture}} = \underbrace{\Delta_{\text{downgrade}}}_{\text{migrations } \downarrow} + \underbrace{\Delta_{\text{upgrade}}}_{\text{migrations } \uparrow} + \underbrace{\Delta_{\text{param\`etres}}}_{\text{PD/LGD/EAD stables}}
+\end{equation}
+\end{formulebox}
+
+L'algorithme classe chaque exposition selon l'\'evolution de son stage :
+\begin{itemize}
+    \item \textbf{Downgrades} ($\text{stage}_{t_1} > \text{stage}_{t_0}$) : contribution = $\text{ECL}_{t_1} - \text{ECL}_{t_0}$ pour ces expositions.
+    \item \textbf{Upgrades} ($\text{stage}_{t_1} < \text{stage}_{t_0}$) : contribution (g\'en\'eralement n\'egative).
+    \item \textbf{Param\`etres} ($\text{stage}_{t_1} = \text{stage}_{t_0}$) : variation due aux changements de PD, LGD ou EAD \`a stage constant.
+\end{itemize}
+
+\begin{interpretbox}[Utilit\'e du waterfall]
+Le waterfall est l'outil privil\'egi\'e des comit\'es de risque pour comprendre les \textbf{drivers} de la variation trimestrielle d'ECL. Il permet de distinguer les effets de migration (changement de stage) des effets de recalibration (mise \`a jour des param\`etres PD/LGD/EAD).
+\end{interpretbox}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Stress Macro\'economique --- Espace Logit}
+\label{sec:stress}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Fondement th\'eorique : Merton-Vasicek}
+
+Le stress macro\'economique sur les PD est r\'ealis\'e dans l'espace logit, conform\'ement au mod\`ele de cr\'edit Merton-Vasicek. Dans ce cadre th\'eorique, la PD stress\'ee s'\'ecrit :
+\begin{equation}
+\text{PD}_{\text{stress}} = \Phi\!\left(\Phi^{-1}(\text{PD}) + \sqrt{\rho} \cdot z_{\text{macro}}\right)
+\end{equation}
+o\`u $\Phi$ est la fonction de r\'epartition normale. L'approximation logistique ($\text{logit}/\text{expit}$) est plus stable num\'eriquement et produit des r\'esultats similaires pour les PD dans la plage $[1\%, 50\%]$.
+
+\subsection{Formule de stress logit}
+
+\begin{formulebox}[Formule --- Stress PD en espace logit]
+\begin{equation}
+\label{eq:logit_stress}
+\text{logit}(\text{PD}_{\text{stress}}) = \text{logit}(\text{PD}_{\text{base}}) + \Lambda \times \sum_{v \in \mathcal{V}} \delta_v \times \text{sens}_{v,s}
+\end{equation}
+o\`u :
+\begin{itemize}
+    \item $\text{logit}(p) = \ln\!\left(\frac{p}{1-p}\right)$ et $\text{expit}(x) = \frac{1}{1+e^{-x}}$
+    \item $\Lambda = \texttt{LOGIT\_AMPLITUDE} \approx 4{,}94$ (calibr\'e dynamiquement depuis 2 points d'ancrage EBA\footnote{%
+          Calibr\'e pour assurer une \'elasticit\'e PD $\times 3$ (de 6\% \`a 18\%) sous un choc composite
+          de 0{,}25 sigma, coh\'erent avec les stress tests EBA 2023 o\`u les PD corporate sont
+          multipli\'ees par 2 \`a 4 en sc\'enario adverse.})
+    \item $\delta_v$ sont les chocs normalis\'es par variable macro
+    \item $\text{sens}_{v,s}$ est la sensibilit\'e du secteur $s$ \`a la variable $v$ (canal cr\'edit)
+\end{itemize}
+
+La PD stress\'ee est obtenue par transformation inverse :
+\begin{equation}
+\text{PD}_{\text{stress}} = \text{expit}\!\left(\text{logit}(\text{PD}_{\text{base}}) + \Lambda \times S_{\text{composite}}\right)
+\end{equation}
+\end{formulebox}
+
+\subsection{Calcul des chocs macro normalis\'es}
+
+Les chocs sont calcul\'es comme des deltas entre la valeur effective et le sc\'enario de base, normalis\'es par 100 :
+
+\begin{center}
+\begin{tabular}{lcl}
+\toprule
+\textbf{Variable} & \textbf{Formule du choc $\delta_v$} & \textbf{Signe} \\
+\midrule
+Ch\^omage & $(\text{val} - \text{base}) / 100$ & Hausse = adverse \\
+PIB       & $(\text{base} - \text{val}) / 100$ & Baisse = adverse \\
+Taux      & $(\text{val} - \text{base}) / 100$ & Hausse = adverse \\
+HPI       & $(\text{base} - \text{val}) / 100$ & Baisse = adverse \\
+Inflation & $(\text{val} - \text{base}) / 100$ & Hausse = adverse \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les chocs sont \textbf{sym\'etriques} : un sc\'enario favorable produit des $\delta_v < 0$, r\'eduisant la PD (pas de $\max(0, \ldots)$).
+
+\subsection{Sensibilit\'es sectorielles}
+
+Le choc composite est la somme pond\'er\'ee par les sensibilit\'es sectorielles. Par exemple, pour le secteur Technologie :
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+\textbf{Variable} & \textbf{Sensibilit\'e cr\'edit} \\
+\midrule
+Ch\^omage  & 2.5 (tr\`es sensible --- startups, cash-burn) \\
+PIB        & 1.8 \\
+Taux       & 1.2 \\
+HPI        & 0.5 (peu d'actifs immobiliers) \\
+Inflation  & 1.5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{interpretbox}[Calibration dynamique de $\Lambda$]
+\textbf{Audit RJ} : $\Lambda$ n'est plus un nombre magique fig\'e \`a $6{,}0$ mais est
+\textbf{calibr\'e dynamiquement} depuis 2 points d'ancrage EBA
+(fonction \texttt{\_calibrate\_logit\_amplitude} dans \texttt{config.py}) :
+\[
+    \Lambda = \frac{\text{logit}(\text{PD}_{\text{adverse}}) - \text{logit}(\text{PD}_{\text{base}})}
+                   {\Delta_{\text{composite}}}
+    = \frac{\text{logit}(0{,}18) - \text{logit}(0{,}06)}{0{,}25} \approx 4{,}94
+\]
+o\`u $\text{PD}_{\text{base}} = 6\%$ et $\text{PD}_{\text{adverse}} = 18\%$ (facteur $\times 3$ EBA).
+Avec $\Lambda \approx 4{,}94$ et un choc composite $\approx 0{,}25$ :
+\begin{itemize}
+    \item PD $6\% \to 18\%$ (facteur $\times 3$)
+    \item PD $3\% \to 8\%$ (facteur $\times 2{,}7$)
+    \item PD $20\% \to 45\%$
+\end{itemize}
+Ces amplitudes sont coh\'erentes avec les stress tests EBA qui montrent des PD corporate
+multipli\'ees par 2 \`a 4 en sc\'enario adverse.
+\end{interpretbox}
+
+\subsection{Bipolarit\'e du ch\^omage}
+
+Le ch\^omage a un traitement sp\'ecial dans l'interface dashboard via un slider ``bipolaire'' :
+\begin{itemize}
+    \item \textbf{Signe positif} ($+$) : rupture technologique --- le ch\^omage augmente mais le secteur Tech/PE en b\'en\'eficie (sensibilit\'e PE n\'egative).
+    \item \textbf{Signe n\'egatif} ($-$) : crise \'economique --- le ch\^omage augmente de mani\`ere classiquement r\'ecessive.
+    \item Dans les deux cas, la valeur absolue d\'etermine la hausse effective : $\text{ch\^omage} = \text{base} + |\text{slider}|$.
+\end{itemize}
+
+\begin{warningbox}[Dette technique UX]
+Cette convention bipolaire encode deux informations orthogonales (amplitude \textit{et} nature du choc)
+dans un seul slider, ce qui cr\'ee une s\'emantique contre-intuitive pour l'utilisateur final.
+Une refonte UX est pr\'evue : s\'eparer en deux contr\^oles distincts (un slider d'amplitude $[0, +N]$~pp
+et un s\'electeur de r\'egime \{crise \'economique, rupture technologique\}).
+En l'\'etat, le comportement est document\'e et coh\'erent c\^ot\'e moteur de calcul.
+\end{warningbox}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Credit Spread Merton}
+\label{sec:spread}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Mod\`ele de pricing risque neutre}
+
+Le spread de cr\'edit est calcul\'e selon une approche structurelle simplifi\'ee (Merton 1974), augment\'ee d'une prime de liquidit\'e.
+
+\begin{formulebox}[Formule --- Credit Spread Merton (H4)]
+\begin{equation}
+\label{eq:spread}
+\text{spread}_i = \frac{-\ln\!\left(1 - \text{PD}_{12\text{m},i} \times \text{LGD}_i\right)}{T} + \lambda_{\text{liq}}
+\end{equation}
+o\`u :
+\begin{itemize}
+    \item $\text{PD}_{12\text{m}} \times \text{LGD}$ est la perte attendue risque-neutre (born\'ee \`a $\texttt{\_PD\_CLIP\_MAX} = 0{,}9999$),
+    \item $T = 1{,}0$ an (horizon),
+    \item $\lambda_{\text{liq}} = \frac{\texttt{liquidity\_premium\_bps}}{10\,000} = \frac{50}{10\,000} = 0{,}0050$ (50 bps),
+    \item Le spread est born\'e dans $[50\text{ bps},\, 2000\text{ bps}]$, soit $[0{,}0050,\, 0{,}2000]$.
+\end{itemize}
+\end{formulebox}
+
+\begin{interpretbox}[Interpr\'etation du spread Merton]
+Le premier terme $-\ln(1 - \text{EL})/T$ est le taux de d\'ecouvert risque-neutre : il traduit la compensation exig\'ee par le march\'e pour l'esp\'erance de perte. Pour une perte attendue (EL) faible ($< 5\%$), $-\ln(1 - \text{EL}) \approx \text{EL}$, et le spread est approximativement \'egal \`a la perte attendue annualis\'ee.
+
+La prime de liquidit\'e $\lambda_{\text{liq}} = 50$~bps refl\`ete le co\^ut de portage d'un instrument illiquide (cr\'edit corporate mid-market) par rapport \`a un benchmark liquide.
+\end{interpretbox}
+
+\textbf{Exemple num\'erique} : PD = 5\%, LGD = 40\% :
+\begin{align*}
+\text{EL} &= 0{,}05 \times 0{,}40 = 0{,}020 \\
+\text{spread} &= -\ln(1 - 0{,}020) / 1 + 0{,}0050 = 0{,}0202 + 0{,}0050 = 252\text{ bps}
+\end{align*}
+
+\subsection{Utilisation dans le RAROC}
+
+Le spread Merton est utilis\'e dans le calcul du RAROC (\textit{Risk-Adjusted Return on Capital}) pour estimer le revenu net d'int\'er\^et (NII). Cependant, le NII utilise le spread \textbf{\`a l'origination} (bas\'e sur le taux de d\'efaut de base du secteur $\times$ LGD TTC) et non le spread stress\'e courant. Ceci \'evite que le NII et l'EL ne se compensent presque parfaitement sous stress, rendant le RAROC insensible aux sc\'enarios.
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Co\^ut du Risque --- Horizon moyen pond\'er\'e}
+\label{sec:cost_of_risk}
+% ══════════════════════════════════════════════════════════
+
+\subsection{D\'efinition}
+
+Le co\^ut du risque (\textit{Cost of Risk}) est le ratio de l'ECL annualis\'e rapport\'e \`a l'EAD totale. L'annualisation n\'ecessite de conna\^itre l'horizon moyen du portefeuille.
+
+\begin{formulebox}[Formule --- Horizon moyen EAD-pond\'er\'e par stage]
+\begin{equation}
+\label{eq:t_moyen}
+\bar{T} = \frac{\displaystyle\sum_{i \in \text{Stage 1}} \text{EAD}_i \times 1 + \sum_{i \in \text{Stage 2,3}} \text{EAD}_i \times T_{\text{lifetime}}}{\displaystyle\sum_{i} \text{EAD}_i}
+\end{equation}
+o\`u $T_{\text{lifetime}} = \texttt{lifetime\_horizon\_years} = 3$ ans.
+\end{formulebox}
+
+\begin{formulebox}[Formule --- Co\^ut du Risque annualis\'e]
+\begin{equation}
+\label{eq:cor}
+\text{CoR} = \frac{\text{ECL}_{\text{total}}}{\bar{T} \times \text{EAD}_{\text{total}}}
+\end{equation}
+\end{formulebox}
+
+\begin{interpretbox}[Pourquoi pond\'erer par l'EAD et non par le nombre d'expositions ?]
+La pond\'eration par l'EAD refl\`ete l'importance \'economique de chaque exposition dans le portefeuille. Un portefeuille domin\'e en EAD par des expositions Stage~1 (faible risque) aura un horizon moyen proche de 1~an, ce qui est correct car la majorit\'e de la provision est \`a court terme. \`A l'inverse, si les expositions Stage~2/3 dominent en EAD, l'horizon s'allonge vers $T_{\text{lifetime}}$, refl\'etant une provision plus longue.
+\end{interpretbox}
+
+\textbf{Exemple} : portefeuille avec 80\% de l'EAD en Stage~1, 15\% en Stage~2, 5\% en Stage~3 :
+\[
+\bar{T} = 0{,}80 \times 1 + 0{,}15 \times 3 + 0{,}05 \times 3 = 0{,}80 + 0{,}45 + 0{,}15 = 1{,}40\text{ ans}
+\]
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Synth\`ese des param\`etres de configuration}
+\label{sec:config}
+% ══════════════════════════════════════════════════════════
+
+\subsection{IFRS9Config --- Moteur principal}
+
+\begin{center}
+\begin{tabular}{llcl}
+\toprule
+\textbf{Param\`etre} & \textbf{Attribut} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+Seuil DPD Stage 3       & \texttt{stage3\_dpd\_threshold}    & 90 jours & Norme prudentielle b\^aloise \\
+Seuil PD Stage 3         & \texttt{stage3\_pd\_threshold}     & 30\%     & D\'efaut pr\'esum\'e \\
+Taux d'actualisation     & \texttt{discount\_rate}            & 4,5\%    & Proxy EIR corporate \\
+Horizon lifetime         & \texttt{lifetime\_horizon\_years}  & 3 ans    & Dur\'ee moyenne r\'esiduelle \\
+Multiplicateur SICR (h\'erit\'e)  & \texttt{sicr\_threshold\_multiplier} & 2.0 & Ancienne r\`egle IAS~39 (non utilis\'e)\footnotemark \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\footnotetext{Param\`etre h\'erit\'e de l'ancienne r\`egle ``PD courante $\geq 2\times$ PD origination''. Il est conserv\'e pour compatibilit\'e descendante mais n'est plus utilis\'e dans le calcul SICR multi-facteurs (\S\ref{sec:staging}).}
+
+\subsection{SICRConfig --- Score multi-facteurs}
+
+\begin{center}
+\begin{tabular}{llcl}
+\toprule
+\textbf{Param\`etre} & \textbf{Attribut} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+Poids ratio PD   & \texttt{w\_pd\_ratio} & 0.40 & Facteur le plus pr\'edictif \\
+Poids delta PD   & \texttt{w\_pd\_delta} & 0.20 & Compl\'ement absolu \\
+Poids DPD        & \texttt{w\_dpd}       & 0.25 & Comportement de paiement \\
+Poids macro      & \texttt{w\_macro}     & 0.15 & Forward-looking \\
+Seuil            & \texttt{threshold}    & 0.50 & Calibr\'e $\sim$10\% Stage 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{LGDConfig --- Mod\`ele de perte en cas de d\'efaut}
+
+\begin{center}
+\begin{tabular}{llcl}
+\toprule
+\textbf{Param\`etre} & \textbf{Attribut} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+LGD TTC moyenne     & \texttt{lgd\_ttc\_mean}       & 35\% & Niveau corporate standard \\
+\'Ecart-type LGD    & \texttt{lgd\_ttc\_std}        & 15\% & Dispersion inter-secteurs \\
+Plancher recouvrement & \texttt{recovery\_rate\_floor} & 5\%  & LGD minimum \\
+Taux de cure        & \texttt{cure\_rate}            & 15\% & Sortie de d\'efaut \\
+Add-on Downturn (h\'erit\'e) & \texttt{downturn\_add\_on} & 10\% & Remplac\'e par $\rho_{\text{LGD}} \times |Z|$ (H3) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{BaselConfig --- Param\`etres prudentiels}
+
+\begin{center}
+\begin{tabular}{llcl}
+\toprule
+\textbf{Param\`etre} & \textbf{Attribut} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+CET1 cible             & \texttt{cet1\_target}          & 13\%    & P2R + buffer \\
+RW cr\'edit corporate  & \texttt{rw\_credit}            & 100\%   & SA corporate \\
+Prime de liquidit\'e   & \texttt{liquidity\_premium\_bps} & 50 bps & Mid-market illiquide \\
+Marge commerciale      & \texttt{commercial\_margin\_bps} & 150 bps & Proxy NII origination \\
+CIR                    & \texttt{cir}                   & 45\%    & Co\^ut/revenu \\
+Taux d'imposition      & \texttt{tax\_rate}             & 25\%    & IS effectif \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Amplitude logit et constantes}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Constante} & \textbf{Valeur} & \textbf{Usage} \\
+\midrule
+\texttt{LOGIT\_AMPLITUDE} & $\approx 4{,}94$\footnotemark & Transmission macro $\to$ logit(PD) cr\'edit \\
+\texttt{PE\_DISTRESS\_LOGIT\_SCALE} & 3.0 & Transmission macro $\to$ logit(P(distress)) PE \\
+\texttt{\_PD\_CLIP\_MAX} & 0.9999 & Borne PD pour \'eviter $\ln(0)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\footnotetext{Calibr\'e dynamiquement par \texttt{\_calibrate\_logit\_amplitude()} depuis 2 points d'ancrage EBA : $\text{PD}_{\text{base}} = 6\%$, $\text{PD}_{\text{adverse}} = 18\%$, choc composite $= 0{,}25$. L'ancienne valeur $6{,}0$ a \'et\'e remplac\'ee lors de l'audit de rigueur (v1).}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Sch\'ema r\'ecapitulatif du pipeline ECL}
+\label{sec:pipeline}
+% ══════════════════════════════════════════════════════════
+
+Le diagramme ci-dessous synth\'etise le flux de donn\'ees complet du moteur ECL :
+
+\begin{center}
+\begin{tikzpicture}[
+    block/.style={rectangle, rounded corners=4pt, draw=steelblue, fill=steelblue!10, minimum width=3.8cm, minimum height=1.2cm, text centered, font=\small},
+    data/.style={rectangle, rounded corners=4pt, draw=accentgreen!70, fill=accentgreen!10, minimum width=3cm, minimum height=0.9cm, text centered, font=\small},
+    result/.style={rectangle, rounded corners=4pt, draw=accentred!70, fill=accentred!10, minimum width=3.5cm, minimum height=1cm, text centered, font=\small\bfseries},
+    arrow/.style={-{Stealth[length=3mm]}, thick, color=gray!70},
+    node distance=1.2cm,
+]
+    % Inputs
+    \node[data] (pd) {PD courante};
+    \node[data, right=1.5cm of pd] (macro) {Sc\'enarios macro};
+    \node[data, left=1.5cm of pd] (df) {DataFrame clients};
+
+    % Stress
+    \node[block, below=1cm of macro] (stress) {Stress logit\\{\scriptsize $\text{logit(PD)} + \Lambda \cdot S$}};
+
+    % Staging
+    \node[block, below=1cm of pd] (staging) {StagingEngine\\{\scriptsize Score SICR}};
+
+    % PD lifetime
+    \node[block, below=1cm of staging] (pdlt) {PD Lifetime\\{\scriptsize Hazard rate}};
+
+    % LGD / EAD
+    \node[block, left=0.8cm of pdlt] (lgd) {LGDModel\\{\scriptsize Beta + Downturn}};
+    \node[block, right=0.8cm of pdlt] (ead) {EADModel\\{\scriptsize CCF}};
+
+    % ECL
+    \node[block, below=1.2cm of pdlt] (ecl) {ECL = PD $\times$ LGD\\$\times$ EAD $\times$ DF};
+
+    % Weighted
+    \node[result, below=1cm of ecl] (weighted) {ECL pond\'er\'e\\50/25/25};
+
+    % Arrows
+    \draw[arrow] (pd) -- (staging);
+    \draw[arrow] (macro) -- (stress);
+    \draw[arrow] (stress) -| (staging);
+    \draw[arrow] (staging) -- (pdlt);
+    \draw[arrow] (df) |- (lgd);
+    \draw[arrow] (pdlt) -- (ecl);
+    \draw[arrow] (lgd) -- (ecl);
+    \draw[arrow] (ead) -- (ecl);
+    \draw[arrow] (ecl) -- (weighted);
+\end{tikzpicture}
+\end{center}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Matrice de transition et suivi temporel}
+% ══════════════════════════════════════════════════════════
+
+Le \texttt{StagingEngine} fournit \'egalement une matrice de transition $3 \times 3$ entre deux dates :
+
+\begin{formulebox}[Formule --- Matrice de transition]
+\begin{equation}
+P_{ij} = \frac{\#\{k : \text{stage}_{t_0}(k) = i \text{ et } \text{stage}_{t_1}(k) = j\}}{\#\{k : \text{stage}_{t_0}(k) = i\}}
+\end{equation}
+\end{formulebox}
+
+\begin{center}
+\begin{tabular}{l|ccc}
+\toprule
+& \textbf{Stage 1} ($t_1$) & \textbf{Stage 2} ($t_1$) & \textbf{Stage 3} ($t_1$) \\
+\midrule
+\textbf{Stage 1} ($t_0$) & $P_{11}$ & $P_{12}$ & $P_{13}$ \\
+\textbf{Stage 2} ($t_0$) & $P_{21}$ (cure) & $P_{22}$ & $P_{23}$ \\
+\textbf{Stage 3} ($t_0$) & $P_{31}$ & $P_{32}$ (cure) & $P_{33}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les \'el\'ements diagonaux repr\'esentent la stabilit\'e, les \'el\'ements au-dessus de la diagonale les d\'egradations, et en dessous les am\'eliorations (cures).
+
+\subsection{Propri\'et\'es de la matrice}
+
+\begin{definitionbox}[Matrice stochastique]
+La matrice $\mathbf{P}$ est une \textbf{matrice stochastique par lignes} : chaque ligne somme \`a 1.
+\begin{equation}
+\forall\, i \in \{1, 2, 3\} : \quad \sum_{j=1}^{3} P_{ij} = 1
+\end{equation}
+Cette propri\'et\'e garantit que chaque exposition quitte un stage pour arriver dans exactement un stage (conservation de la masse).
+\end{definitionbox}
+
+\subsection{Lien avec le waterfall ECL}
+
+La matrice de transition alimente directement la d\'ecomposition waterfall (\S\ref{sec:waterfall}) :
+\begin{itemize}
+    \item Les expositions avec $j > i$ (au-dessus de la diagonale) contribuent au terme $\Delta_{\text{downgrade}}$.
+    \item Les expositions avec $j < i$ (en dessous de la diagonale) contribuent au terme $\Delta_{\text{upgrade}}$.
+    \item Les expositions avec $j = i$ (diagonale) contribuent au terme $\Delta_{\text{param\`etres}}$.
+\end{itemize}
+
+\subsection{Exemple num\'erique typique}
+
+Pour un portefeuille corporate sous stress mod\'er\'e (sc\'enario Base $\to$ Adverse) :
+
+\begin{center}
+\begin{tabular}{l|ccc}
+\toprule
+& \textbf{Stage 1} & \textbf{Stage 2} & \textbf{Stage 3} \\
+\midrule
+\textbf{Stage 1} & 85\% & 13\% & 2\% \\
+\textbf{Stage 2} & 20\% & 65\% & 15\% \\
+\textbf{Stage 3} & 0\%  & 15\% & 85\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{interpretbox}[Lecture de la matrice]
+\begin{itemize}
+    \item 85\% des expositions Stage~1 restent performing --- le portefeuille est globalement stable.
+    \item 13\% migrent vers Stage~2 (SICR d\'etect\'e sous stress) --- ce sont les d\'eclencheurs principaux du \textit{cliff effect} ECL.
+    \item Le taux de cure Stage~2 $\to$ Stage~1 (20\%) est coh\'erent avec un cycle \'economique mod\'er\'e ; il chuterait sous 10\% en r\'ecession profonde.
+    \item Le Stage~3 est absorbant \`a 85\% --- une fois en d\'efaut, la sortie est lente (cure $\sim$15\%, conforme au \texttt{cure\_rate} de la \texttt{LGDConfig}).
+\end{itemize}
+Cette matrice alimente le tableau de bord (onglet ``Staging \& Transitions'').
+\end{interpretbox}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Annexe --- Secteurs et sensibilit\'es macro}
+\label{sec:annexe}
+% ══════════════════════════════════════════════════════════
+
+\subsection{Portefeuille : 5 secteurs entreprise}
+
+\begin{longtable}{lccccc}
+\toprule
+\textbf{Attribut} & \textbf{Techno.} & \textbf{Industrie} & \textbf{Sant\'e} & \textbf{Immobilier} & \textbf{Services} \\
+\midrule
+\endhead
+Proportion              & 25\%  & 25\%  & 15\%  & 20\%  & 15\% \\
+PD base                 & 6\%   & 5\%   & 3\%   & 5\%   & 4\% \\
+$\rho_{\text{LGD}}$     & 0.25  & 0.30  & 0.10  & 0.35  & 0.20 \\
+\midrule
+\multicolumn{6}{c}{\textit{Sensibilit\'es canal cr\'edit}} \\
+\midrule
+Ch\^omage   & 2.5 & 1.5 & 0.5 & 1.0 & 1.2 \\
+PIB         & 1.8 & 2.0 & 0.4 & 1.2 & 1.0 \\
+Taux        & 1.2 & 1.0 & 0.6 & 2.0 & 0.8 \\
+HPI         & 0.5 & 0.8 & 0.3 & 2.5 & 0.5 \\
+Inflation   & 1.5 & 1.2 & 0.8 & 1.0 & 1.8 \\
+\bottomrule
+\end{longtable}
+
+\begin{interpretbox}[Lecture des sensibilit\'es]
+Les sensibilit\'es sont des multiplicateurs sans dimension. Une sensibilit\'e de $2{,}5$ pour le ch\^omage sur la Technologie signifie que l'impact du ch\^omage sur le logit(PD) de ce secteur est $2{,}5$ fois plus fort que la r\'ef\'erence. Cela refl\`ete la fragilit\'e structurelle des entreprises technologiques (startups, cash-burn, levier) face au march\'e de l'emploi.
+
+\`A l'inverse, la Sant\'e affiche des sensibilit\'es faibles ($< 1{,}0$) sur toutes les variables, refl\'etant le caract\`ere d\'efensif du secteur (demande in\'elastique, revenus r\'ecurrents).
+\end{interpretbox}
+
+\newpage
+% ══════════════════════════════════════════════════════════
+\section{Annexe --- Glossaire et r\'ef\'erences normatives}
+% ══════════════════════════════════════════════════════════
+
+\begin{definitionbox}[Glossaire]
+\begin{description}[leftmargin=3cm, style=nextline]
+    \item[ECL] \textit{Expected Credit Loss} --- Perte de cr\'edit attendue, concept central d'IFRS~9.
+    \item[SICR] \textit{Significant Increase in Credit Risk} --- Augmentation significative du risque de cr\'edit d\'eclenchant le passage de Stage~1 \`a Stage~2.
+    \item[PD] \textit{Probability of Default} --- Probabilit\'e de d\'efaut \`a un horizon donn\'e.
+    \item[LGD] \textit{Loss Given Default} --- Perte en cas de d\'efaut, exprim\'ee en fraction de l'EAD.
+    \item[EAD] \textit{Exposure At Default} --- Exposition au moment du d\'efaut.
+    \item[TTC] \textit{Through-The-Cycle} --- Estimation moyenne sur un cycle \'economique complet.
+    \item[DT] \textit{Downturn} --- Estimation en conditions adverses.
+    \item[DF] \textit{Discount Factor} --- Facteur d'actualisation.
+    \item[EIR] \textit{Effective Interest Rate} --- Taux d'int\'er\^et effectif.
+    \item[DPD] \textit{Days Past Due} --- Jours de retard de paiement.
+    \item[HPI] \textit{House Price Index} --- Indice des prix immobiliers.
+    \item[CCF] \textit{Credit Conversion Factor} --- Facteur de conversion en cr\'edit.
+    \item[RWA] \textit{Risk-Weighted Assets} --- Actifs pond\'er\'es par les risques.
+    \item[RAROC] \textit{Risk-Adjusted Return on Capital} --- Rendement ajust\'e au risque du capital.
+    \item[CRR3] \textit{Capital Requirements Regulation 3} --- R\`eglement europ\'een transposant B\^ale III finalis\'e.
+\end{description}
+\end{definitionbox}
+
+\subsection*{R\'ef\'erences normatives}
+
+\begin{enumerate}
+    \item IFRS~9 \textit{Financial Instruments} (IASB, 2014) --- \S5.5 D\'epr\'eciation.
+    \item IFRS~9 \S B5.5.17 --- Informations raisonnables et \'etay\'ees (forward-looking).
+    \item IFRS~9 IE24 --- Exemple illustratif du facteur d'actualisation.
+    \item EBA GL/2019/03 --- \textit{Guidelines on estimation of LGD appropriate for an economic downturn}.
+    \item BCBS d424 (2017) --- \textit{Basel III: Finalising post-crisis reforms}.
+    \item CRR3 Art.~133 (SA equity RW), Art.~155 (IRB equity).
+    \item Merton, R.C. (1974) --- \textit{On the Pricing of Corporate Debt}.
+    \item Vasicek, O.A. (2002) --- \textit{The Distribution of Loan Portfolio Value}.
+    \item EBA/GL/2017/06 --- \textit{Guidelines on credit institutions' credit risk management practices and accounting for expected credit losses}.
+    \item IFRS~9 \S B5.5.1--B5.5.6 --- Crit\`eres d\'etaill\'es d'\'evaluation du SICR.
+    \item Gordy, M.B. (2003) --- \textit{A Risk-Factor Model Foundation for Ratings-Based Bank Capital Rules}, Journal of Financial Intermediation, 12(3), 199--232.
+    \item Cox, D.R. (1972) --- \textit{Regression Models and Life-Tables}, Journal of the Royal Statistical Society, Series B, 34(2), 187--220.
+    \item CRR3 Art.~111 --- CCF pour engagements hors bilan (approche standard).
+\end{enumerate}
+
+\end{document}

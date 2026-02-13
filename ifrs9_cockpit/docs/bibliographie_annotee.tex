@@ -1,0 +1,338 @@
+% ============================================================================
+% IFRS 9 Risk Cockpit — Bibliographie Annotée
+% avec identification des 10 références fondamentales
+% ============================================================================
+\documentclass[12pt,a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage{csquotes}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{multicol}
+\usepackage{etoolbox}
+
+\geometry{margin=2.5cm}
+\onehalfspacing
+
+% --- Couleurs ---
+\definecolor{steelblue}{HTML}{4682B4}
+\definecolor{darkblue}{HTML}{1B3A5C}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{accentgreen}{HTML}{34D399}
+\definecolor{goldstar}{HTML}{D4A017}
+\definecolor{warnorange}{HTML}{E67E22}
+
+% --- Hyperref ---
+\hypersetup{
+  colorlinks=true,
+  linkcolor=darkblue,
+  citecolor=steelblue,
+  urlcolor=steelblue,
+}
+
+% --- En-têtes ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{steelblue}{IFRS~9 Risk Cockpit}}
+\fancyhead[R]{\small\textcolor{steelblue}{Bibliographie Annotée}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Titres ---
+\titleformat{\section}{\Large\bfseries\color{darkblue}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{steelblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{steelblue}}{\thesubsubsection}{1em}{}
+
+% --- Boîtes ---
+\newtcolorbox{keyref}{
+  colback=goldstar!8,
+  colframe=goldstar!80!black,
+  fonttitle=\bfseries,
+  title={\large $\bigstar$ R\'{e}f\'{e}rence fondamentale},
+  sharp corners,
+  boxrule=1.2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+}
+
+\newtcolorbox{infobox}[1][]{
+  colback=steelblue!5,
+  colframe=steelblue!70!black,
+  fonttitle=\bfseries,
+  title={#1},
+  sharp corners,
+  boxrule=0.8pt,
+}
+
+% --- Commande pour les entrées ---
+\newcommand{\bibentry}[4]{%
+  \noindent\textbf{#1}\\
+  \textit{#2}\\
+  #3\par
+  \textcolor{steelblue}{\footnotesize\textsf{Utilisation dans le projet :} #4}\par
+  \medskip
+}
+
+\newcommand{\bibentrystar}[4]{%
+  \noindent{\color{goldstar}$\bigstar$}~\textbf{#1}\\
+  \textit{#2}\\
+  #3\par
+  \textcolor{steelblue}{\footnotesize\textsf{Utilisation dans le projet :} #4}\par
+  \medskip
+}
+
+% ============================================================================
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries\color{darkblue} Bibliographie Annotée}\\[6pt]
+  {\Large\color{steelblue} IFRS~9 Risk Cockpit}\\[4pt]
+  {\large Arbitrage Crédit / Private Equity sous contraintes réglementaires}\\[12pt]
+  {\normalsize Février 2026 --- 47 références}\\[6pt]
+  \rule{0.6\textwidth}{0.4pt}
+\end{center}
+
+\vspace{8pt}
+
+\begin{infobox}[Organisation]
+Cette bibliographie couvre les 47 sources mobilisées dans le projet IFRS~9 Risk Cockpit, organisées en 12 catégories thématiques. Les \textcolor{goldstar}{$\bigstar$~10 références fondamentales} sont identifiées --- elles constituent le socle théorique, réglementaire et méthodologique sans lequel l'architecture du cockpit ne pourrait être construite.
+\end{infobox}
+
+\vspace{4pt}
+
+% ============================================================================
+\section{Les 10 Références Fondamentales}
+% ============================================================================
+
+\begin{keyref}
+Les 10 références ci-dessous constituent le \textbf{noyau irréductible} du projet. Elles couvrent les trois piliers : \emph{norme comptable} (IFRS~9), \emph{cadre prudentiel} (Bâle~III, CRR3, EBA), \emph{modélisation du risque de crédit} (Merton, Vasicek, Gordy) et \emph{gouvernance des modèles} (SR~11-7, SHAP).
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{IFRS~9} (IASB, 2014) --- Norme comptable imposant le modèle ECL en 3 stages. \emph{Raison d'être du projet.}
+  \item \textbf{Merton} (1974) --- Modèle structurel de la dette risquée. Fondement du credit spread Merton $-\ln(1-\text{PD}\times\text{LGD})/T + \lambda$ implémenté dans le moteur ECL.
+  \item \textbf{Vasicek} (2002) --- Distribution du portefeuille de prêts (ASRF). Base mathématique du calcul des RWA et de la formule IRB de Bâle.
+  \item \textbf{Basel~III / BCBS d424} (2017) --- Cadre prudentiel final. Détermine les exigences de fonds propres (output floor, SA révisée) implémentées dans le comparateur.
+  \item \textbf{CRR3} (2024) --- Transposition européenne de Bâle~III final. Articles~133 (pondération equity 190\%/250\%/400\%) et~155 (IRB equity) directement codés.
+  \item \textbf{EBA GL/2017/06} --- Directives réglementaires pour l'estimation PD/LGD. Calibre les modèles de scoring et la LGD downturn.
+  \item \textbf{Gordy} (2003) --- Pont entre le modèle Vasicek et les formules de capital réglementaire. Justifie l'approche ASRF à facteur unique.
+  \item \textbf{Lundberg \& Lee} (2017) --- SHAP. Cadre d'explicabilité utilisé dans les 3 familles de modèles (Tab~6 du dashboard).
+  \item \textbf{SR~11-7} (Fed/OCC, 2011) --- Gouvernance du risque de modèle. Justifie l'architecture 3 familles (LR, XGBoost, TabNet) et la validation croisée.
+  \item \textbf{Arik \& Pfister} (2021) --- TabNet. Architecture deep learning tabulaire avec attention séquentielle, implémentée comme 3\textsuperscript{e} famille de modèles PD.
+\end{enumerate}
+\end{keyref}
+
+\vspace{12pt}
+
+% ============================================================================
+\section{Normes Comptables}
+% ============================================================================
+
+\bibentrystar{IASB (2014). \emph{IFRS~9 --- Financial Instruments.}}{International Accounting Standards Board. Amendé 2022.}{Sections 5.5.17 (pondération ECL par scénario), B5.5.17 (informations forward-looking), IE24 (taux d'actualisation EIR). Modèle ECL en 3 stages : performing / SICR / default.}{Norme fondatrice. Le modèle 3-stages structure l'intégralité du moteur ECL (\texttt{staging.py}, \texttt{ecl\_calculator.py}), le waterfall chart et les KPI du dashboard.}
+
+\bibentry{IASB (2011). \emph{IFRS~13 --- Fair Value Measurement.}}{International Accounting Standards Board.}{Hiérarchie de juste valeur (niveaux 1--3). Cadre pour la valorisation des actifs non cotés.}{Valorisation NAV des positions Private Equity (niveau~3) dans \texttt{pe\_calculator.py}.}
+
+\bibentry{IASB (1999). \emph{IAS~39 --- Financial Instruments: Recognition and Measurement.}}{International Accounting Standards Board.}{Prédécesseur d'IFRS~9. Modèle de dépréciation \og incurred loss\fg{} (pertes avérées).}{Contexte historique. Justifie le passage au modèle \og expected loss\fg{} d'IFRS~9.}
+
+% ============================================================================
+\section{Réglementation Prudentielle}
+% ============================================================================
+
+\bibentrystar{BCBS (2017). \emph{Basel~III: Finalising Post-Crisis Reforms.} Document d424.}{Basel Committee on Banking Supervision, décembre 2017.}{Cadre prudentiel final Bâle~III : output floor à 72,5\%, approche standard révisée, exigences de fonds propres.}{Calcul des RWA crédit et PE dans \texttt{comparator.py}. Output floor et sensibilité CRR3 dans le Tab~4 (Optimisation \& Bilan).}
+
+\bibentrystar{Parlement européen et Conseil (2024). \emph{Règlement (UE) 2024/1623 --- CRR3.}}{Journal officiel de l'Union européenne. Entrée en vigueur : janvier 2025.}{Articles~111 (CCF hors-bilan), 133 (pondération SA equity : 190\%/250\%/400\%), 155 (IRB equity). Transposition européenne de Bâle~III final.}{Pondérations PE directement codées dans \texttt{pe\_calculator.py}. Analyse CRR3 composite dans \texttt{comparator.py} (score macro\_env, portfolio\_quality, leverage, financial\_perf).}
+
+\bibentry{Parlement européen et Conseil (2013). \emph{Règlement (UE) n°~575/2013 --- CRR.}}{Journal officiel de l'Union européenne.}{Capital Requirements Regulation original. Base des exigences prudentielles européennes.}{Cadre de référence pour les formules IRB pré-CRR3.}
+
+% ============================================================================
+\section{Guidelines EBA}
+% ============================================================================
+
+\bibentrystar{EBA (2017). \emph{Guidelines on PD Estimation, LGD Estimation and the Treatment of Defaulted Exposures.} GL/2017/06.}{European Banking Authority.}{Directives pour l'estimation des paramètres de risque (PD TTC, PD PIT, LGD, CCF). Méthodologie de calibration et backtesting.}{Calibration PD dans \texttt{pd\_model.py} (correction de biais, prior correction). LGD TTC et LGD downturn dans \texttt{lgd\_model.py}. Seuils SICR dans \texttt{staging.py}.}
+
+\bibentry{EBA (2019). \emph{Guidelines for the Estimation of LGD Appropriate for an Economic Downturn.} GL/2019/03.}{European Banking Authority.}{LGD downturn : $\text{LGD}_\text{DT} = \text{LGD}_\text{TTC} \times (1 + \rho_\text{LGD} \times |Z_\text{stress}|)$.}{Formule implémentée dans \texttt{lgd\_model.py} avec $\rho_\text{LGD}$ sectoriel (config.py).}
+
+\bibentry{EBA (2020). \emph{Guidelines on Credit Risk Stress Testing.} GL/2020/06.}{European Banking Authority.}{Méthodologie de stress test crédit : scénarios macro, transmission aux paramètres PD/LGD/EAD.}{Architecture du reverse stress test (\texttt{layer3\_rst.py}) et scénarios prédéfinis (\texttt{config.py}).}
+
+\bibentry{EBA (2018). \emph{IFRS~9 Implementation by EU Institutions --- Monitoring Report.}}{European Banking Authority.}{Rapport de suivi de l'implémentation d'IFRS~9. Retour d'expérience sur les pratiques de staging et provisionnement.}{Validation des choix de seuils SICR et de la méthodologie multi-facteurs.}
+
+% ============================================================================
+\section{Guidelines BCE / ECB}
+% ============================================================================
+
+\bibentry{ECB (2019). \emph{Targeted Review of Internal Models (TRIM) --- Project Report.}}{European Central Bank.}{Revue ciblée des modèles internes des banques de la zone euro. Identification des faiblesses des modèles IRB.}{Justification de l'approche 3 familles de modèles pour la robustesse (model risk management).}
+
+\bibentry{ECB (2024). \emph{Guide on Climate-Related and Environmental Risks.}}{European Central Bank.}{Attentes prudentielles en matière de risques climatiques et environnementaux.}{Cadre pour le Green Asset Ratio (GAR) implémenté dans \texttt{comparator.py}.}
+
+\bibentry{ECB (2023). \emph{Statistical Data Warehouse.}}{European Central Bank. \url{https://sdw.ecb.europa.eu/}}{Source des données macroéconomiques zone euro : taux directeurs, inflation, chômage, HPI.}{Calibration des volatilités macro ($\sigma_\text{taux} = 0{,}8$ pp, $\sigma_\text{inflation} = 1{,}2$ pp) dans \texttt{config.py}.}
+
+\bibentry{ECB (2023). \emph{Supervisory Banking Statistics.}}{European Central Bank. \url{https://www.bankingsupervision.europa.eu/}}{Statistiques bancaires prudentielles : ratios CET1, NPL, couverture.}{Benchmarks pour les seuils de risk appetite dans \texttt{config.py}.}
+
+% ============================================================================
+\section{Cadre Risk Appetite \& Gouvernance}
+% ============================================================================
+
+\bibentry{FSB (2013). \emph{Principles for an Effective Risk Appetite Framework.}}{Financial Stability Board, novembre 2013.}{Principes pour un cadre d'appétit au risque : articulation stratégie/limites/monitoring.}{Architecture du système tricolore (vert/ambre/rouge) dans le Tab~1 (Synthèse CRO) avec symboles CVD.}
+
+\bibentrystar{Federal Reserve Board / OCC (2011). \emph{Supervisory Guidance on Model Risk Management.} SR~11-7.}{Board of Governors of the Federal Reserve System.}{Cadre de référence pour la gestion du risque de modèle : validation, backtesting, gouvernance. Les 3 lignes de défense.}{Justifie l'architecture 3 familles (LR\_WoE / XGBoost / TabNet), les métriques de performance (Tab~5), l'explicabilité SHAP (Tab~6) et le contrat de données Pandera.}
+
+% ============================================================================
+\section{Risque de Crédit --- Fondements Académiques}
+% ============================================================================
+
+\bibentrystar{Merton, R.C. (1974). On the Pricing of Corporate Debt: The Risk Structure of Interest Rates.}{\emph{The Journal of Finance}, 29(2), 449--470.}{Modèle structurel : la valeur des actifs suit un mouvement brownien géométrique ; le défaut survient lorsque $V_T < D$. Pricing de la dette risquée via Black-Scholes-Merton.}{Credit spread Merton : $s = -\ln(1 - \text{PD} \times \text{LGD})/T + \lambda_\text{liquidité}$ dans \texttt{ecl\_calculator.py}. Fondement du lien PD$\to$spread dans le calcul du NII (RAROC).}
+
+\bibentrystar{Vasicek, O.A. (2002). The Distribution of Loan Portfolio Value.}{\emph{Risk}, 15(12), 160--162.}{Modèle ASRF (Asymptotic Single Risk Factor) : distribution de perte du portefeuille en fonction d'un facteur systémique unique et de la corrélation $\rho$.}{Base de la formule IRB. Le facteur systémique macro pilote le stress PD dans \texttt{ecl\_calculator.py}. Corrélation intra-sectorielle $\rho$ dans \texttt{config.py}.}
+
+\bibentrystar{Gordy, M.B. (2003). A Risk-Factor Model Foundation for Ratings-Based Bank Capital Rules.}{\emph{Journal of Financial Intermediation}, 12(3), 199--232.}{Formalisation du lien entre le modèle Vasicek et les formules de capital réglementaire Bâle~II. Montre que sous certaines conditions (portefeuille granulaire, facteur unique), le capital VaR 99,9\% se calcule analytiquement.}{Pont théorique entre le modèle de portefeuille et les RWA. Justifie l'allocation proportionnelle (\texttt{layer2\_euler.py}).}
+
+\bibentry{Cox, D.R. (1972). Regression Models and Life-Tables.}{\emph{Journal of the Royal Statistical Society, Series B}, 34(2), 187--220.}{Modèle de Cox à risques proportionnels. Fondement des taux de hasard $h = -\ln(1 - \text{PD})$.}{PD lifetime via hazard rate : $\text{PD}_\text{lifetime} = 1 - \exp(-h \times T)$ dans \texttt{ecl\_calculator.py} (correction C1).}
+
+% ============================================================================
+\section{Credit Scoring \& Risque de Modèle}
+% ============================================================================
+
+\bibentry{Siddiqi, N. (2006). \emph{Credit Risk Scorecards: Developing and Implementing Intelligent Credit Scoring.}}{John Wiley \& Sons.}{Méthodologie complète WoE/IV : discrétisation, calcul des WoE, Information Value, construction de scorecard.}{Pipeline LR\_WoE dans \texttt{woe.py} : binning, PAV monotonicity, IV filtering, scorecard scaling.}
+
+\bibentry{Anderson, R. (2007). \emph{The Credit Scoring Toolkit.}}{Oxford University Press.}{Imputation WoE par proximité, minimum bin \%, seuils IV ($>0{,}02$), validation de scorecard.}{Minimum bin pct post-PAV dans \texttt{woe.py}. NaN WoE-proximity merge. Seuil $\text{IV}_\text{min} = 0{,}02$ dans \texttt{config.py}.}
+
+\bibentry{King, G. \& Zeng, L. (2001). Logistic Regression in Rare Events Data.}{\emph{Political Analysis}, 9(2), 137--163.}{Correction du biais d'intercept pour les événements rares : $\hat{\beta}_0 \leftarrow \hat{\beta}_0 + \ln\!\big(\frac{\pi_\text{réel}(1-0{,}5)}{0{,}5(1-\pi_\text{réel})}\big)$.}{Prior correction dans \texttt{pd\_model.py} après fit avec \texttt{class\_weight="balanced"}.}
+
+\bibentry{Hosmer, D.W., Lemeshow, S. \& Sturdivant, R.X. (2013). \emph{Applied Logistic Regression} (3\textsuperscript{e} éd.).}{John Wiley \& Sons.}{Référence pour la régression logistique : diagnostic, goodness-of-fit, calibration.}{Métriques de calibration dans le Tab~5 (Performance Modèles).}
+
+% ============================================================================
+\section{Machine Learning \& Deep Learning Tabulaire}
+% ============================================================================
+
+\bibentrystar{Ar\i{}k, S.Ö. \& Pfister, T. (2021). TabNet: Attentive Interpretable Tabular Learning.}{\emph{Proceedings of the AAAI Conference on Artificial Intelligence}, 35(8), 6679--6687. arXiv:1908.07442.}{Architecture deep learning pour données tabulaires avec mécanisme d'attention séquentiel. Sélection de features instance-wise. Interprétabilité native via masques d'attention.}{3\textsuperscript{e} famille de modèles PD dans \texttt{pd\_model.py}. Configuration : $n_d = n_a = 64$, $n_\text{steps} = 5$ ($\sim$120k paramètres). GPU RTX~5070~Ti. AUC~0,814 sur 1,5M lignes.}
+
+\bibentry{Chen, T. \& Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System.}{\emph{Proceedings of KDD}, 785--794.}{Gradient boosting optimisé : régularisation $L_1$/$L_2$, approximation histogramme, parallélisation.}{2\textsuperscript{e} famille de modèles PD. \texttt{device="cuda"} auto-détecté. TreeExplainer SHAP pour l'explicabilité.}
+
+\bibentry{Grinsztajn, L., Oyallon, E. \& Varoquaux, G. (2022). Why Do Tree-Based Models Still Outperform Deep Learning on Typical Tabular Data?}{\emph{Advances in NeurIPS}, vol.~35.}{Benchmark systématique : les arbres (XGBoost, Random Forest) dominent le deep learning sur données tabulaires typiques.}{Justifie le choix de 3 familles pour le model risk management. XGBoost $\approx$ TabNet $\gg$ LR sur les données crédit.}
+
+\bibentry{Borisov, V. et al. (2022). Deep Neural Networks and Tabular Data: A Survey.}{\emph{IEEE Trans.\ Neural Networks and Learning Systems}.}{Revue complète des architectures DNN pour données tabulaires : MLP, attention, hybrid.}{Contexte académique pour le choix de TabNet parmi les alternatives.}
+
+% ============================================================================
+\section{Explicabilité}
+% ============================================================================
+
+\bibentrystar{Lundberg, S.M. \& Lee, S-I. (2017). A Unified Approach to Interpreting Model Predictions.}{\emph{Advances in NeurIPS}, vol.~30.}{SHAP (SHapley Additive exPlanations) : cadre unifié d'explicabilité basé sur les valeurs de Shapley. Propriétés : efficience, symétrie, additivité.}{Tab~6 (Explicabilité) : LinearExplainer (LR), TreeExplainer (XGBoost), KernelExplainer (TabNet). Beeswarm plot global + waterfall individuel via \texttt{@st.fragment}.}
+
+\bibentry{Shapley, L.S. (1953). A Value for $n$-Person Games.}{\emph{Contributions to the Theory of Games}, 2(28), 307--317.}{Fondement axiomatique de la théorie des jeux coopératifs. Valeur de Shapley unique satisfaisant efficience, symétrie, linéarité, dummy.}{Base théorique de SHAP. Mentionné dans la documentation LaTeX pour la rigueur mathématique.}
+
+% ============================================================================
+\section{Private Equity --- Valorisation \& Données}
+% ============================================================================
+
+\bibentry{IPEV Board (2022). \emph{International Private Equity and Venture Capital Valuation Guidelines.}}{International Private Equity and Venture Capital Valuation Board.}{Méthodes de juste valeur : multiples, DCF, taux de capitalisation. Cadre pour la valorisation IFRS~13 niveau~3.}{Méthodologie NAV dans \texttt{pe\_calculator.py}. Seuils de classification (performing/watchlist/distressed).}
+
+\bibentry{Preqin (2023). \emph{Global Private Equity Report.}}{Preqin.}{Corrélation intra-fonds PE : $\rho \approx 0{,}3$--$0{,}5$. Seuils de détresse : NAV drawdown 10--30\%.}{Corrélation intra-secteur $\rho = 0{,}40$ dans \texttt{config.py}. Seuils de classification PE.}
+
+\bibentry{Cambridge Associates (2023). \emph{Private Equity Index and Benchmark Statistics.}}{Cambridge Associates.}{MOIC médian : 1,5--2,0$\times$ selon vintage. Taux de défaut PE : $\sim$5\% en base.}{Calibration MOIC et P(distress) dans \texttt{pe\_model.py} et \texttt{pe\_calculator.py}.}
+
+\bibentry{Moody's Investors Service (2023). \emph{Annual Default Study: Corporate Default and Recovery Rates, 1920--2022.}}{Moody's.}{LGD equity $\approx$ 60\% (recovery 40\%). Taux de défaut corporate par notation, secteur et cycle.}{Calibration \texttt{base\_default\_rate} et \texttt{lgd\_tcc} par secteur dans \texttt{config.py}.}
+
+\bibentry{Jefferies \& Lazard (2023). \emph{Global Secondary Market Review.}}{Jefferies / Lazard.}{Décote marché secondaire PE (DLOM) : 8--12\% fonds matures, 15--30\% fonds jeunes.}{Décote d'illiquidité dans la valorisation NAV (\texttt{pe\_calculator.py}).}
+
+\bibentry{AICPA (2013). \emph{Valuation of Privately-Held-Company Equity Securities --- Practice Aid.}}{American Institute of Certified Public Accountants.}{Seuils de classification PE : MOIC, probabilité de détresse, ratio de couverture.}{Catégories de risque PE (stacked bar CVD) dans le Tab~3.}
+
+\bibentry{Pratt, S.P. \& Grabowski, R.J. (2014). \emph{Cost of Capital: Applications and Examples} (5\textsuperscript{e} éd.).}{John Wiley \& Sons.}{Méthodes de décote d'illiquidité (DLOM), primes de risque actions non cotées.}{Cadre théorique pour les ajustements de valorisation PE.}
+
+% ============================================================================
+\section{Immobilier}
+% ============================================================================
+
+\bibentry{CBRE Research (2023). \emph{European Real Estate Operating Expenses Benchmark.}}{CBRE.}{Ratio OPEX/revenu brut : 12--18\%. NOI $\approx$ EBITDA $\times$ (1 $-$ 0,15).}{Calibration du secteur Immobilier dans \texttt{config.py} (SectorConfig).}
+
+\bibentry{JLL (2023). \emph{European Office Market Benchmarks.}}{Jones Lang LaSalle.}{Taux de capitalisation et benchmarks immobilier commercial européen.}{Sensibilité HPI du secteur Immobilier dans les scénarios macro.}
+
+% ============================================================================
+\section{Relations Macroéconomiques}
+% ============================================================================
+
+\bibentry{Okun, A.M. (1962). Potential GNP: Its Measurement and Significance.}{\emph{Proceedings of the ASA}, 98--104.}{Loi d'Okun : relation chômage--PIB. Coefficient empirique $\rho \approx -0{,}70$.}{Corrélation PIB--chômage dans la matrice experte \texttt{\_EXPERT\_CORR} (\texttt{config.py}).}
+
+\bibentry{Phillips, A.W. (1958). The Relation Between Unemployment and the Rate of Change of Money Wage Rates in the UK.}{\emph{Economica}, 25(100), 283--299.}{Courbe de Phillips : relation inflation--chômage ($\rho \approx -0{,}30$).}{Corrélation inflation--chômage dans la matrice de covariance macro.}
+
+\bibentry{Taylor, J.B. (1993). Discretion Versus Policy Rules in Practice.}{\emph{Carnegie-Rochester Conference Series on Public Policy}, 39, 195--214.}{Règle de Taylor : $i_t = r^* + \pi_t + 0{,}5(\pi_t - \pi^*) + 0{,}5(y_t - y^*)$.}{Corrélation taux--inflation ($\rho = 0{,}50$) et équilibre structurel $r^* = 2{,}5\%$ dans \texttt{config.py}.}
+
+\bibentry{Laubach, T. \& Williams, J.C. (2003). Measuring the Natural Rate of Interest.}{\emph{Review of Economics and Statistics}, 85(4), 1063--1070.}{Estimation du taux d'intérêt naturel $r^* \approx 2{,}5\%$ pour la zone euro.}{\texttt{MACRO\_STRUCTURAL\_EQUILIBRIUM} dans \texttt{config.py} : $r^* = 2{,}5\%$.}
+
+\bibentry{FMI (2023). \emph{World Economic Outlook.}}{Fonds monétaire international.}{Prévisions macroéconomiques mondiales. Source des corrélations inter-variables.}{Calibration de la matrice de corrélation experte 5$\times$5 dans \texttt{config.py}.}
+
+% ============================================================================
+\section{Processus Stochastiques}
+% ============================================================================
+
+\bibentry{Uhlenbeck, G.E. \& Ornstein, L.S. (1930). On the Theory of the Brownian Motion.}{\emph{Physical Review}, 36(5), 823--841.}{Processus d'Ornstein-Uhlenbeck : $dX_t = \theta(\mu - X_t)\,dt + \sigma\,dW_t$. Retour à la moyenne avec vitesse $\theta$.}{Trajectoires macroéconomiques prospectives dans \texttt{layer5\_prospective.py}. Paramètres $\theta$ et $\mu$ dans \texttt{MACRO\_MEAN\_REVERSION}.}
+
+\bibentry{Mahalanobis, P.C. (1936). On the Generalised Distance in Statistics.}{\emph{Proceedings of the National Institute of Sciences of India}, 2(1), 49--55.}{Distance de Mahalanobis : $d = \sqrt{\mathbf{x}^\top \boldsymbol{\Sigma}^{-1} \mathbf{x}}$. Mesure de distance tenant compte de la covariance.}{Vraisemblance des scénarios de reverse stress test dans \texttt{layer3\_rst.py}.}
+
+% ============================================================================
+\section{Statistiques \& Estimation}
+% ============================================================================
+
+\bibentry{Marquardt, D.W. (1970). Generalized Inverses, Ridge Regression, Biased Linear Estimation.}{\emph{Technometrics}, 12(3), 591--612.}{Variance Inflation Factor (VIF) : seuil VIF $< 5$ pour détecter la multicolinéarité.}{Filtrage VIF itératif dans \texttt{pd\_model.py} avant la contrainte sur les bêtas.}
+
+\bibentry{Herfindahl, O.C. (1950). Concentration in the Steel Industry.}{PhD thesis, Columbia University.}{Indice HHI : $\text{HHI} = \sum_i s_i^2 \times 10\,000$ pour mesurer la concentration.}{HHI sectoriel (\texttt{hhi\_crosscell}) et HHI name level (\texttt{hhi\_name\_credit}) dans \texttt{comparator.py}.}
+
+\bibentry{Ledoit, O. \& Wolf, M. (2004). A Well-Conditioned Estimator for Large-Dimensional Covariance Matrices.}{\emph{Journal of Multivariate Analysis}, 88(2), 365--411.}{Shrinkage de la matrice de covariance vers une cible structurée. Régularisation $\alpha \cdot S + (1-\alpha) \cdot F$.}{Initialement utilisé pour la covariance macro. Remplacé par la matrice experte (circularité sur données synthétiques) + 10\% diagonal shrinkage.}
+
+% ============================================================================
+\section{Allocation de Capital \& Gestion Quantitative des Risques}
+% ============================================================================
+
+\bibentry{Tasche, D. (2008). Capital Allocation to Business Units and Sub-Portfolios: The Euler Principle.}{\emph{Pillar~II in the New Basel Accord: The Challenge of Economic Capital}, 423--453.}{Allocation proportionnelle (principe d'Euler) : $K_i = \frac{\partial \rho(X)}{\partial w_i} \times w_i$. Allocation cohérente et additive.}{Allocation proportionnelle du capital dans \texttt{layer2\_euler.py} avec deltas adaptatifs.}
+
+\bibentry{McNeil, A.J., Frey, R. \& Embrechts, P. (2015). \emph{Quantitative Risk Management} (2\textsuperscript{e} éd.).}{Princeton University Press.}{Référence générale : mesures de risque cohérentes (VaR, ES), copules, modèles de portefeuille crédit, dépendances extrêmes.}{Cadre théorique pour l'architecture globale du cockpit de risque.}
+
+% ============================================================================
+\section{ESG \& Finance Durable}
+% ============================================================================
+
+\bibentry{Parlement européen et Conseil (2020). \emph{Règlement (UE) 2020/852 --- Taxonomie.}}{Journal officiel de l'Union européenne.}{Classification des activités économiques durables. Base réglementaire du Green Asset Ratio (GAR).}{\texttt{green\_share} par SectorConfig dans \texttt{config.py}. \texttt{compute\_green\_asset\_ratio()} dans \texttt{comparator.py}.}
+
+% ============================================================================
+\section{Données \& Sources Institutionnelles}
+% ============================================================================
+
+\bibentry{Eurostat (2023). \emph{Employment and Unemployment Statistics.}}{\url{https://ec.europa.eu/eurostat}}{Séries temporelles emploi/chômage zone euro. Volatilités historiques : $\sigma_\text{chômage} = 1{,}5$ pp, $\sigma_\text{PIB} = 1{,}8$ pp.}{Calibration des volatilités dans \texttt{\_MACRO\_VOLATILITIES} (\texttt{config.py}).}
+
+\bibentry{OCDE (2023). \emph{Economic Outlook --- Long-Term Consensus Forecasts.}}{\url{https://www.oecd.org/economic-outlook/}}{Prévisions macroéconomiques de long terme. Équilibres structurels pour la zone euro.}{Calibration de \texttt{MACRO\_STRUCTURAL\_EQUILIBRIUM} (NAIRU 6,5\%, $r^*$ 2,5\%, BCE 2,0\%).}
+
+% ============================================================================
+\section{Outils Logiciels}
+% ============================================================================
+
+\bibentry{Streamlit (2024). \emph{The Fastest Way to Build Data Apps.}}{\url{https://streamlit.io}}{Framework Python open-source pour les applications de données interactives.}{Dashboard 7 onglets dans \texttt{app.py}. Caching (\texttt{@st.cache\_data}), fragments (\texttt{@st.fragment}).}
+
+\bibentry{Plotly Technologies (2024). \emph{Modern Analytic Apps for the Enterprise.}}{\url{https://plotly.com}}{Bibliothèque de visualisation interactive : charts, heatmaps, waterfall, Sankey.}{Tous les graphiques du dashboard dans \texttt{charts.py} : CVD-safe, WCAG AAA.}
+
+\bibentry{Pedregosa, F. et al. (2011). Scikit-learn: Machine Learning in Python.}{\url{https://scikit-learn.org}}{Framework ML : LogisticRegression, IsotonicRegression, métriques (AUC, Brier), VIF.}{Pipeline LR\_WoE, PAV monotonicity, métriques de performance dans \texttt{pd\_model.py}.}
+
+\bibentry{Paszke, A. et al. (2019). PyTorch: An Imperative Style, High-Performance Deep Learning Library.}{\url{https://pytorch.org}}{Framework deep learning. Backend CUDA pour l'entraînement GPU.}{Backend de TabNet (pytorch-tabnet). GPU RTX~5070~Ti Blackwell (sm\_120, CUDA~12.8).}
+
+\bibentry{Lundberg, S.M. (2024). \emph{SHAP Library.}}{\url{https://github.com/shap/shap}}{Implémentation des explainers SHAP : Linear, Tree, Kernel.}{3 explainers dans \texttt{app.py} : LinearExplainer (LR), TreeExplainer (XGB), KernelExplainer (TabNet).}
+
+\bibentry{Bantilan, N. (2024). Pandera: Statistical Data Validation for Pandas.}{\url{https://pandera.readthedocs.io}}{Schémas déclaratifs pour la validation des DataFrames.}{4 schémas Pandera dans \texttt{schemas.py} (contrats de données).}
+
+\bibentry{Ramírez, S. (2024). FastAPI --- Modern, Fast Web Framework for Building APIs.}{\url{https://fastapi.tiangolo.com}}{Framework REST async avec validation Pydantic automatique.}{API REST dans \texttt{api.py} : \texttt{/health}, \texttt{/models}, \texttt{/compute}, \texttt{/stress-test}.}
+
+% ============================================================================
+\vfill
+\begin{center}
+\rule{0.4\textwidth}{0.4pt}\\[4pt]
+{\small\color{steelblue} 47 références $\bullet$ 12 catégories $\bullet$ 10 références fondamentales identifiées}
+\end{center}
+
+\end{document}

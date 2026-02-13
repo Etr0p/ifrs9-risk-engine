@@ -13,6 +13,7 @@ import streamlit as st
 from typing import Any, Dict, List, Optional
 
 from ifrs9_cockpit.analytics.virtual_cro import CROAlert
+from ifrs9_cockpit.config import DASHBOARD_CONFIG as _CFG
 from ifrs9_cockpit.utils.helpers import format_euro, format_pct
 
 
@@ -199,30 +200,30 @@ def render_smart_insight_box(briefing: Dict[str, Any]) -> None:
 
     # Header icon & color
     color_map = {
-        "rouge": ("#EF4444", "\U0001f6a8"),
-        "orange": ("#F59E0B", "\u26a0\ufe0f"),
-        "vert": ("#06D6A0", "\u2705"),
+        "rouge": (_CFG.color_danger, "\U0001f6a8"),
+        "orange": (_CFG.color_warning, "\u26a0\ufe0f"),
+        "vert": (_CFG.color_success, "\u2705"),
     }
     accent_color, header_icon = color_map.get(
-        risk_color, ("#94A3B8", "\u2753")
+        risk_color, (_CFG.theme_text_muted, "\u2753")
     )
 
     border_color = accent_color
 
     # Severity color mapping
     sev_colors = {
-        "CRITICAL": "#EF4444",
-        "ALERT": "#F59E0B",
-        "WARNING": "#F97316",
-        "INFO": "#06D6A0",
+        "CRITICAL": _CFG.color_danger,
+        "ALERT": _CFG.color_warning,
+        "WARNING": "#FB923C",
+        "INFO": _CFG.color_success,
     }
 
     # Priority color mapping
     prio_colors = {
-        "HAUTE": "#EF4444",
-        "MOYENNE": "#F59E0B",
-        "STANDARD": "#06D6A0",
-        "INFO": "#06D6A0",
+        "HAUTE": _CFG.color_danger,
+        "MOYENNE": _CFG.color_warning,
+        "STANDARD": _CFG.color_success,
+        "INFO": _CFG.color_success,
     }
 
     # Findings HTML (prose paragraphs with colored severity prefix)
@@ -231,7 +232,7 @@ def render_smart_insight_box(briefing: Dict[str, Any]) -> None:
         findings_lines = []
         for f in findings:
             sev = f["severity"]
-            color = sev_colors.get(sev, "#94A3B8")
+            color = sev_colors.get(sev, _CFG.theme_text_muted)
             findings_lines.append(
                 f'<div class="cro-finding">'
                 f'<span style="color:{color};font-weight:700;">'
@@ -248,7 +249,7 @@ def render_smart_insight_box(briefing: Dict[str, Any]) -> None:
         recs_lines = []
         for r in recommendations:
             prio = r["priority"]
-            color = prio_colors.get(prio, "#94A3B8")
+            color = prio_colors.get(prio, _CFG.theme_text_muted)
             recs_lines.append(
                 f'<div class="cro-recommendation">'
                 f'<span style="color:{color};font-weight:700;">'
@@ -273,7 +274,7 @@ def render_smart_insight_box(briefing: Dict[str, Any]) -> None:
         f'<span style="font-size:1.2rem;">{header_icon}</span>'
         f'<h3>Analyse CRO &mdash; Niveau de risque '
         f'<span style="color:{accent_color};">{risk_level}</span> '
-        f'<span style="color:#94A3B8;font-size:0.8rem;font-weight:400;">'
+        f'<span style="color:{_CFG.theme_text_muted};font-size:0.8rem;font-weight:400;">'
         f'(score {risk_score}/10)</span></h3>'
         f'</div>'
         f'<div class="insight-box-content">{body}</div>'
@@ -288,7 +289,7 @@ def render_section_title(title: str) -> None:
     Args:
         title: Texte du titre.
     """
-    st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<h2 class="section-title">{title}</h2>', unsafe_allow_html=True)
 
 
 def render_kpi_row(cards: List[Dict[str, str]]) -> None:
@@ -300,8 +301,9 @@ def render_kpi_row(cards: List[Dict[str, str]]) -> None:
     """
     card_html = []
     for c in cards:
+        _aria = f'{c["label"]}: {c["value"]}, {c.get("sub_text", "")}'
         card_html.append(
-            f'<div class="kpi-card">'
+            f'<div class="kpi-card" role="status" aria-label="{_aria}">'
             f'<div class="kpi-label">{c["label"]}</div>'
             f'<div class="kpi-value">{c["value"]}</div>'
             f'<div class="kpi-sub {c.get("sub_class", "neutral")}">{c.get("sub_text", "")}</div>'
@@ -365,19 +367,19 @@ def render_ai_narrative_box(narrative: str, recommendations: list) -> None:
         rec = recommendations[0]
         _status = getattr(rec, "risk_appetite_status", "vert")
         if _status == "rouge":
-            accent = "#EF4444"
+            accent = _CFG.color_danger
             icon = "\U0001f6a8"
             level = "ELEVE"
         elif _status == "ambre":
-            accent = "#F59E0B"
+            accent = _CFG.color_warning
             icon = "\u26a0\ufe0f"
             level = "MODERE"
         else:
-            accent = "#10B981"
+            accent = _CFG.color_success
             icon = "\u2705"
-            level = "MAITRISE"
+            level = "BON"
     else:
-        accent = "#94A3B8"
+        accent = _CFG.theme_text_muted
         icon = "\u2139\ufe0f"
         level = "N/A"
 
@@ -399,7 +401,7 @@ def render_ai_narrative_box(narrative: str, recommendations: list) -> None:
                 for alt in r.alternatives:
                     recs_lines.append(
                         f'<div class="cro-finding">'
-                        f'<span style="color:#94A3B8;font-weight:600;">'
+                        f'<span style="color:{_CFG.theme_text_muted};font-weight:600;">'
                         f'ALT</span> {alt}</div>'
                     )
         recs_html = (

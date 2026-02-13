@@ -9,10 +9,17 @@ avec 3 canaux de stress distincts :
 Formule NAV par position :
     NAV = Metric_stresse x Multiple_compresse x (1 - Leverage_stresse)
 
-Methodes IPEV par secteur (config-driven) :
-    - Technologie : EV/Revenue (metric = revenue)
+Methodes IPEV par secteur (config-driven, IPEV Valuation Guidelines 2025) :
+    - Technologie : EV/Revenue (metric = revenue, standard SaaS/Tech)
     - Industrie, Sante, Services : EV/EBITDA (metric = ebitda)
-    - Immobilier : Cap rate/NOI (metric = ebitda, proxy NOI)
+    - Immobilier : Cap rate/NOI (metric = ebitda × (1 - NOI_OPEX_RATIO),
+      conversion EBITDA→NOI via ratio charges d'exploitation)
+
+Bruit de dispersion :
+    Modele a facteur sectoriel pour capturer la correlation intra-sectorielle.
+    ε_i = 1 + sqrt(ρ)·σ·Z_secteur + sqrt(1-ρ)·σ·Z_idio
+    Positions du meme secteur et vintage partagent un facteur commun.
+    Ref: Preqin (2023) correlation intra-fonds.
 """
 
 from __future__ import annotations
@@ -27,6 +34,8 @@ from ifrs9_cockpit.config import (
     SCENARIO_BASE,
     SECTORS,
     SectorConfig,
+    NOI_OPEX_RATIO,
+    PE_NOISE_INTRA_SECTOR_CORR,
 )
 
 
@@ -58,6 +67,7 @@ class PEModel:
         interest_rate_override: Optional[float] = None,
         hpi_override: Optional[float] = None,
         inflation_override: Optional[float] = None,
+        unemployment_crisis: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Calcule la NAV pour chaque position PE.
 
@@ -71,6 +81,11 @@ class PEModel:
             interest_rate_override: Taux directeur BCE (%).
             hpi_override: Variation prix immobiliers (%).
             inflation_override: Inflation IPC (%).
+            unemployment_crisis: Si True, le chomage est de nature "crise
+                economique" et penalise tous les secteurs PE y compris ceux
+                a sensibilite negative (ex. Technologie). Si False (defaut),
+                le chomage est de nature "rupture techno" et les sensibilites
+                negatives beneficient au secteur.
 
         Returns:
             Tuple (nav_array, exit_multiples_array) en M EUR.
@@ -93,7 +108,9 @@ class PEModel:
 
             # Canal 1 : Metrique IPEV (revenue ou ebitda)
             metric = self._get_valuation_metric(df_pe, mask, sector)
-            metric_stressed = self._stress_metric(metric, sector, deltas)
+            metric_stressed = self._stress_metric(
+                metric, sector, deltas, unemployment_crisis,
+            )
 
             # Canal 2 : Multiple de sortie compresse
             compressed_mult = self._compress_exit_multiple(
@@ -108,11 +125,32 @@ class PEModel:
             # NAV = Metric x Multiple x (1 - Leverage)
             nav[mask] = metric_stressed * compressed_mult * (1 - leverage_stressed)
 
-        # Dispersion realiste (+/- 3%)
-        noise = self.rng.normal(1.0, 0.03, n)
+        # Dispersion realiste (+/- 3%) avec correlation intra-sectorielle.
+        # Modele a facteur : ε_i = 1 + sqrt(ρ)·σ·Z_secteur + sqrt(1-ρ)·σ·Z_idio
+        # Preserves la variance marginale σ² = 0.03² tout en creant une
+        # correlation ρ entre positions du meme secteur (Preqin 2023).
+        # RNG reinitialise (seed+7) pour determinisme cross-scenario.
+        noise_rng = np.random.default_rng(self.seed + 7)
+        sigma = 0.03
+        rho = PE_NOISE_INTRA_SECTOR_CORR
+        sqrt_rho = np.sqrt(rho)
+        sqrt_1mrho = np.sqrt(1 - rho)
+        # Facteurs sectoriels (1 par secteur, meme pour toutes positions du secteur)
+        sector_factors = {s.name: noise_rng.normal(0, 1) for s in SECTORS}
+        # Facteurs idiosyncratiques (1 par position)
+        idio = noise_rng.normal(0, 1, n)
+        noise = np.ones(n)
+        for sector in SECTORS:
+            mask = df_pe["sector"].values == sector.name
+            if mask.sum() == 0:
+                continue
+            z_sector = sector_factors[sector.name]
+            noise[mask] = 1 + sigma * (sqrt_rho * z_sector + sqrt_1mrho * idio[mask])
         nav *= noise
 
-        return np.maximum(nav, 0), exit_multiples
+        # Floor a 1 EUR (1e-6 M EUR) : une position PE a toujours
+        # une valeur residuelle > 0 (option sur actif net)
+        return np.maximum(nav, 1e-6), exit_multiples
 
     def calculate_nav_scenarios(
         self,
@@ -225,18 +263,24 @@ class PEModel:
             sector: Configuration du secteur.
 
         Returns:
-            Array de metriques (revenue ou ebitda en M EUR).
+            Array de metriques (revenue, ebitda ou NOI en M EUR).
         """
         if sector.valuation_method == "EV/Revenue":
             return df_pe.loc[mask, "revenue"].values.astype(float)
-        # EV/EBITDA et Cap_rate/NOI utilisent EBITDA (proxy NOI pour immobilier)
-        return df_pe.loc[mask, "ebitda"].values.astype(float)
+        ebitda = df_pe.loc[mask, "ebitda"].values.astype(float)
+        if sector.valuation_method == "Cap_rate/NOI":
+            # Conversion EBITDA → NOI : deduit les charges d'exploitation (OPEX)
+            # que l'EBITDA ne capture pas (frais de gestion, maintenance, assurance).
+            # Source : CBRE/JLL benchmark, OPEX commercial RE = 12-18%.
+            return ebitda * (1 - NOI_OPEX_RATIO)
+        return ebitda
 
     def _stress_metric(
         self,
         metric: np.ndarray,
         sector: SectorConfig,
         deltas: Dict[str, float],
+        unemployment_crisis: bool = False,
     ) -> np.ndarray:
         """Stresse la metrique IPEV (canal EBITDA).
 
@@ -248,17 +292,26 @@ class PEModel:
             metric: Metrique de base (M EUR).
             sector: Configuration du secteur.
             deltas: Deltas macro normalises.
+            unemployment_crisis: Si True, utilise abs(sensitivity) pour
+                chomage (crise eco = toujours adverse).
 
         Returns:
             Metrique stressee.
         """
+        unemp_sens = (
+            abs(sector.unemployment_sensitivity_pe)
+            if unemployment_crisis
+            else sector.unemployment_sensitivity_pe
+        )
         stress = (
             deltas["gdp"] * sector.gdp_sensitivity_pe
-            + deltas["unemployment"] * sector.unemployment_sensitivity_pe
+            + deltas["unemployment"] * unemp_sens
             + deltas["inflation"] * sector.inflation_sensitivity_pe
         )
-        # exp(-stress × 3.0) : toujours > 0 par construction (pas de floor artificiel)
-        factor = np.exp(-stress * 3.0)
+        # exp(-stress × 1.5) : toujours > 0 par construction (pas de floor artificiel)
+        # Scale 1.5 calibre pour qu'un choc PIB de -3pp reduise l'EBITDA de ~5-8%
+        # (benchmark Preqin 2023, mouvements trimestriels medians).
+        factor = np.exp(-stress * 1.5)
         return metric * factor
 
     def _compress_exit_multiple(
@@ -285,8 +338,10 @@ class PEModel:
             + deltas["gdp"] * sector.gdp_sensitivity_pe
             + deltas["hpi"] * sector.hpi_sensitivity_pe
         )
-        # exp(-compression × 5.0) : toujours > 0 par construction (pas de floor artificiel)
-        factor = float(np.exp(-compression * 5.0))
+        # exp(-compression × 2.0) : toujours > 0 par construction (pas de floor artificiel)
+        # Scale 2.0 calibre pour qu'un choc taux de +100bp comprime les multiples
+        # de ~3-5% (benchmark EBA 2023, sensibilite PE mid-market).
+        factor = float(np.exp(-compression * 2.0))
         compressed = base_multiple * factor
 
         # Borner dans la fourchette IPEV du secteur
@@ -313,7 +368,8 @@ class PEModel:
         """
         ir_impact = (
             deltas["interest_rate"] * sector.interest_rate_sensitivity_pe
-            * 2.0  # Echelle leverage : 2× la sensibilite taux
+            * 0.5  # Echelle leverage : 0.5× la sensibilite taux
+            # +100bp → ~+0.5-1pp leverage (coherent avec LBO mid-market)
         )
         leverage_stressed = leverage + ir_impact
         return np.clip(leverage_stressed, 0, 0.95)

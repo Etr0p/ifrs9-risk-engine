@@ -19,16 +19,21 @@ from typing import Dict, Optional, Tuple
 from ifrs9_cockpit.config import (
     BASEL_CONFIG,
     IFRS9_CONFIG,
+    LGD_CONFIG,
     SECTORS,
     SCENARIOS,
     SCENARIO_BASE,
     REQUIRED_CREDIT_RESULT_COLS,
     REQUIRED_PE_RESULT_COLS,
     RISK_APPETITE_CONFIG,
+    _EXPERT_CORR,
+    SECTOR_NAMES,
 )
 
-# Capital de base (fonds propres) pour les ratios prudentiels
-_CAPITAL_BASE: float = BASEL_CONFIG.rwa_budget * BASEL_CONFIG.cet1_target
+# Capital de base prudentiel : derive dynamiquement du RWA reel du portefeuille.
+# Ancien calcul statique (rwa_budget * cet1_target = 1.3Md) etait incoherent
+# car le RWA reel du portefeuille est ~20Md (10K x 2M x RW 1.0).
+# Maintenant : capital = RWA_reel_credit × cet1_target, calcule dans chaque methode.
 
 
 def compute_crr3_rw(result_pe: pd.DataFrame) -> np.ndarray:
@@ -84,8 +89,9 @@ def compute_crr3_rw(result_pe: pd.DataFrame) -> np.ndarray:
     leverage = result_pe.get("leverage", pd.Series(np.full(n, 0.5))).values.astype(float)
     leverage_risk = np.clip(leverage / 0.95, 0, 1)
 
-    # Environnement macro (reutilise P(distress) comme proxy)
-    macro_env = portfolio_quality.copy()
+    # Environnement macro : combine leverage et financial_perf comme proxy
+    # distinct de portfolio_quality pour eviter le double-comptage de P(distress)
+    macro_env = np.clip(0.5 * leverage_risk + 0.5 * financial_perf, 0, 1)
 
     score = (
         0.30 * financial_perf
@@ -145,7 +151,7 @@ class PortfolioComparator:
             - npl_ratio : EAD Stage 3 / EAD total
             - cost_of_risk_bps : ECL / (EAD x T_moyen) x 10 000 (M8 annualise)
             - coverage_ratio : ECL Stage 3 / EAD Stage 3 (M10 unifie)
-            - texas_ratio : EAD Stage 3 / (ECL Stage 3 + capital_share) (C3 corrige)
+            - texas_ratio_synth : EAD Stage 3 / (ECL Stage 3 + capital_share) (C3, synth.)
             - pd_mean : PD 12m moyenne
             - stage2_pct : Part Stage 2 en EAD
             - rwa_density : RWA / EAD
@@ -154,6 +160,7 @@ class PortfolioComparator:
             DataFrame avec metriques par secteur + ligne Total.
         """
         df = self.result_credit
+        coc = BASEL_CONFIG.cet1_target
         records = []
 
         for sector in SECTORS:
@@ -171,11 +178,17 @@ class PortfolioComparator:
             ead_s2 = df_sec.loc[df_sec["stage"] == 2, "ead"].sum()
             ecl_s3 = df_sec.loc[df_sec["stage"] == 3, "ecl_weighted"].sum()
 
-            # Part du capital proportionnelle au secteur
-            capital_share = _CAPITAL_BASE * (ead_total / max(df["ead"].sum(), 1))
+            # Part du capital proportionnelle au secteur (base = RWA reel)
+            portfolio_capital = df["rwa_credit"].sum() * coc
+            capital_share = portfolio_capital * (ead_total / max(df["ead"].sum(), 1))
 
-            # M8 : Cost of Risk annualise (divise par maturite moyenne residuelle)
-            t_moyen = IFRS9_CONFIG.lifetime_horizon_years
+            # M8 : Cost of Risk annualise — horizon EAD-pondere par stage
+            # Stage 1 = 1 an, Stage 2/3 = lifetime_horizon_years
+            ead_s1 = df_sec.loc[df_sec["stage"] == 1, "ead"].sum()
+            t_moyen = (
+                (ead_s1 * 1.0 + (ead_total - ead_s1) * IFRS9_CONFIG.lifetime_horizon_years)
+                / max(ead_total, 1)
+            )
 
             records.append({
                 "sector": sector.name,
@@ -189,8 +202,9 @@ class PortfolioComparator:
                 ),
                 # M10 : Coverage = provisions Stage 3 / exposition Stage 3
                 "coverage_ratio": round(ecl_s3 / max(ead_s3, 1), 4) if ead_s3 > 0 else 0.0,
-                # C3 : Texas = EAD_S3 / (ECL_S3 + capital_share) — provisions NPL uniquement
-                "texas_ratio": round(ead_s3 / max(ecl_s3 + capital_share, 1), 4),
+                # C3 : Texas Synthetique = EAD_S3 / (ECL_S3 + capital reglementaire)
+                # Denominateur non-standard : capital alloue (RWA × CET1), pas fonds propres tangibles.
+                "texas_ratio_synth": round(ead_s3 / max(ecl_s3 + capital_share, 1), 4),
                 "pd_mean": round(df_sec["pd_12m"].mean(), 4),
                 "stage2_pct": round(ead_s2 / max(ead_total, 1), 4),
                 "rwa_density": round(rwa_total / max(ead_total, 1), 4),
@@ -204,8 +218,12 @@ class PortfolioComparator:
         rwa_all = df["rwa_credit"].sum()
         ead_s3_all = df.loc[df["stage"] == 3, "ead"].sum()
         ead_s2_all = df.loc[df["stage"] == 2, "ead"].sum()
+        ead_s1_all = df.loc[df["stage"] == 1, "ead"].sum()
         ecl_s3_all = df.loc[df["stage"] == 3, "ecl_weighted"].sum()
-        t_moyen_all = IFRS9_CONFIG.lifetime_horizon_years
+        t_moyen_all = (
+            (ead_s1_all * 1.0 + (ead_all - ead_s1_all) * IFRS9_CONFIG.lifetime_horizon_years)
+            / max(ead_all, 1)
+        )
 
         total_row = pd.DataFrame([{
             "sector": "Total",
@@ -219,8 +237,8 @@ class PortfolioComparator:
             ),
             # M10 : Coverage = provisions Stage 3 / exposition Stage 3
             "coverage_ratio": round(ecl_s3_all / max(ead_s3_all, 1), 4) if ead_s3_all > 0 else 0.0,
-            # C3 : Texas = EAD_S3 / (ECL_S3 + capital) — provisions NPL uniquement
-            "texas_ratio": round(ead_s3_all / max(ecl_s3_all + _CAPITAL_BASE, 1), 4),
+            # C3 : Texas Synthetique = EAD_S3 / (ECL_S3 + capital reglementaire)
+            "texas_ratio_synth": round(ead_s3_all / max(ecl_s3_all + rwa_all * coc, 1), 4),
             "pd_mean": round(df["pd_12m"].mean(), 4),
             "stage2_pct": round(ead_s2_all / max(ead_all, 1), 4),
             "rwa_density": round(rwa_all / max(ead_all, 1), 4),
@@ -298,7 +316,86 @@ class PortfolioComparator:
             "hhi_credit": hhi_credit,
             "hhi_pe": hhi_pe,
             "hhi_crosscell": hhi_crosscell,
+            "hhi_name_credit": self._compute_hhi_name_level("credit"),
+            "hhi_name_pe": self._compute_hhi_name_level("pe"),
             "shares": shares_df,
+        }
+
+    def _compute_hhi_name_level(self, canal: str) -> float:
+        """Calcule le HHI par contrepartie (Name Concentration, ICAAP Pilier 2).
+
+        HHI_name = sum((EAD_i / EAD_total)^2) * 10 000
+        Un HHI_name > 50 (echelle 10k) signale une concentration idiosyncratique.
+
+        Args:
+            canal: "credit" ou "pe".
+
+        Returns:
+            HHI name level en echelle 10 000.
+        """
+        if canal == "credit":
+            df = self.result_credit
+            exposure_col = "ead"
+        else:
+            df = self.result_pe
+            exposure_col = "nav"
+
+        exposures = df.groupby("enterprise_id")[exposure_col].sum().values
+        total = exposures.sum()
+        if total <= 0:
+            return 0.0
+        shares = exposures / total
+        return float(np.sum(shares ** 2) * 10_000)
+
+    # ──────────────────────────────────────────────
+    # GREEN ASSET RATIO (ESG placeholder)
+    # ──────────────────────────────────────────────
+
+    def compute_green_asset_ratio(self) -> Dict[str, object]:
+        """Calcule le Green Asset Ratio declaratif par secteur et aggregate.
+
+        GAR = sum(EAD_i * green_share_i) / sum(EAD_i) pour le credit.
+        Pour le PE : sum(NAV_i * green_share_i) / sum(NAV_i).
+
+        Les green_share par secteur sont declaratifs (SectorConfig.green_share),
+        non audites. Placeholder pour conformite reglementaire BCE 2024.
+
+        Returns:
+            Dict avec gar_credit, gar_pe, gar_total, details DataFrame.
+        """
+        sector_map = {s.name: s.green_share for s in SECTORS}
+
+        # Credit
+        df_c = self.result_credit.copy()
+        df_c["green_share"] = df_c["sector"].map(sector_map).fillna(0.0)
+        ead_total = df_c["ead"].sum()
+        gar_credit = float((df_c["ead"] * df_c["green_share"]).sum() / max(ead_total, 1))
+
+        # PE
+        df_p = self.result_pe.copy()
+        df_p["green_share"] = df_p["sector"].map(sector_map).fillna(0.0)
+        nav_total = df_p["nav"].sum()
+        gar_pe = float((df_p["nav"] * df_p["green_share"]).sum() / max(nav_total, 1))
+
+        # Total pondere
+        total_exposure = ead_total + nav_total
+        gar_total = (gar_credit * ead_total + gar_pe * nav_total) / max(total_exposure, 1)
+
+        # Detail par secteur
+        details = []
+        for s in SECTORS:
+            details.append({
+                "sector": s.name,
+                "green_share": s.green_share,
+                "ead_sector": df_c.loc[df_c["sector"] == s.name, "ead"].sum(),
+                "nav_sector": df_p.loc[df_p["sector"] == s.name, "nav"].sum(),
+            })
+
+        return {
+            "gar_credit": round(gar_credit, 4),
+            "gar_pe": round(gar_pe, 4),
+            "gar_total": round(gar_total, 4),
+            "details": pd.DataFrame(details),
         }
 
     # ──────────────────────────────────────────────
@@ -345,20 +442,28 @@ class PortfolioComparator:
 
             if len(df_sec_c) > 0:
                 ead = df_sec_c["ead"].sum()
-                ecl = df_sec_c["ecl_weighted"].sum()
                 rwa = df_sec_c["rwa_credit"].sum()
 
                 # H5 : RAROC complet avec CIR et impots
-                # Credit spread Merton : -ln(1 - PD*LGD) + prime de liquidite
+                # NII contractuel : spread fixe a l'origination (ne bouge pas avec le stress).
+                # La banque a facture un spread base sur le risque initial du secteur.
+                # En stress, seul l'EL (PD courante × LGD) change → RAROC bouge.
                 pd_arr = df_sec_c["pd_12m"].values.astype(float)
                 lgd_arr = df_sec_c["lgd"].values.astype(float)
                 ead_arr = df_sec_c["ead"].values.astype(float)
                 liq_premium = BASEL_CONFIG.liquidity_premium_bps / 10_000
-                cs_arr = -np.log(np.maximum(1 - pd_arr * lgd_arr, 1e-10)) / 1.0 + liq_premium
-                cs_arr = np.clip(cs_arr, 0.0050, 0.2000)
-                nii = float(np.sum(ead_arr * cs_arr))
+                comm_margin = BASEL_CONFIG.commercial_margin_bps / 10_000
+                # Spread Merton a l'origination (PD_base × LGD_TTC du secteur)
+                pd_base = sector.base_default_rate
+                lgd_ttc = LGD_CONFIG.lgd_ttc_mean
+                cs_origination = -np.log(max(1 - pd_base * lgd_ttc, 1e-10)) + liq_premium + comm_margin
+                cs_origination = np.clip(cs_origination, 0.0050, 0.2000)
+                nii = float(ead * cs_origination)
+                # Perte annuelle attendue a la PD courante (stressee)
+                # C'est ici que le stress impacte : PD↑ → EL↑ → profit↓ → RAROC↓
+                annual_el = float(np.sum(pd_arr * lgd_arr * ead_arr))
                 revenue_net = nii * (1 - BASEL_CONFIG.cir)
-                profit_net = (revenue_net - ecl) * (1 - BASEL_CONFIG.tax_rate)
+                profit_net = (revenue_net - annual_el) * (1 - BASEL_CONFIG.tax_rate)
                 capital_c = rwa * coc
                 raroc_c = profit_net / max(capital_c, 1)
                 eva_c = (raroc_c - coc) * capital_c
@@ -368,7 +473,7 @@ class PortfolioComparator:
                     "canal": "Credit",
                     "exposure": round(ead, 0),
                     "revenue": round(nii, 0),
-                    "loss": round(ecl, 0),
+                    "loss": round(annual_el, 0),
                     "rwa": round(rwa, 0),
                     "capital": round(capital_c, 0),
                     "raroc": round(raroc_c, 4),
@@ -612,6 +717,7 @@ class PortfolioComparator:
             Dict avec allocation optimale et metriques.
         """
         raroc_df = self.compute_raroc_eva()
+        coc = BASEL_CONFIG.cet1_target
 
         # ── Niveau 1 : Poids secteurs credit ──
         credit_cells = raroc_df.loc[
@@ -650,8 +756,13 @@ class PortfolioComparator:
         # ── Metriques post-optimisation ──
         rwa_credit_total = self.result_credit["rwa_credit"].sum()
         rwa_pe_total = self.result_pe["rwa_pe"].sum()
+        rwa_total = rwa_credit_total + rwa_pe_total
         rwa_weighted = credit_alloc * rwa_credit_total + pe_alloc * rwa_pe_total
-        cet1_ratio = _CAPITAL_BASE / max(rwa_weighted, 1)
+        # Capital = RWA reel du portefeuille × CET1 target
+        actual_capital = rwa_total * coc
+        # CET1 ratio = Capital / RWA (Basel III definition)
+        cet1_ratio = actual_capital / max(rwa_total, 1)
+        headroom_eur = actual_capital - BASEL_CONFIG.cet1_target * rwa_weighted
 
         return {
             "credit_allocation": round(credit_alloc, 2),
@@ -663,16 +774,24 @@ class PortfolioComparator:
             "rwa_weighted": round(rwa_weighted, 0),
             "cet1_ratio": round(cet1_ratio, 4),
             "cet1_headroom": round(cet1_ratio - BASEL_CONFIG.cet1_target, 4),
+            "headroom_m": round(headroom_eur / 1e6, 1),
+            "feasible": headroom_eur >= 0,
         }
 
     def _optimize_sector_weights(
         self,
         cells: pd.DataFrame,
     ) -> Dict[str, float]:
-        """Optimise les poids sectoriels par RAROC relatif.
+        """Optimise les poids sectoriels par RAROC penalise des correlations.
 
-        Heuristique : softmax sur RAROC, clip dans [0.05, 0.40],
-        renormalise a somme 1.
+        RJ audit v3 : le Softmax naif ignore les correlations inter-secteurs.
+        Score_i = RAROC_i - lambda * sum(w_j * rho_ij) penalise les secteurs
+        fortement correles aux autres, favorisant la diversification.
+
+        Algorithme iteratif (2 passes) :
+            Passe 1 : poids Softmax naif sur RAROC.
+            Passe 2 : score penalise = RAROC - lambda * sum(w_j * rho_ij),
+                       puis Softmax sur scores penalises.
 
         Args:
             cells: DataFrame avec colonnes sector, raroc.
@@ -682,20 +801,49 @@ class PortfolioComparator:
         """
         sectors = cells["sector"].values
         rarocs = cells["raroc"].values.astype(float)
+        n = len(sectors)
 
-        # M7 : Softmax avec temperature adaptative
-        # scale = 1/var(raroc), clip dans [2, 50] pour stabilite numerique
-        scale = np.clip(1.0 / max(np.var(rarocs), 1e-6), 2.0, 50.0)
-        # Stabilite numerique : soustraire le max pour eviter overflow/underflow
-        shifted = rarocs * scale - np.max(rarocs * scale)
+        # Matrice de correlation entre les secteurs presents
+        # _EXPERT_CORR est 5x5 dans l'ordre SECTOR_NAMES
+        sector_indices = [list(SECTOR_NAMES).index(s) for s in sectors]
+        corr_matrix = np.array(_EXPERT_CORR)
+        # Sous-matrice pour les secteurs presents
+        rho = corr_matrix[np.ix_(sector_indices, sector_indices)]
+
+        lam = BASEL_CONFIG.lambda_correlation
+
+        # Passe 1 : Softmax naif pour obtenir les poids initiaux
+        w = self._softmax_weights(rarocs)
+
+        # Passe 2 : Score penalise par la correlation
+        penalized_scores = np.zeros(n)
+        for i in range(n):
+            corr_penalty = sum(w[j] * rho[i, j] for j in range(n) if j != i)
+            penalized_scores[i] = rarocs[i] - lam * corr_penalty
+
+        # Softmax sur scores penalises
+        final_weights = self._softmax_weights(penalized_scores)
+
+        return {s: round(w, 4) for s, w in zip(sectors, final_weights)}
+
+    @staticmethod
+    def _softmax_weights(values: np.ndarray) -> np.ndarray:
+        """Softmax adaptative avec clip [0.05, 0.40] et renormalisation.
+
+        M7 : scale = 1/var(values), clip dans [2, 50].
+
+        Args:
+            values: Array de scores (RAROC ou scores penalises).
+
+        Returns:
+            Array de poids normalises.
+        """
+        scale = np.clip(1.0 / max(np.var(values), 1e-6), 2.0, 50.0)
+        shifted = values * scale - np.max(values * scale)
         exp_vals = np.exp(shifted)
         raw_weights = exp_vals / exp_vals.sum()
-
-        # Clip dans [0.05, 0.40]
         clipped = np.clip(raw_weights, 0.05, 0.40)
-        clipped = clipped / clipped.sum()  # Renormaliser
-
-        return {s: round(w, 4) for s, w in zip(sectors, clipped)}
+        return clipped / clipped.sum()
 
     # ──────────────────────────────────────────────
     # SENSIBILITE CRR3 (FR23)
@@ -712,6 +860,11 @@ class PortfolioComparator:
             DataFrame avec colonnes rw_pe, rwa_pe, rwa_total, cet1_ratio, headroom.
         """
         rwa_credit_total = self.result_credit["rwa_credit"].sum()
+        rwa_pe_current = self.result_pe["rwa_pe"].sum()
+        coc = BASEL_CONFIG.cet1_target
+        # Capital = fonds propres reels = (RWA_credit + RWA_PE_courant) × CET1_target
+        # La sensibilite montre comment le ratio change si le RW PE est reclasse.
+        actual_capital = (rwa_credit_total + rwa_pe_current) * coc
         records = []
 
         # H8 : RWA PE via score CRR3 composite (position par position)
@@ -725,8 +878,8 @@ class PortfolioComparator:
             nav_total = self.result_pe["nav"].sum()
             rwa_pe = nav_total * rw_pe / 100.0
             rwa_total = rwa_credit_total + rwa_pe
-            cet1 = _CAPITAL_BASE / max(rwa_total, 1)
-            headroom = cet1 - BASEL_CONFIG.cet1_target
+            cet1 = actual_capital / max(rwa_total, 1)
+            headroom = round(cet1 - coc, 4)
 
             records.append({
                 "rw_pe": rw_pe,
@@ -734,14 +887,14 @@ class PortfolioComparator:
                 "rwa_credit": round(rwa_credit_total, 0),
                 "rwa_total": round(rwa_total, 0),
                 "cet1_ratio": round(cet1, 4),
-                "headroom": round(headroom, 4),
+                "headroom": headroom,
                 "feasible": headroom >= 0,
             })
 
         # Ligne supplementaire : RW composite CRR3 (H8)
         rwa_total_composite = rwa_credit_total + rwa_pe_composite
-        cet1_composite = _CAPITAL_BASE / max(rwa_total_composite, 1)
-        headroom_composite = cet1_composite - BASEL_CONFIG.cet1_target
+        cet1_composite = actual_capital / max(rwa_total_composite, 1)
+        headroom_composite = round(cet1_composite - coc, 4)
         rw_moyen = int(np.round(np.mean(crr3_rw)))
 
         records.append({
@@ -750,7 +903,7 @@ class PortfolioComparator:
             "rwa_credit": round(rwa_credit_total, 0),
             "rwa_total": round(rwa_total_composite, 0),
             "cet1_ratio": round(cet1_composite, 4),
-            "headroom": round(headroom_composite, 4),
+            "headroom": headroom_composite,
             "feasible": headroom_composite >= 0,
         })
 
@@ -840,11 +993,20 @@ if __name__ == "__main__":
     # 4. HHI cross-cell
     print("\n[4/5] HHI cross-cell (FR41)...")
     hhi_result = comparator.compute_hhi_crosscell()
-    print(f"  HHI Credit     : {hhi_result['hhi_credit']:.2f}")
-    print(f"  HHI PE         : {hhi_result['hhi_pe']:.2f}")
-    print(f"  HHI Cross-cell : {hhi_result['hhi_crosscell']:.2f}")
+    print(f"  HHI Credit       : {hhi_result['hhi_credit']:.2f}")
+    print(f"  HHI PE           : {hhi_result['hhi_pe']:.2f}")
+    print(f"  HHI Cross-cell   : {hhi_result['hhi_crosscell']:.2f}")
+    print(f"  HHI Name Credit  : {hhi_result['hhi_name_credit']:.2f}")
+    print(f"  HHI Name PE      : {hhi_result['hhi_name_pe']:.2f}")
     print("\n  --- Parts par cellule ---")
     print(hhi_result["shares"].to_string(index=False))
+
+    # Green Asset Ratio (ESG placeholder)
+    print("\n  --- Green Asset Ratio (ESG) ---")
+    gar = comparator.compute_green_asset_ratio()
+    print(f"  GAR Credit : {gar['gar_credit']:.2%}")
+    print(f"  GAR PE     : {gar['gar_pe']:.2%}")
+    print(f"  GAR Total  : {gar['gar_total']:.2%}")
 
     # 5. RAROC / EVA
     print("\n[5/5] RAROC / EVA par cellule (FR44)...")

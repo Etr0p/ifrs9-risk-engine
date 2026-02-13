@@ -145,80 +145,82 @@ class TestLayer1Crossing:
         intensities = asym["stress_intensity"].values
         assert len(set(intensities)) > 1, "Les stress_intensity devraient varier entre secteurs"
 
-    def test_marginal_credit_dominates_pe(self, pipeline_data):
-        """Les contributions marginales Credit dominent PE (portefeuille credit >> PE)."""
+    def test_marginal_credit_and_pe_nonzero(self, pipeline_data):
+        """Les contributions marginales Credit et PE sont positives et somment a 1."""
         from ifrs9_cockpit.ai_analyst.layer1_crossing import analyze_crossings
         result_credit, result_pe, macro_params = pipeline_data
         _, marginal = analyze_crossings(result_credit, result_pe, macro_params)
         credit_total = marginal.loc[marginal["canal"] == "Credit", "marginal_contribution"].sum()
         pe_total = marginal.loc[marginal["canal"] == "PE", "marginal_contribution"].sum()
-        assert credit_total > pe_total
+        assert credit_total > 0
+        assert pe_total > 0
+        assert abs(credit_total + pe_total - 1.0) < 0.01
 
 
 # ============================================================
-# Story 5-1 : Couche 2 — Allocation proportionnelle / Euler (FR27)
+# Story 5-1 : Couche 2 — Allocation proportionnelle (FR27)
 # ============================================================
 
-class TestLayer2Euler:
-    """Tests Couche 2 — decompose_euler (FR27)."""
+class TestLayer2Proportional:
+    """Tests Couche 2 — decompose_proportional (FR27)."""
 
-    def test_euler_full_allocation_sum_1(self, pipeline_data):
-        """La somme des euler_share vaut ~1.0 (full allocation)."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+    def test_proportional_full_allocation_sum_1(self, pipeline_data):
+        """La somme des proportional_share vaut ~1.0 (full allocation)."""
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
-        euler, _ = decompose_euler(result_credit, result_pe, macro_params)
-        assert abs(euler["euler_share"].sum() - 1.0) < 0.01
+        alloc, _ = decompose_proportional(result_credit, result_pe, macro_params)
+        assert abs(alloc["proportional_share"].sum() - 1.0) < 0.01
 
-    def test_euler_10_cells(self, pipeline_data):
+    def test_proportional_10_cells(self, pipeline_data):
         """L'allocation proportionnelle contient 10 cellules (5 secteurs x 2 canaux)."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
-        euler, _ = decompose_euler(result_credit, result_pe, macro_params)
-        assert len(euler) == 10
+        alloc, _ = decompose_proportional(result_credit, result_pe, macro_params)
+        assert len(alloc) == 10
 
-    def test_euler_columns(self, pipeline_data):
+    def test_proportional_columns(self, pipeline_data):
         """Les colonnes requises sont presentes."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
-        euler, _ = decompose_euler(result_credit, result_pe, macro_params)
-        required = {"sector", "canal", "risk_amount", "euler_share", "rwa"}
-        assert required.issubset(set(euler.columns))
+        alloc, _ = decompose_proportional(result_credit, result_pe, macro_params)
+        required = {"sector", "canal", "risk_amount", "proportional_share", "rwa"}
+        assert required.issubset(set(alloc.columns))
 
     def test_factor_attribution_10_rows(self, pipeline_data):
         """L'attribution factorielle a 10 lignes (5 vars x 2 canaux)."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
-        _, factors = decompose_euler(result_credit, result_pe, macro_params)
+        _, factors = decompose_proportional(result_credit, result_pe, macro_params)
         assert len(factors) == 10
 
     def test_factor_attribution_columns(self, pipeline_data):
         """Les colonnes requises de l'attribution factorielle."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
-        _, factors = decompose_euler(result_credit, result_pe, macro_params)
+        _, factors = decompose_proportional(result_credit, result_pe, macro_params)
         required = {"variable", "canal", "delta_from_base", "attribution", "regime_adjusted"}
         assert required.issubset(set(factors.columns))
 
     def test_factor_attribution_zero_at_baseline(self, pipeline_data):
         """Au baseline (pas de stress), les attributions factorielles sont 0."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
-        _, factors = decompose_euler(result_credit, result_pe, macro_params)
+        _, factors = decompose_proportional(result_credit, result_pe, macro_params)
         assert (factors["attribution"] == 0.0).all()
 
     def test_factor_attribution_nonzero_under_stress(self, pipeline_data):
         """Sous stress, les attributions factorielles sont non-nulles."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         result_credit, result_pe, macro_params = pipeline_data
         stressed = macro_params.copy()
         stressed["unemployment_rate"] = 12.0
         stressed["gdp_growth"] = -2.0
-        _, factors = decompose_euler(result_credit, result_pe, stressed)
+        _, factors = decompose_proportional(result_credit, result_pe, stressed)
         assert factors["attribution"].abs().sum() > 0
 
-    def test_euler_with_regime(self, pipeline_data):
+    def test_proportional_with_regime(self, pipeline_data):
         """L'allocation proportionnelle fonctionne avec un regime detecte."""
-        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
         from ifrs9_cockpit.ai_analyst.types import RegimeClassification
         result_credit, result_pe, macro_params = pipeline_data
         regime = RegimeClassification(
@@ -228,9 +230,16 @@ class TestLayer2Euler:
         )
         stressed = macro_params.copy()
         stressed["unemployment_rate"] = 12.0
-        euler, factors = decompose_euler(result_credit, result_pe, stressed, regime=regime)
-        assert len(euler) == 10
+        alloc, factors = decompose_proportional(result_credit, result_pe, stressed, regime=regime)
+        assert len(alloc) == 10
         assert all(factors["regime_adjusted"])
+
+    def test_backward_compat_alias(self, pipeline_data):
+        """L'alias backward-compat decompose_euler fonctionne."""
+        from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_euler
+        result_credit, result_pe, macro_params = pipeline_data
+        alloc, _ = decompose_euler(result_credit, result_pe, macro_params)
+        assert len(alloc) == 10
 
 
 # ============================================================
@@ -661,14 +670,14 @@ class TestOrchestrator:
         assert state.asymmetry_matrix is not None
         assert len(state.asymmetry_matrix) == 5
 
-    def test_euler_contributions_populated(self, pipeline_data):
+    def test_proportional_contributions_populated(self, pipeline_data):
         """L'allocation proportionnelle est peuplee avec 10 cellules."""
         from ifrs9_cockpit.ai_analyst.orchestrator import CROAnalyst
         result_credit, result_pe, macro_params = pipeline_data
         analyst = CROAnalyst(result_credit, result_pe, macro_params)
         state = analyst.analyze()
-        assert state.euler_contributions is not None
-        assert len(state.euler_contributions) == 10
+        assert state.proportional_contributions is not None
+        assert len(state.proportional_contributions) == 10
 
     def test_tipping_points_populated(self, pipeline_data):
         """Les tipping points sont peuples avec 5 variables."""
@@ -715,7 +724,7 @@ class TestOrchestrator:
         assert rec.action
         assert rec.regime
         assert rec.trigger
-        assert rec.euler_driver
+        assert rec.proportional_driver
         assert rec.macro_factor
         assert rec.risk_appetite_status in {"vert", "ambre", "rouge"}
         assert isinstance(rec.rst_distance, float)
@@ -838,7 +847,7 @@ class TestTypes:
             action="test",
             regime="Crise",
             trigger="test trigger",
-            euler_driver="Tech Credit",
+            proportional_driver="Tech Credit",
             macro_factor="unemployment_rate",
             risk_appetite_status="rouge",
             rst_distance=3.5,

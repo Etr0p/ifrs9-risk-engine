@@ -1,0 +1,609 @@
+% ============================================================================
+% IFRS 9 Risk Cockpit — Bibliographie complète
+% ============================================================================
+
+% ─────────────────────────────────────────────
+% NORMES COMPTABLES
+% ─────────────────────────────────────────────
+
+@misc{ifrs9,
+  author       = {{IASB}},
+  title        = {{IFRS~9} --- Financial Instruments},
+  year         = {2014},
+  note         = {Amendé 2022. Sections 5.5.17 (pondération ECL), B5.5.17 (forward-looking), IE24 (taux d'actualisation)},
+  howpublished = {International Accounting Standards Board},
+}
+
+@misc{ifrs13,
+  author       = {{IASB}},
+  title        = {{IFRS~13} --- Fair Value Measurement},
+  year         = {2011},
+  howpublished = {International Accounting Standards Board},
+}
+
+@misc{ias39,
+  author       = {{IASB}},
+  title        = {{IAS~39} --- Financial Instruments: Recognition and Measurement},
+  year         = {1999},
+  note         = {Remplacé par IFRS~9 pour les exercices ouverts à compter du 1\textsuperscript{er} janvier 2018},
+  howpublished = {International Accounting Standards Board},
+}
+
+% ─────────────────────────────────────────────
+% RÉGLEMENTATION PRUDENTIELLE
+% ─────────────────────────────────────────────
+
+@techreport{bcbs_d424,
+  author      = {{BCBS}},
+  title       = {Basel {III}: Finalising Post-Crisis Reforms},
+  institution = {Basel Committee on Banking Supervision},
+  year        = {2017},
+  month       = dec,
+  number      = {d424},
+  note        = {Cadre prudentiel final Bâle~III, y compris output floor et approche standard révisée},
+}
+
+@misc{crr3,
+  author       = {{Parlement européen et Conseil}},
+  title        = {Règlement ({UE}) 2024/1623 modifiant le règlement ({UE}) n°~575/2013 ({CRR3})},
+  year         = {2024},
+  note         = {Articles 111 (CCF hors-bilan), 133 (pondération SA equity : 190\%/250\%/400\%), 155 (IRB equity). Entrée en vigueur : janvier 2025},
+  howpublished = {Journal officiel de l'Union européenne},
+}
+
+@misc{crr,
+  author       = {{Parlement européen et Conseil}},
+  title        = {Règlement ({UE}) n°~575/2013 concernant les exigences prudentielles ({CRR})},
+  year         = {2013},
+  howpublished = {Journal officiel de l'Union européenne},
+}
+
+% ─────────────────────────────────────────────
+% GUIDELINES EBA
+% ─────────────────────────────────────────────
+
+@techreport{eba_gl_2017_06,
+  author      = {{EBA}},
+  title       = {Guidelines on {PD} Estimation, {LGD} Estimation and the Treatment of Defaulted Exposures},
+  institution = {European Banking Authority},
+  year        = {2017},
+  number      = {GL/2017/06},
+}
+
+@techreport{eba_gl_2019_03,
+  author      = {{EBA}},
+  title       = {Guidelines for the Estimation of {LGD} Appropriate for an Economic Downturn},
+  institution = {European Banking Authority},
+  year        = {2019},
+  number      = {GL/2019/03},
+  note        = {LGD downturn : $\text{LGD}_\text{DT} = \text{LGD}_\text{TTC} \times (1 + \rho \times |Z|)$},
+}
+
+@techreport{eba_gl_2020_06,
+  author      = {{EBA}},
+  title       = {Guidelines on Credit Risk Stress Testing},
+  institution = {European Banking Authority},
+  year        = {2020},
+  number      = {GL/2020/06},
+}
+
+@techreport{eba_ifrs9_report,
+  author      = {{EBA}},
+  title       = {{IFRS~9} Implementation by {EU} Institutions --- Monitoring Report},
+  institution = {European Banking Authority},
+  year        = {2018},
+}
+
+% ─────────────────────────────────────────────
+% GUIDELINES BCE / ECB
+% ─────────────────────────────────────────────
+
+@techreport{ecb_trim,
+  author      = {{ECB}},
+  title       = {Targeted Review of Internal Models ({TRIM}) --- Project Report},
+  institution = {European Central Bank},
+  year        = {2019},
+}
+
+@techreport{ecb_climate,
+  author      = {{ECB}},
+  title       = {Guide on Climate-Related and Environmental Risks},
+  institution = {European Central Bank},
+  year        = {2024},
+  note        = {Attentes prudentielles en matière de risques climatiques et environnementaux},
+}
+
+@misc{ecb_sdw,
+  author       = {{ECB}},
+  title        = {Statistical Data Warehouse},
+  howpublished = {\url{https://sdw.ecb.europa.eu/}},
+  year         = {2023},
+  note         = {Source des données macroéconomiques zone euro (taux, inflation, chômage)},
+}
+
+@misc{ecb_sbs,
+  author       = {{ECB}},
+  title        = {Supervisory Banking Statistics},
+  howpublished = {\url{https://www.bankingsupervision.europa.eu/}},
+  year         = {2023},
+}
+
+% ─────────────────────────────────────────────
+% CADRE RISK APPETITE
+% ─────────────────────────────────────────────
+
+@techreport{fsb_raf,
+  author      = {{FSB}},
+  title       = {Principles for an Effective Risk Appetite Framework},
+  institution = {Financial Stability Board},
+  year        = {2013},
+  month       = nov,
+}
+
+@techreport{sr_11_7,
+  author      = {{Federal Reserve Board}},
+  title       = {Supervisory Guidance on Model Risk Management},
+  institution = {Board of Governors of the Federal Reserve System / OCC},
+  year        = {2011},
+  number      = {SR 11-7 / OCC 2011-12},
+  note        = {Cadre de référence pour la gestion du risque de modèle},
+}
+
+% ─────────────────────────────────────────────
+% RISQUE DE CRÉDIT — FONDEMENTS ACADÉMIQUES
+% ─────────────────────────────────────────────
+
+@article{merton1974,
+  author  = {Merton, Robert C.},
+  title   = {On the Pricing of Corporate Debt: The Risk Structure of Interest Rates},
+  journal = {The Journal of Finance},
+  volume  = {29},
+  number  = {2},
+  pages   = {449--470},
+  year    = {1974},
+}
+
+@article{vasicek2002,
+  author  = {Vasicek, Oldrich A.},
+  title   = {The Distribution of Loan Portfolio Value},
+  journal = {Risk},
+  volume  = {15},
+  number  = {12},
+  pages   = {160--162},
+  year    = {2002},
+  note    = {Fondement du modèle IRB de Bâle~II/III (ASRF)},
+}
+
+@article{gordy2003,
+  author  = {Gordy, Michael B.},
+  title   = {A Risk-Factor Model Foundation for Ratings-Based Bank Capital Rules},
+  journal = {Journal of Financial Intermediation},
+  volume  = {12},
+  number  = {3},
+  pages   = {199--232},
+  year    = {2003},
+}
+
+@article{cox1972,
+  author  = {Cox, David R.},
+  title   = {Regression Models and Life-Tables},
+  journal = {Journal of the Royal Statistical Society, Series B},
+  volume  = {34},
+  number  = {2},
+  pages   = {187--220},
+  year    = {1972},
+  note    = {Fondement des taux de hasard pour la PD lifetime},
+}
+
+% ─────────────────────────────────────────────
+% SCORING & RISQUE DE MODÈLE
+% ─────────────────────────────────────────────
+
+@book{siddiqi2006,
+  author    = {Siddiqi, Naeem},
+  title     = {Credit Risk Scorecards: Developing and Implementing Intelligent Credit Scoring},
+  publisher = {John Wiley \& Sons},
+  year      = {2006},
+  note      = {Référence pour la méthodologie WoE/IV et la construction de scorecards},
+}
+
+@book{anderson2007,
+  author    = {Anderson, Raymond},
+  title     = {The Credit Scoring Toolkit: Theory and Practice for Retail Credit Risk Management and Decision Automation},
+  publisher = {Oxford University Press},
+  year      = {2007},
+  note      = {Référence pour l'imputation WoE par proximité, minimum bin \%, seuils IV},
+}
+
+@article{king_zeng2001,
+  author  = {King, Gary and Zeng, Langche},
+  title   = {Logistic Regression in Rare Events Data},
+  journal = {Political Analysis},
+  volume  = {9},
+  number  = {2},
+  pages   = {137--163},
+  year    = {2001},
+  note    = {Correction de biais d'intercept pour événements rares (prior correction)},
+}
+
+@book{hosmer_lemeshow2013,
+  author    = {Hosmer, David W. and Lemeshow, Stanley and Sturdivant, Rodney X.},
+  title     = {Applied Logistic Regression},
+  edition   = {3},
+  publisher = {John Wiley \& Sons},
+  year      = {2013},
+}
+
+% ─────────────────────────────────────────────
+% MACHINE LEARNING & DEEP LEARNING TABULAIRE
+% ─────────────────────────────────────────────
+
+@inproceedings{arik_pfister2021,
+  author    = {Ar{\i}k, Sercan \"{O}. and Pfister, Tomas},
+  title     = {{TabNet}: Attentive Interpretable Tabular Learning},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {35},
+  number    = {8},
+  pages     = {6679--6687},
+  year      = {2021},
+  note      = {arXiv:1908.07442. Mécanisme d'attention séquentiel pour données tabulaires},
+}
+
+@inproceedings{chen_guestrin2016,
+  author    = {Chen, Tianqi and Guestrin, Carlos},
+  title     = {{XGBoost}: A Scalable Tree Boosting System},
+  booktitle = {Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+  pages     = {785--794},
+  year      = {2016},
+}
+
+@inproceedings{grinsztajn2022,
+  author    = {Grinsztajn, L\'{e}o and Oyallon, Edouard and Varoquaux, Ga\"{e}l},
+  title     = {Why Do Tree-Based Models Still Outperform Deep Learning on Typical Tabular Data?},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {35},
+  year      = {2022},
+}
+
+@article{borisov2022,
+  author  = {Borisov, Vadim and Leemann, Tobias and Se{\ss}ler, Kathrin and Haug, Johannes and Pawelczyk, Martin and Kasneci, Gjergji},
+  title   = {Deep Neural Networks and Tabular Data: A Survey},
+  journal = {IEEE Transactions on Neural Networks and Learning Systems},
+  year    = {2022},
+  note    = {Revue complète des architectures deep learning pour données tabulaires},
+}
+
+% ─────────────────────────────────────────────
+% EXPLICABILITÉ
+% ─────────────────────────────────────────────
+
+@inproceedings{lundberg_lee2017,
+  author    = {Lundberg, Scott M. and Lee, Su-In},
+  title     = {A Unified Approach to Interpreting Model Predictions},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {30},
+  year      = {2017},
+  note      = {SHAP --- SHapley Additive exPlanations},
+}
+
+@article{shapley1953,
+  author  = {Shapley, Lloyd S.},
+  title   = {A Value for $n$-Person Games},
+  journal = {Contributions to the Theory of Games},
+  volume  = {2},
+  number  = {28},
+  pages   = {307--317},
+  year    = {1953},
+  note    = {Fondement théorique des valeurs de Shapley},
+}
+
+% ─────────────────────────────────────────────
+% PRIVATE EQUITY — VALORISATION & DONNÉES
+% ─────────────────────────────────────────────
+
+@techreport{ipev2022,
+  author      = {{IPEV Board}},
+  title       = {International Private Equity and Venture Capital Valuation Guidelines},
+  institution = {International Private Equity and Venture Capital Valuation Board},
+  year        = {2022},
+  note        = {Méthodes de juste valeur : multiples, DCF, taux de capitalisation},
+}
+
+@techreport{preqin2023,
+  author      = {{Preqin}},
+  title       = {Global Private Equity Report},
+  institution = {Preqin},
+  year        = {2023},
+  note        = {Corrélation intra-fonds PE : $\rho \approx 0{,}3$--$0{,}5$. Seuils de détresse : 10--30\%},
+}
+
+@techreport{cambridge2023,
+  author      = {{Cambridge Associates}},
+  title       = {Private Equity Index and Benchmark Statistics},
+  institution = {Cambridge Associates},
+  year        = {2023},
+  note        = {MOIC médian : 1,5--2,0$\times$ selon vintage. Taux de défaut PE : $\sim$5\% base},
+}
+
+@techreport{moodys_default2023,
+  author      = {{Moody's Investors Service}},
+  title       = {Annual Default Study: Corporate Default and Recovery Rates, 1920--2022},
+  institution = {Moody's},
+  year        = {2023},
+  note        = {LGD equity $\approx$ 60\% (recovery 40\%). Taux de défaut par notation et secteur},
+}
+
+@techreport{jefferies_lazard2023,
+  author      = {{Jefferies} and {Lazard}},
+  title       = {Global Secondary Market Review},
+  institution = {Jefferies / Lazard},
+  year        = {2023},
+  note        = {Décote marché secondaire PE (DLOM) : 8--12\% fonds matures, 15--30\% fonds jeunes},
+}
+
+@techreport{aicpa2013,
+  author      = {{AICPA}},
+  title       = {Valuation of Privately-Held-Company Equity Securities Issued as Compensation --- Practice Aid},
+  institution = {American Institute of Certified Public Accountants},
+  year        = {2013},
+  note        = {Seuils de classification PE : MOIC, probabilité de détresse, ratio de couverture},
+}
+
+@book{pratt_grabowski2014,
+  author    = {Pratt, Shannon P. and Grabowski, Roger J.},
+  title     = {Cost of Capital: Applications and Examples},
+  edition   = {5},
+  publisher = {John Wiley \& Sons},
+  year      = {2014},
+  note      = {Méthodes de décote d'illiquidité (DLOM), primes de risque actions non cotées},
+}
+
+% ─────────────────────────────────────────────
+% IMMOBILIER
+% ─────────────────────────────────────────────
+
+@techreport{cbre2023,
+  author      = {{CBRE Research}},
+  title       = {European Real Estate Operating Expenses Benchmark},
+  institution = {CBRE},
+  year        = {2023},
+  note        = {Ratio OPEX/revenu brut : 12--18\%. NOI $\approx$ EBITDA $\times$ (1 $-$ 0,15)},
+}
+
+@techreport{jll2023,
+  author      = {{JLL}},
+  title       = {European Office Market Benchmarks},
+  institution = {Jones Lang LaSalle},
+  year        = {2023},
+  note        = {Taux de capitalisation et benchmarks immobilier commercial européen},
+}
+
+% ─────────────────────────────────────────────
+% RELATIONS MACROÉCONOMIQUES
+% ─────────────────────────────────────────────
+
+@article{okun1962,
+  author  = {Okun, Arthur M.},
+  title   = {Potential {GNP}: Its Measurement and Significance},
+  journal = {Proceedings of the Business and Economic Statistics Section, American Statistical Association},
+  pages   = {98--104},
+  year    = {1962},
+  note    = {Loi d'Okun : relation chômage--PIB ($\rho \approx -0{,}70$)},
+}
+
+@article{phillips1958,
+  author  = {Phillips, Alban W.},
+  title   = {The Relation Between Unemployment and the Rate of Change of Money Wage Rates in the {United Kingdom}, 1861--1957},
+  journal = {Economica},
+  volume  = {25},
+  number  = {100},
+  pages   = {283--299},
+  year    = {1958},
+  note    = {Courbe de Phillips : relation inflation--chômage ($\rho \approx -0{,}30$)},
+}
+
+@article{taylor1993,
+  author  = {Taylor, John B.},
+  title   = {Discretion Versus Policy Rules in Practice},
+  journal = {Carnegie-Rochester Conference Series on Public Policy},
+  volume  = {39},
+  pages   = {195--214},
+  year    = {1993},
+  note    = {Règle de Taylor : fonction de réaction du taux directeur},
+}
+
+@article{laubach_williams2003,
+  author  = {Laubach, Thomas and Williams, John C.},
+  title   = {Measuring the Natural Rate of Interest},
+  journal = {Review of Economics and Statistics},
+  volume  = {85},
+  number  = {4},
+  pages   = {1063--1070},
+  year    = {2003},
+  note    = {Estimation de $r^*$ (taux d'intérêt naturel) $\approx$ 2,5\% zone euro},
+}
+
+@techreport{fmi_weo,
+  author      = {{FMI}},
+  title       = {World Economic Outlook},
+  institution = {Fonds monétaire international},
+  year        = {2023},
+  note        = {Prévisions macroéconomiques mondiales. Source des corrélations macro inter-variables},
+}
+
+% ─────────────────────────────────────────────
+% PROCESSUS STOCHASTIQUES
+% ─────────────────────────────────────────────
+
+@article{uhlenbeck_ornstein1930,
+  author  = {Uhlenbeck, George E. and Ornstein, Leonard S.},
+  title   = {On the Theory of the {Brownian} Motion},
+  journal = {Physical Review},
+  volume  = {36},
+  number  = {5},
+  pages   = {823--841},
+  year    = {1930},
+  note    = {Processus de retour à la moyenne utilisé pour les trajectoires macroéconomiques prospectives},
+}
+
+@article{mahalanobis1936,
+  author  = {Mahalanobis, Prasanta Chandra},
+  title   = {On the Generalised Distance in Statistics},
+  journal = {Proceedings of the National Institute of Sciences of India},
+  volume  = {2},
+  number  = {1},
+  pages   = {49--55},
+  year    = {1936},
+  note    = {Distance de Mahalanobis pour l'évaluation de la vraisemblance des scénarios de reverse stress test},
+}
+
+% ─────────────────────────────────────────────
+% STATISTIQUES & MULTICOLINÉARITÉ
+% ─────────────────────────────────────────────
+
+@article{marquardt1970,
+  author  = {Marquardt, Donald W.},
+  title   = {Generalized Inverses, Ridge Regression, Biased Linear Estimation, and Nonlinear Estimation},
+  journal = {Technometrics},
+  volume  = {12},
+  number  = {3},
+  pages   = {591--612},
+  year    = {1970},
+  note    = {Seuil VIF $<$ 5 pour la détection de multicolinéarité},
+}
+
+@article{herfindahl1950,
+  author  = {Herfindahl, Orris C.},
+  title   = {Concentration in the Steel Industry},
+  year    = {1950},
+  note    = {PhD thesis, Columbia University. Indice HHI pour la mesure de la concentration sectorielle},
+}
+
+% ─────────────────────────────────────────────
+% DONNÉES & SOURCES INSTITUTIONNELLES
+% ─────────────────────────────────────────────
+
+@misc{eurostat,
+  author       = {{Eurostat}},
+  title        = {Employment and Unemployment Statistics},
+  howpublished = {\url{https://ec.europa.eu/eurostat}},
+  year         = {2023},
+  note         = {Source : volatilités macroéconomiques ($\sigma_\text{chômage} = 1{,}5$ pp, $\sigma_\text{PIB} = 1{,}8$ pp)},
+}
+
+@misc{ocde_consensus,
+  author       = {{OCDE}},
+  title        = {Economic Outlook --- Long-Term Consensus Forecasts},
+  howpublished = {\url{https://www.oecd.org/economic-outlook/}},
+  year         = {2023},
+  note         = {Équilibres structurels de long terme pour la zone euro},
+}
+
+% ─────────────────────────────────────────────
+% OUTILS LOGICIELS
+% ─────────────────────────────────────────────
+
+@misc{streamlit,
+  author       = {{Streamlit}},
+  title        = {Streamlit --- The Fastest Way to Build Data Apps},
+  howpublished = {\url{https://streamlit.io}},
+  year         = {2024},
+  note         = {Framework Python pour le dashboard interactif},
+}
+
+@misc{plotly,
+  author       = {{Plotly Technologies}},
+  title        = {Plotly --- Modern Analytic Apps for the Enterprise},
+  howpublished = {\url{https://plotly.com}},
+  year         = {2024},
+  note         = {Bibliothèque de visualisation interactive (charts, heatmaps, waterfall)},
+}
+
+@misc{sklearn,
+  author       = {Pedregosa, Fabian and others},
+  title        = {Scikit-learn: Machine Learning in {Python}},
+  howpublished = {\url{https://scikit-learn.org}},
+  year         = {2011},
+  note         = {Pipeline ML : LogisticRegression, IsotonicRegression, VIF, métriques},
+}
+
+@misc{pytorch,
+  author       = {Paszke, Adam and others},
+  title        = {{PyTorch}: An Imperative Style, High-Performance Deep Learning Library},
+  howpublished = {\url{https://pytorch.org}},
+  year         = {2019},
+  note         = {Backend GPU pour TabNet (CUDA, sm\_120 Blackwell)},
+}
+
+@misc{shap_lib,
+  author       = {Lundberg, Scott M.},
+  title        = {{SHAP} --- A Game Theoretic Approach to Explain the Output of Any Machine Learning Model},
+  howpublished = {\url{https://github.com/shap/shap}},
+  year         = {2024},
+  note         = {LinearExplainer (LR), TreeExplainer (XGBoost), KernelExplainer (TabNet)},
+}
+
+@misc{pandera,
+  author       = {Niels Bantilan},
+  title        = {Pandera: Statistical Data Validation for {Pandas}},
+  howpublished = {\url{https://pandera.readthedocs.io}},
+  year         = {2024},
+  note         = {Schémas déclaratifs pour la validation des DataFrames (contrats de données)},
+}
+
+@misc{fastapi,
+  author       = {Sebastián Ramírez},
+  title        = {{FastAPI} --- Modern, Fast Web Framework for Building {APIs}},
+  howpublished = {\url{https://fastapi.tiangolo.com}},
+  year         = {2024},
+  note         = {API REST : /health, /models, /compute, /stress-test},
+}
+
+% ─────────────────────────────────────────────
+% ESG & FINANCE DURABLE
+% ─────────────────────────────────────────────
+
+@misc{eu_taxonomy,
+  author       = {{Parlement européen et Conseil}},
+  title        = {Règlement ({UE}) 2020/852 sur l'établissement d'un cadre visant à favoriser les investissements durables (Taxonomie)},
+  year         = {2020},
+  howpublished = {Journal officiel de l'Union européenne},
+  note         = {Classification des activités économiques durables. Base du Green Asset Ratio (GAR)},
+}
+
+% ─────────────────────────────────────────────
+% ESTIMATION DE COVARIANCE
+% ─────────────────────────────────────────────
+
+@article{ledoit_wolf2004,
+  author  = {Ledoit, Olivier and Wolf, Michael},
+  title   = {A Well-Conditioned Estimator for Large-Dimensional Covariance Matrices},
+  journal = {Journal of Multivariate Analysis},
+  volume  = {88},
+  number  = {2},
+  pages   = {365--411},
+  year    = {2004},
+  note    = {Shrinkage de covariance. Remplacé dans le projet par matrice experte (circularité sur données synthétiques)},
+}
+
+% ─────────────────────────────────────────────
+% ALLOCATION DE CAPITAL
+% ─────────────────────────────────────────────
+
+@article{tasche2008,
+  author  = {Tasche, Dirk},
+  title   = {Capital Allocation to Business Units and Sub-Portfolios: The {Euler} Principle},
+  journal = {Pillar {II} in the New Basel Accord: The Challenge of Economic Capital},
+  pages   = {423--453},
+  year    = {2008},
+  note    = {Allocation proportionnelle (Euler) du capital économique aux sous-portefeuilles},
+}
+
+@article{mcneil_frey_embrechts2015,
+  author    = {McNeil, Alexander J. and Frey, Rüdiger and Embrechts, Paul},
+  title     = {Quantitative Risk Management: Concepts, Techniques and Tools},
+  publisher = {Princeton University Press},
+  edition   = {2},
+  year      = {2015},
+  note      = {Référence générale : mesures de risque cohérentes, copules, modèles de portefeuille crédit},
+}
