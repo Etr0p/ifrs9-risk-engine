@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-import pandas as pd
+import polars as pl
 
 import numpy as np
 
@@ -25,7 +25,11 @@ from ifrs9_cockpit.ai_analyst.types import (
 )
 from ifrs9_cockpit.ai_analyst.layer1_crossing import analyze_crossings
 from ifrs9_cockpit.ai_analyst.layer2_euler import decompose_proportional
-from ifrs9_cockpit.ai_analyst.layer3_rst import find_tipping_points, reverse_stress_test
+from ifrs9_cockpit.ai_analyst.layer3_rst import (
+    find_tipping_points,
+    reverse_stress_test,
+    adversarial_reverse_stress_test,
+)
 from ifrs9_cockpit.ai_analyst.layer4_regime import classify_regime
 from ifrs9_cockpit.ai_analyst.layer5_prospective import (
     project_trajectories,
@@ -45,8 +49,8 @@ class CROAnalyst:
 
     def __init__(
         self,
-        result_credit: pd.DataFrame,
-        result_pe: pd.DataFrame,
+        result_credit: pl.DataFrame,
+        result_pe: pl.DataFrame,
         macro_params: Dict[str, float],
         target_ecl: Optional[float] = None,
     ) -> None:
@@ -157,12 +161,13 @@ class CROAnalyst:
         # RST retourne la distance de Mahalanobis (H6) depuis layer3_rst
         # Capital reel = RWA_credit × CET1_target (coherent avec comparator.py)
         _actual_capital = self.result_credit["rwa_credit"].sum() * BASEL_CONFIG.cet1_target
-        rst = reverse_stress_test(
+        rst = adversarial_reverse_stress_test(
             ecl_proxy, self.macro_params, regime,
             target_ecl=self.target_ecl, capital_base=_actual_capital,
         )
         state.rst_result = rst
         state.rst_distance = rst["rst_distance_sigma"]
+        state.pareto_front = rst.get("pareto_front")
 
         # Couche 4 — Regime
         state.regime = classify_regime(self.macro_params)
@@ -193,7 +198,7 @@ class CROAnalyst:
         # Top allocation proportionnelle driver
         alloc = state.proportional_contributions
         if alloc is not None and len(alloc) > 0:
-            top_proportional = alloc.sort_values("proportional_share", ascending=False).iloc[0]
+            top_proportional = alloc.sort("proportional_share", descending=True).row(0, named=True)
             proportional_driver = f"{top_proportional['sector']} {top_proportional['canal']}"
         else:
             proportional_driver = "N/A"
@@ -201,7 +206,7 @@ class CROAnalyst:
         # Top factor
         factors = state.factor_attribution
         if factors is not None and len(factors) > 0:
-            top_factor = factors.sort_values("attribution", ascending=False).iloc[0]
+            top_factor = factors.sort("attribution", descending=True).row(0, named=True)
             macro_factor = top_factor["variable"]
         else:
             macro_factor = "N/A"
@@ -259,44 +264,171 @@ class CROAnalyst:
 
         return recs
 
-    def _generate_narrative(self, state: AnalyticsState) -> str:
-        """Genere la synthese narrative CRO (FR32).
+    def _generate_narrative(self, state: AnalyticsState) -> Dict:
+        """Genere la synthese narrative CRO structuree (FR32).
 
-        Inclut : regime, top 3 asymetries, allocation proportionnelle, RST, recommandation.
+        Retourne un Dict avec 7 sections pour rendu HTML riche :
+            - diagnostic: analyse du regime et du positionnement
+            - concentration: risques de concentration identifies
+            - facteur: facteur macro dominant et impact
+            - resilience: evaluation de la solidite du portefeuille
+            - action: recommandation principale
+            - confiance: niveau de confiance et justification
+            - alternatives: actions alternatives
+
+        Returns:
+            Dict[str, str] avec les 7 sections narratives.
         """
-        lines = []
-
-        # 1. Regime
         regime = state.regime
+        rec = state.recommendations[0] if state.recommendations else None
+        rst_dist = state.rst_distance
+        ra = state.risk_appetite_matrix
+
+        # ── RST escalation logic ──
+        ra_status = rec.risk_appetite_status if rec else "vert"
+        effective_status = ra_status
+        escalation_text = ""
+        if rst_dist < 2.0 and ra_status == "ambre":
+            effective_status = "rouge"
+            escalation_text = (
+                " L'escalade de ambre vers rouge est declenchee par la proximite "
+                f"du point de rupture RST ({rst_dist:.1f} sigma < 2 sigma)."
+            )
+        elif rst_dist < 2.0 and ra_status == "vert":
+            effective_status = "ambre"
+            escalation_text = (
+                " Attention : malgre un Risk Appetite vert, la distance RST de "
+                f"{rst_dist:.1f} sigma signale une vulnerabilite proche du seuil de rupture."
+            )
+
+        # 1. Diagnostic
+        diagnostic_parts = []
         if regime:
-            lines.append(f"Regime detecte : {regime.detected_regime} "
-                        f"(probabilite {regime.probabilities.get(regime.detected_regime, 0):.0%})")
+            prob = regime.probabilities.get(regime.detected_regime, 0)
+            diagnostic_parts.append(
+                f"Le portefeuille evolue dans un regime de type {regime.detected_regime} "
+                f"(probabilite {prob:.0%})."
+            )
+        if rst_dist < 2.0:
+            diagnostic_parts.append(
+                f"Le Reverse Stress Test identifie un point de rupture a seulement "
+                f"{rst_dist:.1f} sigma, signalant une faible marge de manoeuvre."
+            )
+        elif rst_dist < 5.0:
+            diagnostic_parts.append(
+                f"La distance de Mahalanobis au point de rupture est de {rst_dist:.1f} sigma, "
+                f"indiquant une resilience moderee."
+            )
+        else:
+            diagnostic_parts.append(
+                f"La distance RST de {rst_dist:.1f} sigma confirme une marge de securite "
+                f"confortable vis-a-vis du seuil de rupture."
+            )
+        if escalation_text:
+            diagnostic_parts.append(escalation_text)
+        diagnostic = " ".join(diagnostic_parts)
 
-        # 2. Top 3 asymetries
+        # 2. Concentration
         asym = state.asymmetry_matrix
+        concentration_parts = []
         if asym is not None and len(asym) > 0:
-            top3 = asym.sort_values("asymmetry", key=abs, ascending=False).head(3)
-            lines.append("Top 3 asymetries sectorielles :")
-            for _, row in top3.iterrows():
-                lines.append(f"  - {row['sector']} : asymetrie = {row['asymmetry']:.4f}")
+            top3 = (
+                asym.with_columns(pl.col("asymmetry").abs().alias("_abs_asym"))
+                .sort("_abs_asym", descending=True)
+                .head(3)
+            )
+            sectors_list = ", ".join(
+                f"{row['sector']} ({row['asymmetry']:+.4f})"
+                for row in top3.iter_rows(named=True)
+            )
+            concentration_parts.append(
+                f"Les secteurs a plus forte asymetrie credit/PE sont : {sectors_list}."
+            )
+            max_asym = top3["asymmetry"].abs().max()
+            if max_asym > 0.03:
+                concentration_parts.append(
+                    "Cette asymetrie elevee suggere un risque de concentration sectorielle "
+                    "necessitant une surveillance renforcee."
+                )
+        concentration = " ".join(concentration_parts) if concentration_parts else (
+            "Aucun desequilibre sectoriel significatif identifie."
+        )
 
-        # 3. Allocation proportionnelle
+        # 3. Facteur macro dominant
+        factors = state.factor_attribution
+        if factors is not None and len(factors) > 0:
+            top_f = factors.sort("attribution", descending=True).row(0, named=True)
+            facteur = (
+                f"Le facteur macro dominant est {top_f['variable']} "
+                f"(attribution {top_f['attribution']:.1%} de la variance ECL). "
+                f"Les decisions de politique monetaire et les evolutions de ce parametre "
+                f"devront etre suivies de pres."
+            )
+        else:
+            facteur = "Aucune attribution factorielle significative identifiee."
+
+        # 4. Resilience
         alloc = state.proportional_contributions
         if alloc is not None and len(alloc) > 0:
-            top_cell = alloc.sort_values("proportional_share", ascending=False).iloc[0]
-            lines.append(f"Allocation proportionnelle : {top_cell['sector']} {top_cell['canal']} "
-                        f"domine ({top_cell['proportional_share']:.1%} du risque total)")
+            top_cell = alloc.sort("proportional_share", descending=True).row(0, named=True)
+            resilience = (
+                f"L'allocation proportionnelle revele que {top_cell['sector']} "
+                f"{top_cell['canal']} concentre {top_cell['proportional_share']:.1%} "
+                f"du risque total du portefeuille. "
+            )
+            if top_cell['proportional_share'] > 0.30:
+                resilience += (
+                    "Cette concentration elevee reduit la diversification effective "
+                    "et augmente la sensibilite aux chocs sectoriels."
+                )
+            else:
+                resilience += (
+                    "La repartition du risque reste suffisamment diversifiee "
+                    "pour absorber des chocs sectoriels moderes."
+                )
+        else:
+            resilience = "Evaluation de la resilience non disponible."
 
-        # 4. RST (Mahalanobis)
-        if state.rst_result:
-            lines.append(f"Distance RST : {state.rst_distance:.1f} sigma (Mahalanobis)")
+        # 5. Action
+        if rec:
+            if effective_status != ra_status:
+                action = (
+                    f"[ESCALADE {ra_status.upper()} → {effective_status.upper()}] "
+                    f"{rec.action}"
+                )
+            else:
+                action = rec.action
+        else:
+            action = "Maintenir l'allocation actuelle avec monitoring standard."
 
-        # 5. Recommandation
-        if state.recommendations:
-            rec = state.recommendations[0]
-            lines.append(f"Recommandation : {rec.action} (confiance : {rec.confidence})")
+        # 6. Confiance
+        if rec:
+            conf_label = {"high": "elevee", "medium": "moderee", "low": "faible"}.get(
+                rec.confidence, rec.confidence
+            )
+            confiance = (
+                f"Niveau de confiance : {conf_label}. "
+                f"Regime {rec.regime}, declencheur : {rec.trigger}. "
+                f"Facteur macro dominant : {rec.macro_factor}."
+            )
+        else:
+            confiance = "Evaluation de confiance non disponible."
 
-        return "\n".join(lines)
+        # 7. Alternatives
+        if rec and rec.alternatives:
+            alternatives = " | ".join(rec.alternatives)
+        else:
+            alternatives = "Aucune alternative identifiee."
+
+        return {
+            "diagnostic": diagnostic,
+            "concentration": concentration,
+            "facteur": facteur,
+            "resilience": resilience,
+            "action": action,
+            "confiance": confiance,
+            "alternatives": alternatives,
+        }
 
 
 if __name__ == "__main__":
@@ -313,7 +445,7 @@ if __name__ == "__main__":
 
     # Pipeline
     print("\n[1/3] Pipelines credit/PE...")
-    df_credit, df_pe, _ = generate_dataset()
+    df_credit, df_pe, _, _ = generate_dataset()
     pd_suite = PDModelSuite()
     pd_suite.fit(df_credit)
     pd_current = pd_suite.predict_active(df_credit)

@@ -15,6 +15,7 @@ du design system SANS lancer Streamlit (mock de st pour eviter les side effects)
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import inspect
 import sys
 from types import ModuleType
@@ -22,6 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import plotly.graph_objects as go
 import pytest
 
@@ -385,7 +387,7 @@ class TestChartsModule:
         """plot_stage_distribution() retourne un go.Figure."""
         from ifrs9_cockpit.dashboard.charts import plot_stage_distribution
 
-        stage_df = pd.DataFrame({
+        stage_df = pl.DataFrame({
             "stage": [1, 2, 3],
             "count": [7000, 2000, 1000],
             "total_ead": [5e8, 2e8, 1e8],
@@ -416,7 +418,7 @@ class TestChartsModule:
         """plot_pe_nav_by_sector() retourne un go.Figure (Story 6-4)."""
         from ifrs9_cockpit.dashboard.charts import plot_pe_nav_by_sector
 
-        result_pe = pd.DataFrame({
+        result_pe = pl.DataFrame({
             "sector": ["Technologie", "Industrie", "Sante"],
             "nav": [1e7, 2e7, 1.5e7],
             "capital_invested": [8e6, 1.5e7, 1.2e7],
@@ -430,7 +432,7 @@ class TestChartsModule:
         """plot_pe_risk_categories() retourne un go.Figure (Story 6-4)."""
         from ifrs9_cockpit.dashboard.charts import plot_pe_risk_categories
 
-        result_pe = pd.DataFrame({
+        result_pe = pl.DataFrame({
             "risk_category": ["Performing", "Performing", "Watchlist", "Distressed"],
         })
         fig = plot_pe_risk_categories(result_pe)
@@ -440,7 +442,7 @@ class TestChartsModule:
         """plot_pe_moic_drawdown() retourne un go.Figure (Story 6-4)."""
         from ifrs9_cockpit.dashboard.charts import plot_pe_moic_drawdown
 
-        result_pe = pd.DataFrame({
+        result_pe = pl.DataFrame({
             "sector": ["Technologie", "Industrie", "Sante"],
             "moic": [1.5, 1.2, 1.8],
             "nav_drawdown": [0.05, 0.12, 0.03],
@@ -453,7 +455,7 @@ class TestChartsModule:
         """plot_asymmetry_heatmap() retourne un go.Figure (Story 6-6)."""
         from ifrs9_cockpit.dashboard.charts import plot_asymmetry_heatmap
 
-        asym_df = pd.DataFrame({
+        asym_df = pl.DataFrame({
             "sector": ["Technologie", "Industrie"],
             "loss_ratio": [1.5, 0.8],
             "rwa_ratio": [2.0, 1.1],
@@ -466,7 +468,7 @@ class TestChartsModule:
         """plot_raroc_comparison() retourne un go.Figure (Story 6-6)."""
         from ifrs9_cockpit.dashboard.charts import plot_raroc_comparison
 
-        raroc_df = pd.DataFrame({
+        raroc_df = pl.DataFrame({
             "sector": ["Technologie", "Industrie", "Technologie", "Industrie"],
             "canal": ["Credit", "Credit", "PE", "PE"],
             "raroc": [0.12, 0.15, 0.08, 0.10],
@@ -478,7 +480,7 @@ class TestChartsModule:
         """plot_crr3_sensitivity() retourne un go.Figure (Story 6-6)."""
         from ifrs9_cockpit.dashboard.charts import plot_crr3_sensitivity
 
-        crr3_df = pd.DataFrame({
+        crr3_df = pl.DataFrame({
             "rw_pe": [190, 250, 400],
             "cet1_ratio": [0.14, 0.12, 0.09],
             "feasible": [True, True, False],
@@ -490,7 +492,7 @@ class TestChartsModule:
         """plot_risk_appetite_matrix() retourne un go.Figure avec donnees."""
         from ifrs9_cockpit.dashboard.charts import plot_risk_appetite_matrix
 
-        ra_df = pd.DataFrame({
+        ra_df = pl.DataFrame({
             "sector": ["Technologie", "Technologie", "Industrie", "Industrie"],
             "canal": ["Credit", "PE", "Credit", "PE"],
             "signal": ["vert", "ambre", "rouge", "vert"],
@@ -502,7 +504,7 @@ class TestChartsModule:
         """plot_risk_appetite_matrix() gere un DataFrame vide."""
         from ifrs9_cockpit.dashboard.charts import plot_risk_appetite_matrix
 
-        fig = plot_risk_appetite_matrix(pd.DataFrame())
+        fig = plot_risk_appetite_matrix(pl.DataFrame())
         assert isinstance(fig, go.Figure)
 
     def test_plot_shap_force_individual_returns_figure(self) -> None:
@@ -545,6 +547,16 @@ class TestChartsModule:
 # Components module : fonctions publiques
 # ──────────────────────────────────────────────
 
+# Legacy Streamlit render functions only exist when legacy.py is present
+_HAS_LEGACY_RENDER = hasattr(
+    __import__("ifrs9_cockpit.dashboard.components", fromlist=["render_header"]),
+    "render_header",
+)
+_skip_legacy = pytest.mark.skipif(
+    not _HAS_LEGACY_RENDER,
+    reason="Legacy Streamlit render functions non disponibles (legacy.py absent)",
+)
+
 
 class TestComponentsModule:
     """Tests pour le module dashboard/components.py (mocke Streamlit)."""
@@ -555,25 +567,30 @@ class TestComponentsModule:
         assert components is not None
 
     def test_components_public_functions_exist(self) -> None:
-        """Toutes les fonctions publiques de components sont callables."""
+        """Toutes les fonctions publiques Dash de components sont callables."""
         from ifrs9_cockpit.dashboard import components
 
         expected_functions = [
-            "render_header",
-            "render_kpi_cards",
-            "render_insight_box",
-            "render_stage_badges",
-            "render_smart_insight_box",
-            "render_section_title",
-            "render_kpi_row",
-            "render_classification_row",
-            "render_ai_narrative_box",
+            "build_header",
+            "build_kpi_row",
+            "build_classification_row",
+            "build_pe_score_card",
+            "build_credit_score_card",
+            "build_ai_narrative_box",
+            "build_rst_results_panel",
+            "build_section_title",
+            "build_scenario_banner",
+            "build_collapsible_button",
+            "build_sidebar",
+            "build_arbitrage_insight",
+            "build_layer2_allocation",
         ]
         for func_name in expected_functions:
             func = getattr(components, func_name, None)
             assert func is not None, f"components.{func_name} introuvable"
             assert callable(func), f"components.{func_name} n'est pas callable"
 
+    @_skip_legacy
     def test_render_header_signature(self) -> None:
         """render_header() ne prend aucun argument requis."""
         from ifrs9_cockpit.dashboard.components import render_header
@@ -585,6 +602,7 @@ class TestComponentsModule:
         ]
         assert len(required) == 0
 
+    @_skip_legacy
     def test_render_kpi_cards_signature(self) -> None:
         """render_kpi_cards() attend 4 arguments numeriques + 1 optionnel."""
         from ifrs9_cockpit.dashboard.components import render_kpi_cards
@@ -596,6 +614,7 @@ class TestComponentsModule:
         ]
         assert len(required) >= 4, "render_kpi_cards doit avoir au moins 4 args requis"
 
+    @_skip_legacy
     @patch("ifrs9_cockpit.dashboard.components.st")
     def test_render_kpi_row_outputs_html(self, mock_st: MagicMock) -> None:
         """render_kpi_row() genere du HTML avec kpi-container (FR45)."""
@@ -613,6 +632,7 @@ class TestComponentsModule:
         assert "1.2M EUR" in html
         assert "negative" in html
 
+    @_skip_legacy
     @patch("ifrs9_cockpit.dashboard.components.st")
     def test_render_classification_row_pe_denominator(self, mock_st: MagicMock) -> None:
         """render_classification_row() utilise le total PE pour les pctages PE (FR47)."""
@@ -625,6 +645,7 @@ class TestComponentsModule:
         # Performing = 8/15 = 53.3%, PAS 8/10000 = 0.1%
         assert "53.3%" in html, "PE pctage doit utiliser le total PE, pas n_total credit"
 
+    @_skip_legacy
     @patch("ifrs9_cockpit.dashboard.components.st")
     def test_render_classification_row_empty_pe(self, mock_st: MagicMock) -> None:
         """render_classification_row() gere le cas PE vide sans division par zero."""
@@ -637,6 +658,7 @@ class TestComponentsModule:
         # Pas de crash — les PE badges affichent 0 (0.0%)
         assert "Performing: 0" in html
 
+    @_skip_legacy
     @patch("ifrs9_cockpit.dashboard.components.st")
     def test_render_ai_narrative_box_risk_level_from_status(self, mock_st: MagicMock) -> None:
         """render_ai_narrative_box() determine le niveau depuis risk_appetite_status."""
@@ -657,6 +679,7 @@ class TestComponentsModule:
         html = mock_st.markdown.call_args[0][0]
         assert "ELEVE" in html, "risk_appetite_status=rouge doit donner niveau ELEVE"
 
+    @_skip_legacy
     @patch("ifrs9_cockpit.dashboard.components.st")
     def test_render_header_contains_cockpit_header(self, mock_st: MagicMock) -> None:
         """render_header() genere le header cockpit."""
@@ -666,6 +689,7 @@ class TestComponentsModule:
         assert "cockpit-header" in html
         assert "IFRS 9 Risk Cockpit" in html
 
+    @_skip_legacy
     @patch("ifrs9_cockpit.dashboard.components.st")
     def test_render_section_title_output(self, mock_st: MagicMock) -> None:
         """render_section_title() genere un div section-title."""
@@ -858,8 +882,9 @@ class TestStory62PipelineOrchestration:
 # ──────────────────────────────────────────────
 
 
+@_skip_legacy
 class TestStory63KpiCardsInsightBox:
-    """Tests pour les KPI cards et l'insight box."""
+    """Tests pour les KPI cards et l'insight box (legacy Streamlit render_*)."""
 
     def test_render_kpi_row_exists(self) -> None:
         """render_kpi_row est importe dans l'espace de noms du dashboard."""

@@ -103,6 +103,41 @@ BTN_DL_AI = "btn-dl-ai"
 BTN_DL_LATEX = "btn-dl-latex"
 
 # ──────────────────────────────────────────────
+# CAUSAL ML SECTION (Etape 3)
+# ──────────────────────────────────────────────
+BTN_CAUSAL = "btn-causal"
+COLLAPSE_CAUSAL = "collapse-causal"
+CAUSAL_CONTENT = "causal-content"
+
+# ──────────────────────────────────────────────
+# VIRTUAL CRO SECTION (Etape 4 — NeSy MAS)
+# ──────────────────────────────────────────────
+BTN_VCRO = "btn-vcro"
+COLLAPSE_VCRO = "collapse-vcro"
+VCRO_CONTENT = "vcro-content"
+
+# ──────────────────────────────────────────────
+# MULTI-ASSET BALANCE SHEET SECTION (Etape 5)
+# ──────────────────────────────────────────────
+BTN_MULTIASSET = "btn-multiasset"
+COLLAPSE_MULTIASSET = "collapse-multiasset"
+MULTIASSET_CONTENT = "multiasset-content"
+
+# ──────────────────────────────────────────────
+# GOUVERNANCE QUANTITATIVE (Phase 1 — Conformal, Sobol, VRP, RMT)
+# ──────────────────────────────────────────────
+BTN_GOVERNANCE = "btn-governance"
+COLLAPSE_GOVERNANCE = "collapse-governance"
+GOVERNANCE_CONTENT = "governance-content"
+
+# ──────────────────────────────────────────────
+# REGIME INTELLIGENCE (HMM + GFlowNet)
+# ──────────────────────────────────────────────
+BTN_REGIME = "btn-regime"
+COLLAPSE_REGIME = "collapse-regime"
+REGIME_CONTENT = "regime-content"
+
+# ──────────────────────────────────────────────
 # LOADING OVERLAY
 # ──────────────────────────────────────────────
 LOADING_PIPELINE = "loading-pipeline"

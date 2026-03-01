@@ -7,7 +7,6 @@ from functools import wraps
 from typing import Any, Callable, TypeVar
 
 import numpy as np
-import pandas as pd
 
 from ifrs9_cockpit.config import RANDOM_SEED
 from ifrs9_cockpit.utils.logging import get_logger

@@ -7,17 +7,17 @@ et calcule les contributions marginales au risque.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, Tuple
 
 from ifrs9_cockpit.config import SECTORS, SCENARIO_BASE
 
 
 def analyze_crossings(
-    result_credit: pd.DataFrame,
-    result_pe: pd.DataFrame,
+    result_credit: pl.DataFrame,
+    result_pe: pl.DataFrame,
     macro_params: Dict[str, float],
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pl.DataFrame, pl.DataFrame]:
     """Scanne les asymetries credit vs PE (FR26).
 
     Args:
@@ -34,13 +34,13 @@ def analyze_crossings(
     asym_records = []
     for sector in SECTORS:
         name = sector.name
-        mask_c = result_credit["sector"].values == name
-        mask_p = result_pe["sector"].values == name
+        credit_sec = result_credit.filter(pl.col("sector") == name)
+        pe_sec = result_pe.filter(pl.col("sector") == name)
 
-        ecl = result_credit.loc[mask_c, "ecl_weighted"].sum()
-        ead = result_credit.loc[mask_c, "ead"].sum()
-        el_pe = result_pe.loc[mask_p, "expected_loss_pe"].sum()
-        nav = result_pe.loc[mask_p, "nav"].sum()
+        ecl = credit_sec["ecl_weighted"].sum()
+        ead = credit_sec["ead"].sum()
+        el_pe = pe_sec["expected_loss_pe"].sum()
+        nav = pe_sec["nav"].sum()
 
         # Taux de perte normalise
         loss_rate_credit = ecl / max(ead, 1)
@@ -77,7 +77,7 @@ def analyze_crossings(
             "stress_intensity": round(stress_delta, 2),
         })
 
-    asymmetry_matrix = pd.DataFrame(asym_records)
+    asymmetry_matrix = pl.DataFrame(asym_records)
 
     # ── Contributions marginales (10 cellules) ──
     total_risk = (
@@ -90,8 +90,8 @@ def analyze_crossings(
         name = sector.name
 
         # Credit
-        mask_c = result_credit["sector"].values == name
-        ecl_sec = result_credit.loc[mask_c, "ecl_weighted"].sum()
+        credit_sec = result_credit.filter(pl.col("sector") == name)
+        ecl_sec = credit_sec["ecl_weighted"].sum()
         contrib_c = ecl_sec / max(total_risk, 1)
 
         marginal_records.append({
@@ -102,8 +102,8 @@ def analyze_crossings(
         })
 
         # PE
-        mask_p = result_pe["sector"].values == name
-        el_sec = result_pe.loc[mask_p, "expected_loss_pe"].sum()
+        pe_sec = result_pe.filter(pl.col("sector") == name)
+        el_sec = pe_sec["expected_loss_pe"].sum()
         contrib_p = el_sec / max(total_risk, 1)
 
         marginal_records.append({
@@ -113,6 +113,6 @@ def analyze_crossings(
             "marginal_contribution": round(contrib_p, 6),
         })
 
-    marginal_contributions = pd.DataFrame(marginal_records)
+    marginal_contributions = pl.DataFrame(marginal_records)
 
     return asymmetry_matrix, marginal_contributions

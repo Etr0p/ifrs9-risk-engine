@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
 from ifrs9_cockpit.config import EAD_CONFIG, LGD_CONFIG, RANDOM_SEED, SECTORS
@@ -29,10 +29,9 @@ from ifrs9_cockpit.models.ead_model import EADModel
 # ============================================================
 
 @pytest.fixture(scope="module")
-def df_credit():
-    """Genere un dataset credit pour les tests."""
-    df_credit, _, _ = generate_dataset(n_clients=2000, seed=RANDOM_SEED)
-    return df_credit
+def df_credit(global_pipeline_results):
+    """Reutilise le pipeline session (zero recalcul)."""
+    return global_pipeline_results["df_credit"]
 
 
 @pytest.fixture(scope="module")
@@ -112,7 +111,7 @@ class TestLGDModel:
     def test_lgd_summary_table(self, lgd_model, df_credit):
         """get_summary retourne un DataFrame par secteur/type."""
         summary = lgd_model.get_summary(df_credit)
-        assert isinstance(summary, pd.DataFrame)
+        assert isinstance(summary, pl.DataFrame)
         assert "sector" in summary.columns
         assert "loan_type" in summary.columns
         assert "lgd_ttc_mean" in summary.columns
@@ -160,11 +159,11 @@ class TestEADModel:
 
     def test_ead_revolving_uses_ccf(self, ead_model, df_credit):
         """Pour les revolving, EAD = drawn + CCF x undrawn (verifie que EAD != loan_amount)."""
-        revolving = df_credit[df_credit["loan_type"] == "Revolving"]
+        revolving = df_credit.filter(pl.col("loan_type") == "Revolving")
         if len(revolving) == 0:
             pytest.skip("Pas de revolving dans le dataset")
         ead = ead_model.predict(revolving)
-        loan_amount = revolving["loan_amount"].values
+        loan_amount = revolving["loan_amount"].to_numpy()
         # EAD revolving != loan_amount pour la plupart (sauf util = 1.0)
         diff = np.abs(ead - loan_amount)
         assert (diff > 1.0).any(), "EAD revolving devrait differer du loan_amount"
@@ -172,24 +171,25 @@ class TestEADModel:
     def test_ead_summary_table(self, ead_model, df_credit):
         """get_summary retourne un DataFrame par secteur/type."""
         summary = ead_model.get_summary(df_credit)
-        assert isinstance(summary, pd.DataFrame)
+        assert isinstance(summary, pl.DataFrame)
         assert "sector" in summary.columns
         assert len(summary) > 0
 
     def test_ead_ccf_analysis(self, ead_model, df_credit):
         """get_ccf_analysis retourne les CCF implicites."""
         ccf_table = ead_model.get_ccf_analysis(df_credit)
-        assert isinstance(ccf_table, pd.DataFrame)
+        assert isinstance(ccf_table, pl.DataFrame)
         if len(ccf_table) > 0:
             assert "avg_ccf" in ccf_table.columns
 
     def test_ead_handles_nan_utilization(self, ead_model, df_credit):
         """EAD gere les NaN dans utilization_rate (bug fix 2-3)."""
-        df_with_nan = df_credit.copy()
-        # Injecter des NaN supplementaires
+        # Clone and inject NaNs using Polars
         rng = np.random.default_rng(RANDOM_SEED)
-        nan_mask = rng.random(len(df_with_nan)) < 0.05
-        df_with_nan.loc[nan_mask, "utilization_rate"] = np.nan
+        nan_mask = rng.random(len(df_credit)) < 0.05
+        util_arr = df_credit["utilization_rate"].to_numpy().copy()
+        util_arr[nan_mask] = np.nan
+        df_with_nan = df_credit.with_columns(pl.Series("utilization_rate", util_arr))
         ead = ead_model.predict(df_with_nan)
         assert not np.isnan(ead).any(), "EAD contient des NaN"
         assert (ead >= 0).all(), "EAD negatives"
@@ -199,12 +199,14 @@ class TestEADModel:
 # Standalone
 # ============================================================
 
+@pytest.mark.slow
 class TestStandalone:
     def test_lgd_module_runs_standalone(self):
         """Le module lgd_model.py s'execute sans erreur."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.models.lgd_model"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.models.lgd_model"],
             capture_output=True, text=True, timeout=60,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr[-500:]}"
         assert "Validation LGD terminee" in result.stdout
@@ -212,8 +214,9 @@ class TestStandalone:
     def test_ead_module_importable(self):
         """Le module ead_model.py s'importe sans erreur."""
         result = subprocess.run(
-            [sys.executable, "-c", "from ifrs9_cockpit.models.ead_model import EADModel; print('OK')"],
+            [sys.executable, "-X", "utf8", "-c", "from ifrs9_cockpit.models.ead_model import EADModel; print('OK')"],
             capture_output=True, text=True, timeout=30,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr[-500:]}"
         assert "OK" in result.stdout

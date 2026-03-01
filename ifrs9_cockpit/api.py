@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import polars as pl
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -131,7 +132,7 @@ def _get_state() -> Dict:
         from ifrs9_cockpit.models.ead_model import EADModel
 
         # Charger donnees
-        df_credit, df_pe, df_history = generate_dataset()
+        df_credit, df_pe, df_history, _ = generate_dataset()
         _state["df_credit"] = df_credit
         _state["df_pe"] = df_pe
         _state["df_history"] = df_history
@@ -239,7 +240,7 @@ def compute(request: ComputeRequest) -> ComputeResponse:
     # 1. ECL Credit
     pd_predictions = pd_suite.predict(df_credit)
     pd_current = pd_predictions[request.selected_model]
-    pd_origination = df_credit["pd_origination"].values
+    pd_origination = df_credit["pd_origination"].to_numpy()
 
     ecl_calc = ECLCalculator(lgd_model=lgd_model, ead_model=ead_model)
     result_base = ecl_calc.calculate(df_credit, pd_current, pd_origination)
@@ -293,16 +294,17 @@ def compute(request: ComputeRequest) -> ComputeResponse:
     nav_ref = nav_total - delta_nav
     drawdown = max(0, -delta_nav) / max(nav_ref, 1)
 
-    raroc_row = raroc_eva[
-        (raroc_eva["sector"] == "Total") & (raroc_eva["canal"] == "Credit")
-    ]
-    raroc_val = float(raroc_row["raroc"].iloc[0]) if len(raroc_row) > 0 else 0.0
+    raroc_row = raroc_eva.filter(
+        (pl.col("sector") == "Total") & (pl.col("canal") == "Credit")
+    )
+    raroc_val = float(raroc_row["raroc"][0]) if len(raroc_row) > 0 else 0.0
 
     ra = analytics_state.risk_appetite_matrix
     ra_rouge = int((ra["signal"] == "rouge").sum()) if ra is not None and len(ra) > 0 else 0
     ra_signal = "rouge" if ra_rouge > 3 else "ambre" if ra_rouge > 1 else "vert"
 
-    stage_counts = result_stressed["stage"].value_counts().to_dict()
+    _vc = result_stressed["stage"].value_counts()
+    stage_counts = dict(zip(_vc["stage"].to_list(), _vc["count"].to_list()))
     stage_dist = {f"Stage {k}": int(v) for k, v in sorted(stage_counts.items())}
 
     elapsed_ms = (time.perf_counter() - t0) * 1000

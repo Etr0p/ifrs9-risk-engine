@@ -12,7 +12,7 @@ Couvre les taches :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
 from ifrs9_cockpit.analytics.metrics import ModelMetrics
@@ -157,7 +157,7 @@ class TestClassificationTable:
         """La table de classification a le bon nombre de bins."""
         y_true, y_score = binary_data
         table = ModelMetrics.classification_table(y_true, y_score, n_bins=10)
-        assert isinstance(table, pd.DataFrame)
+        assert isinstance(table, pl.DataFrame)
         assert len(table) <= 10
         assert len(table) >= 5  # Quelques bins au moins
 
@@ -172,7 +172,7 @@ class TestClassificationTable:
         """Le taux de defaut est near-monotone croissant par decile (AC 3.2)."""
         y_true, y_score = binary_data
         table = ModelMetrics.classification_table(y_true, y_score, n_bins=10)
-        default_rates = table["default_rate"].values
+        default_rates = table["default_rate"].to_numpy()
         # Compter les inversions (tolerance : max 2 inversions pour near-monotone)
         inversions = sum(1 for i in range(len(default_rates) - 1)
                         if default_rates[i] > default_rates[i + 1] + 0.01)
@@ -188,7 +188,7 @@ class TestBacktesting:
         """compute_backtesting_metrics retourne un DataFrame."""
         y_true, y_score = binary_data
         bt = ModelMetrics.compute_backtesting_metrics(y_true, y_score, n_folds=5)
-        assert isinstance(bt, pd.DataFrame)
+        assert isinstance(bt, pl.DataFrame)
         assert len(bt) > 0
 
     def test_backtesting_columns(self, binary_data):
@@ -249,10 +249,11 @@ class TestHHI:
 
 class TestComputeAll:
     def test_compute_all_keys(self, binary_data):
-        """compute_all retourne les 4 metriques."""
+        """compute_all retourne les 9 metriques."""
         y_true, y_score = binary_data
         metrics = ModelMetrics.compute_all(y_true, y_score)
-        assert set(metrics.keys()) == {"auc", "gini", "ks", "psi"}
+        expected = {"auc", "gini", "ks", "psi", "brier", "logloss", "precision", "recall", "f1"}
+        assert set(metrics.keys()) == expected
 
     def test_compute_all_with_ref(self, binary_data, random_data):
         """compute_all avec y_score_ref calcule le PSI."""

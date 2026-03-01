@@ -12,10 +12,11 @@ baisse des prix immobiliers -> hausse LTV -> hausse LGD.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, Optional
 
 from ifrs9_cockpit.config import LGD_CONFIG, RANDOM_SEED, SECTORS, SectorConfig
+from ifrs9_cockpit.utils.frame_compat import to_pandas, to_polars, ensure_numpy
 
 
 class LGDModel:
@@ -42,7 +43,7 @@ class LGDModel:
         self.sector_lgd_: Dict[str, float] = {}
         self._fitted = False
 
-    def fit(self, df: pd.DataFrame) -> LGDModel:
+    def fit(self, df) -> LGDModel:
         """Calibre les parametres LGD sur les defauts observes.
 
         Args:
@@ -52,6 +53,7 @@ class LGDModel:
         Returns:
             Self (pattern fluent).
         """
+        df = to_pandas(df)
         defaults = df[df["default_flag"] == 1].copy()
 
         if len(defaults) == 0:
@@ -88,7 +90,7 @@ class LGDModel:
     _REVOLVING_MULTIPLIER: float = 1.15
     _TERM_MULTIPLIER: float = 0.90
 
-    def _compute_base_lgd(self, df: pd.DataFrame) -> np.ndarray:
+    def _compute_base_lgd(self, df) -> np.ndarray:
         """Calcule la LGD de base (avant dispersion Beta).
 
         Ajustement credit score calibre (M1) :
@@ -130,7 +132,7 @@ class LGDModel:
 
     def predict_ttc_and_downturn(
         self,
-        df: pd.DataFrame,
+        df,
         z_stress: float = 2.0,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Calcule LGD TTC et Downturn a partir du meme tirage Beta.
@@ -153,6 +155,7 @@ class LGDModel:
         Returns:
             Tuple (lgd_ttc, lgd_downturn).
         """
+        df = to_pandas(df)
         base_lgd = self._compute_base_lgd(df)
 
         # Dispersion Beta (un seul tirage)
@@ -172,7 +175,7 @@ class LGDModel:
 
         return lgd_ttc, lgd_downturn
 
-    def predict_ttc(self, df: pd.DataFrame) -> np.ndarray:
+    def predict_ttc(self, df) -> np.ndarray:
         """Predit la LGD Through-The-Cycle pour chaque entreprise.
 
         Args:
@@ -184,7 +187,7 @@ class LGDModel:
         lgd_ttc, _ = self.predict_ttc_and_downturn(df)
         return lgd_ttc
 
-    def predict_downturn(self, df: pd.DataFrame) -> np.ndarray:
+    def predict_downturn(self, df) -> np.ndarray:
         """Predit la LGD Downturn (scenario stresse).
 
         Args:
@@ -198,7 +201,7 @@ class LGDModel:
 
     def predict(
         self,
-        df: pd.DataFrame,
+        df,
         downturn: bool = False,
         hpi_override: Optional[float] = None,
     ) -> np.ndarray:
@@ -215,6 +218,7 @@ class LGDModel:
         Returns:
             Array de LGD.
         """
+        df = to_pandas(df)
         lgd_ttc, lgd_dt = self.predict_ttc_and_downturn(df)
         lgd = lgd_dt if downturn else lgd_ttc
 
@@ -229,7 +233,7 @@ class LGDModel:
 
         return lgd
 
-    def get_summary(self, df: pd.DataFrame) -> pd.DataFrame:
+    def get_summary(self, df) -> pl.DataFrame:
         """Resume des LGD par secteur et type de pret.
 
         Args:
@@ -238,13 +242,15 @@ class LGDModel:
         Returns:
             DataFrame recapitulatif avec LGD TTC et Downturn moyennes.
         """
+        df = to_pandas(df)
         lgd_ttc, lgd_dt = self.predict_ttc_and_downturn(df)
 
+        import pandas as pd
         summary_df = df[["sector", "loan_type"]].copy()
         summary_df["lgd_ttc"] = lgd_ttc
         summary_df["lgd_downturn"] = lgd_dt
 
-        return (
+        result_pd = (
             summary_df.groupby(["sector", "loan_type"])
             .agg(
                 count=("lgd_ttc", "size"),
@@ -255,8 +261,9 @@ class LGDModel:
             .round(4)
             .reset_index()
         )
+        return pl.from_pandas(result_pd)
 
-    def _simulate_realized_lgd(self, df: pd.DataFrame) -> np.ndarray:
+    def _simulate_realized_lgd(self, df) -> np.ndarray:
         """Simule des LGD realisees pour calibrer le modele.
 
         Args:
@@ -345,7 +352,7 @@ if __name__ == "__main__":
 
     # 1. Data
     print("\n[1/3] Generation des donnees...")
-    df_credit, _, _ = generate_dataset()
+    df_credit, _, _, _ = generate_dataset()
     print(f"       {len(df_credit):,} entreprises | DR = {df_credit['default_flag'].mean():.2%}")
 
     # 2. Fit
@@ -366,6 +373,6 @@ if __name__ == "__main__":
     # Summary
     print("\n--- Resume par secteur/type ---")
     summary = model.get_summary(df_credit)
-    print(summary.to_string(index=False))
+    print(summary.to_pandas().to_string(index=False))
 
     print("\nValidation LGD terminee.")

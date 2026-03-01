@@ -12,10 +12,11 @@ Pour les prets a terme, EAD = encours courant (CCF = 1.0).
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict
 
 from ifrs9_cockpit.config import EAD_CONFIG, RANDOM_SEED, SECTORS
+from ifrs9_cockpit.utils.frame_compat import to_pandas, to_polars, ensure_numpy
 
 
 class EADModel:
@@ -42,7 +43,7 @@ class EADModel:
         self.avg_ccf_by_type_: Dict[str, float] = {}
         self._fitted = False
 
-    def fit(self, df: pd.DataFrame) -> EADModel:
+    def fit(self, df) -> EADModel:
         """Calibre les CCF par type de pret.
 
         Args:
@@ -61,7 +62,7 @@ class EADModel:
 
     def predict(
         self,
-        df: pd.DataFrame,
+        df,
         stressed: bool = False,
     ) -> np.ndarray:
         """Calcule l'EAD pour chaque entreprise.
@@ -79,6 +80,7 @@ class EADModel:
         Returns:
             Array d'EAD en euros.
         """
+        df = to_pandas(df)
         n = len(df)
         loan_amount = df["loan_amount"].values.astype(float)
         utilization = df["utilization_rate"].values.astype(float)
@@ -118,7 +120,7 @@ class EADModel:
 
         return np.maximum(ead, 0)
 
-    def get_summary(self, df: pd.DataFrame) -> pd.DataFrame:
+    def get_summary(self, df) -> pl.DataFrame:
         """Resume des EAD par secteur et type de pret.
 
         Args:
@@ -127,15 +129,17 @@ class EADModel:
         Returns:
             DataFrame recapitulatif avec EAD base et stressee.
         """
+        df = to_pandas(df)
         ead_base = self.predict(df, stressed=False)
         ead_stress = self.predict(df, stressed=True)
 
+        import pandas as pd
         summary_df = df[["sector", "loan_type"]].copy()
         summary_df["ead_base"] = ead_base
         summary_df["ead_stressed"] = ead_stress
         summary_df["loan_amount"] = df["loan_amount"].values
 
-        return (
+        result_pd = (
             summary_df.groupby(["sector", "loan_type"])
             .agg(
                 count=("ead_base", "size"),
@@ -147,8 +151,9 @@ class EADModel:
             .round(2)
             .reset_index()
         )
+        return pl.from_pandas(result_pd)
 
-    def get_ccf_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
+    def get_ccf_analysis(self, df) -> pl.DataFrame:
         """Analyse des CCF implicites par secteur.
 
         Args:
@@ -157,9 +162,10 @@ class EADModel:
         Returns:
             DataFrame avec CCF implicites par secteur.
         """
+        df = to_pandas(df)
         revolving = df[df["loan_type"] == "Revolving"].copy()
         if len(revolving) == 0:
-            return pd.DataFrame()
+            return pl.DataFrame()
 
         ead = self.predict(revolving, stressed=False)
         drawn = revolving["loan_amount"].values * revolving["utilization_rate"].values
@@ -175,7 +181,7 @@ class EADModel:
         revolving["undrawn"] = undrawn
         revolving["ead"] = ead
 
-        return (
+        result_pd = (
             revolving.groupby("sector")
             .agg(
                 count=("ccf_implicit", "size"),
@@ -188,3 +194,4 @@ class EADModel:
             .round(4)
             .reset_index()
         )
+        return pl.from_pandas(result_pd)

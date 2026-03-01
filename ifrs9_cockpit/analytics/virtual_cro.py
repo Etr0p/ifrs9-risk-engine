@@ -14,7 +14,7 @@ commentaires contextualisés avec 5 règles d'alerte :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
@@ -75,7 +75,7 @@ class VirtualCRO:
 
     def analyze(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
         ecl_previous: Optional[float] = None,
         psi_value: float = 0.0,
         unemployment_rate: float = 7.5,
@@ -120,7 +120,7 @@ class VirtualCRO:
 
     def generate_report(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
         ecl_previous: Optional[float] = None,
         psi_value: float = 0.0,
         unemployment_rate: float = 7.5,
@@ -174,7 +174,7 @@ class VirtualCRO:
 
     def get_executive_summary(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
         unemployment_rate: float = 7.5,
         gdp_growth: float = 1.2,
     ) -> Dict[str, object]:
@@ -192,29 +192,33 @@ class VirtualCRO:
         ead_total = result_df["ead"].sum()
         n_total = len(result_df)
 
-        stages = result_df["stage"].values
+        stages = result_df["stage"].to_numpy()
         stage_dist = {
             f"stage_{s}": int((stages == s).sum())
             for s in [1, 2, 3]
         }
         stage_pct = {
-            f"stage_{s}_pct": round((stages == s).mean(), 4)
+            f"stage_{s}_pct": round(float((stages == s).mean()), 4)
             for s in [1, 2, 3]
         }
 
         # ECL par segment
-        ecl_by_segment = (
-            result_df.groupby("segment")["ecl_weighted"]
-            .sum()
-            .to_dict()
+        _ecl_agg = result_df.group_by("segment").agg(
+            pl.col("ecl_weighted").sum(),
+        )
+        ecl_by_segment = dict(
+            zip(
+                _ecl_agg["segment"].to_list(),
+                _ecl_agg["ecl_weighted"].to_list(),
+            )
         )
 
         # Segment le plus risqué
         coverage_by_segment = {}
-        for seg in result_df["segment"].unique():
-            mask = result_df["segment"] == seg
-            seg_ecl = result_df.loc[mask, "ecl_weighted"].sum()
-            seg_ead = result_df.loc[mask, "ead"].sum()
+        for seg in result_df["segment"].unique().to_list():
+            seg_df = result_df.filter(pl.col("segment") == seg)
+            seg_ecl = seg_df["ecl_weighted"].sum()
+            seg_ead = seg_df["ead"].sum()
             coverage_by_segment[seg] = seg_ecl / seg_ead if seg_ead > 0 else 0
 
         riskiest_segment = max(coverage_by_segment, key=coverage_by_segment.get)
@@ -240,7 +244,7 @@ class VirtualCRO:
 
     def _rule_ecl_variation(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
         ecl_previous: Optional[float],
     ) -> List[CROAlert]:
         """Règle 1 : Variation ECL > seuil → ALERTE.
@@ -284,7 +288,7 @@ class VirtualCRO:
 
     def _rule_segment_analysis(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
         unemployment_rate: float,
         gdp_growth: float,
     ) -> List[CROAlert]:
@@ -301,16 +305,15 @@ class VirtualCRO:
         alerts: List[CROAlert] = []
 
         for seg in SEGMENTS:
-            mask = result_df["segment"] == seg.name
-            if mask.sum() == 0:
+            seg_data = result_df.filter(pl.col("segment") == seg.name)
+            if len(seg_data) == 0:
                 continue
 
-            seg_data = result_df[mask]
             seg_ecl = seg_data["ecl_weighted"].sum()
             seg_ead = seg_data["ead"].sum()
             coverage = seg_ecl / seg_ead if seg_ead > 0 else 0
-            stage2_pct = (seg_data["stage"] == 2).mean()
-            stage3_pct = (seg_data["stage"] == 3).mean()
+            stage2_pct = (seg_data["stage"].to_numpy() == 2).mean()
+            stage3_pct = (seg_data["stage"].to_numpy() == 3).mean()
             total_ecl = result_df["ecl_weighted"].sum()
             ecl_contribution = seg_ecl / total_ecl if total_ecl > 0 else 0
 
@@ -356,7 +359,7 @@ class VirtualCRO:
 
     def _rule_stage2_concentration(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
     ) -> List[CROAlert]:
         """Règle 3 : Part Stage 2 > seuil → WARNING.
 
@@ -428,7 +431,7 @@ class VirtualCRO:
 
     def _rule_recommended_actions(
         self,
-        result_df: pd.DataFrame,
+        result_df: pl.DataFrame,
         existing_alerts: List[CROAlert],
     ) -> List[CROAlert]:
         """Règle 5 : Synthèse des actions recommandées.

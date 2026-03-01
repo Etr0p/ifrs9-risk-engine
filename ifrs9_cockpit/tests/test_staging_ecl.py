@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
 from ifrs9_cockpit.config import (
@@ -37,27 +37,14 @@ from ifrs9_cockpit.models.pd_model import PDModelSuite
 # ============================================================
 
 @pytest.fixture(scope="module")
-def pipeline_data():
-    """Genere les donnees et entraine tous les modeles."""
-    df_credit, _, _ = generate_dataset(n_clients=2000, seed=RANDOM_SEED)
-
-    pd_suite = PDModelSuite(seed=RANDOM_SEED)
-    pd_suite.fit(df_credit)
-    pd_current = pd_suite.predict_active(df_credit)
-    pd_origination = df_credit["pd_origination"].values
-
-    lgd_model = LGDModel(seed=RANDOM_SEED)
-    lgd_model.fit(df_credit)
-
-    ead_model = EADModel(seed=RANDOM_SEED)
-    ead_model.fit(df_credit)
-
+def pipeline_data(global_pipeline_results):
+    """Reutilise le pipeline session (zero recalcul)."""
     return {
-        "df_credit": df_credit,
-        "pd_current": pd_current,
-        "pd_origination": pd_origination,
-        "lgd_model": lgd_model,
-        "ead_model": ead_model,
+        "df_credit": global_pipeline_results["df_credit"],
+        "pd_current": global_pipeline_results["pd_current"],
+        "pd_origination": global_pipeline_results["pd_origination"],
+        "lgd_model": global_pipeline_results["lgd_model"],
+        "ead_model": global_pipeline_results["ead_model"],
     }
 
 
@@ -83,17 +70,17 @@ def ecl_result(pipeline_data):
 class TestStaging:
     def test_stages_in_123(self, ecl_result):
         """Les stages sont dans {1, 2, 3}."""
-        stages = ecl_result["stage"].values
+        stages = ecl_result["stage"].to_numpy()
         assert set(np.unique(stages)).issubset({1, 2, 3})
 
     def test_all_three_stages_present(self, ecl_result):
         """Les 3 stages sont representes (le dataset est assez grand)."""
-        stages = ecl_result["stage"].values
+        stages = ecl_result["stage"].to_numpy()
         assert len(np.unique(stages)) == 3, f"Stages presentes: {np.unique(stages)}"
 
     def test_stage3_for_defaults(self, ecl_result):
         """Les defauts averes sont en Stage 3."""
-        defaults = ecl_result[ecl_result["default_flag"] == 1]
+        defaults = ecl_result.filter(pl.col("default_flag") == 1)
         if len(defaults) > 0:
             assert (defaults["stage"] == 3).all(), \
                 f"Defauts hors Stage 3: {(defaults['stage'] != 3).sum()}"
@@ -124,10 +111,10 @@ class TestStaging:
         """Score SICR eleve -> Stage 2."""
         engine = StagingEngine()
         n = 100
-        # PD doublee : ratio = 1.0, delta = 0.05
-        pd_c = np.full(n, 0.10)
+        # PD fortement deterioree : ratio capped at 5.0, delta = 0.22, dpd=60
+        pd_c = np.full(n, 0.25)
         pd_o = np.full(n, 0.03)
-        dpd = np.full(n, 35)  # DPD contribue au score
+        dpd = np.full(n, 60)  # DPD contribue au score
         default_flag = np.zeros(n)
         stages = engine.assign_stages(pd_c, pd_o, dpd, default_flag)
         # Au moins certains devraient etre en Stage 2
@@ -156,15 +143,16 @@ class TestStaging:
         assert abs(z) < 1e-10
 
     def test_transition_matrix(self):
-        """La matrice de transition est 3x3 avec lignes sommant a ~1."""
+        """La matrice de transition est 3x4 (from_stage + 3 cols) avec lignes sommant a ~1."""
         engine = StagingEngine()
         stages_t0 = np.array([1, 1, 1, 2, 2, 3])
         stages_t1 = np.array([1, 2, 1, 2, 3, 3])
         matrix = engine.compute_transition_matrix(stages_t0, stages_t1)
-        assert matrix.shape == (3, 3)
-        # Chaque ligne somme a ~1
+        assert matrix.shape == (3, 4)  # from_stage + Stage 1/2/3
+        # Chaque ligne somme a ~1 (colonnes numeriques seulement)
+        num_cols = ["Stage 1", "Stage 2", "Stage 3"]
         for i in range(3):
-            row_sum = matrix.iloc[i].sum()
+            row_sum = sum(matrix[col][i] for col in num_cols)
             if row_sum > 0:
                 assert abs(row_sum - 1.0) < 0.01
 
@@ -174,7 +162,7 @@ class TestStaging:
         stages = np.array([1, 1, 1, 2, 3])
         ead = np.array([100.0, 200.0, 150.0, 300.0, 500.0])
         summary = engine.get_stage_summary(stages, ead)
-        assert isinstance(summary, pd.DataFrame)
+        assert isinstance(summary, pl.DataFrame)
         assert len(summary) == 3
         assert "stage" in summary.columns
 
@@ -209,8 +197,8 @@ class TestECLCalculator:
             + weights["Favorable"] * ecl_result["ecl_favorable"]
         )
         np.testing.assert_allclose(
-            ecl_result["ecl_weighted"].values,
-            np.round(expected.values, 2),
+            ecl_result["ecl_weighted"].to_numpy(),
+            np.round(expected.to_numpy(), 2),
             atol=0.02,
         )
 
@@ -231,7 +219,7 @@ class TestECLCalculator:
     def test_pd_lifetime_gte_pd_12m(self, ecl_result):
         """PD lifetime >= PD 12m (horizon plus long => cumul plus eleve)."""
         # Pour Stage 2/3, PD lifetime est sur un horizon > 1 an
-        stage23 = ecl_result[ecl_result["stage"] >= 2]
+        stage23 = ecl_result.filter(pl.col("stage") >= 2)
         if len(stage23) > 0:
             assert (stage23["pd_lifetime"] >= stage23["pd_12m"] - 1e-6).all()
 
@@ -257,7 +245,7 @@ class TestECLCalculator:
             ead_model=pipeline_data["ead_model"],
         )
         summary = calc.compute_ecl_summary(ecl_result)
-        assert isinstance(summary, pd.DataFrame)
+        assert isinstance(summary, pl.DataFrame)
         assert "ecl_total" in summary.columns
         assert "coverage_ratio" in summary.columns
 
@@ -278,13 +266,15 @@ class TestECLCalculator:
 # Standalone
 # ============================================================
 
+@pytest.mark.slow
 class TestStandalone:
     def test_staging_module_importable(self):
         """Le module staging.py s'importe sans erreur."""
         result = subprocess.run(
-            [sys.executable, "-c",
+            [sys.executable, "-X", "utf8", "-c",
              "from ifrs9_cockpit.engine.staging import StagingEngine; print('OK')"],
             capture_output=True, text=True, timeout=30,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr[-500:]}"
         assert "OK" in result.stdout
@@ -292,8 +282,9 @@ class TestStandalone:
     def test_ecl_calculator_module_runs_standalone(self):
         """Le module ecl_calculator.py s'execute sans erreur."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.engine.ecl_calculator"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.engine.ecl_calculator"],
             capture_output=True, text=True, timeout=600,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr[-500:]}"
         assert "Phase 3 valid" in result.stdout

@@ -9,7 +9,7 @@ les indicateurs d'alerte precoce composites.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, List, Optional
 
 from ifrs9_cockpit.config import (
@@ -46,7 +46,7 @@ def project_trajectories(
     regime: Optional[RegimeClassification] = None,
     n_months: int = 12,
     seed: int = 42,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """Projette les trajectoires macro via Ornstein-Uhlenbeck (mean-reversion) (FR30).
 
     Processus O-U discret :
@@ -112,13 +112,13 @@ def project_trajectories(
 
             records.append(row)
 
-    return pd.DataFrame(records)
+    return pl.DataFrame(records)
 
 
 def compute_risk_appetite(
-    result_credit: pd.DataFrame,
-    result_pe: pd.DataFrame,
-) -> pd.DataFrame:
+    result_credit: pl.DataFrame,
+    result_pe: pl.DataFrame,
+) -> pl.DataFrame:
     """Calcule les feux tricolores du risk appetite par cellule (FR30).
 
     10 cellules (5 secteurs x 2 canaux) x 3 metriques (ECL/EAD, RAROC proxy, HHI).
@@ -137,8 +137,7 @@ def compute_risk_appetite(
         name = sector.name
 
         # -- Credit --
-        mask_c = result_credit["sector"].values == name
-        df_c = result_credit.loc[mask_c]
+        df_c = result_credit.filter(pl.col("sector") == name)
 
         if len(df_c) > 0:
             ead = df_c["ead"].sum()
@@ -158,8 +157,7 @@ def compute_risk_appetite(
             })
 
         # -- PE --
-        mask_p = result_pe["sector"].values == name
-        df_p = result_pe.loc[mask_p]
+        df_p = result_pe.filter(pl.col("sector") == name)
 
         if len(df_p) > 0:
             drawdown = df_p["nav_drawdown"].mean()
@@ -176,14 +174,14 @@ def compute_risk_appetite(
                 "signal": signal_dd,
             })
 
-    return pd.DataFrame(records)
+    return pl.DataFrame(records)
 
 
 def compute_early_warning(
-    result_credit: pd.DataFrame,
-    result_pe: pd.DataFrame,
+    result_credit: pl.DataFrame,
+    result_pe: pl.DataFrame,
     macro_params: Dict[str, float],
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """Calcule les indicateurs d'alerte precoce composites (FR30).
 
     Combine les signaux de deterioration credit et PE en un score
@@ -211,15 +209,13 @@ def compute_early_warning(
         name = sector.name
 
         # Credit deterioration
-        mask_c = result_credit["sector"].values == name
-        df_c = result_credit.loc[mask_c]
+        df_c = result_credit.filter(pl.col("sector") == name)
         pd_mean = df_c["pd_12m"].mean() if len(df_c) > 0 else 0
         s2_pct = (df_c["stage"] == 2).mean() if len(df_c) > 0 else 0
         s3_pct = (df_c["stage"] == 3).mean() if len(df_c) > 0 else 0
 
         # PE deterioration
-        mask_p = result_pe["sector"].values == name
-        df_p = result_pe.loc[mask_p]
+        df_p = result_pe.filter(pl.col("sector") == name)
         drawdown = df_p["nav_drawdown"].mean() if len(df_p) > 0 else 0
         distress_pct = (df_p["risk_category"] == "Distressed").mean() if len(df_p) > 0 else 0
 
@@ -255,7 +251,7 @@ def compute_early_warning(
             "macro_stress": round(macro_stress, 2),
         })
 
-    return pd.DataFrame(records)
+    return pl.DataFrame(records)
 
 
 def _regime_drift(var: str, regime: str, time_scale: float) -> float:
@@ -271,6 +267,7 @@ def _regime_drift(var: str, regime: str, time_scale: float) -> float:
 
 
 if __name__ == "__main__":
+    import pandas as pd
     from ifrs9_cockpit.data.generator import generate_dataset
     from ifrs9_cockpit.models.pd_model import PDModelSuite
     from ifrs9_cockpit.engine.ecl_calculator import ECLCalculator
@@ -284,7 +281,7 @@ if __name__ == "__main__":
 
     # Pipeline
     print("\n[1/4] Pipelines credit/PE...")
-    df_credit, df_pe, _ = generate_dataset()
+    df_credit, df_pe, _, _ = generate_dataset()
     pd_suite = PDModelSuite()
     pd_suite.fit(df_credit)
     pd_current = pd_suite.predict_active(df_credit)
@@ -311,17 +308,17 @@ if __name__ == "__main__":
     # Couche 5 — Trajectoires (Ornstein-Uhlenbeck)
     print("\n[3/4] Couche 5 — Trajectoires O-U T+3/6/9/12...")
     traj = project_trajectories(macro_params, regime)
-    print(traj.to_string(index=False))
+    print(traj.to_pandas().to_string(index=False))
 
     # Risk appetite
     print("\n[4/4] Risk appetite (feux tricolores)...")
     ra = compute_risk_appetite(result_credit, result_pe)
-    print(ra.to_string(index=False))
+    print(ra.to_pandas().to_string(index=False))
 
     # Early warning
     print("\n--- Early Warning ---")
     ew = compute_early_warning(result_credit, result_pe, macro_params)
-    print(ew.to_string(index=False))
+    print(ew.to_pandas().to_string(index=False))
 
     # Validations
     print("\n--- Validations ---")
@@ -347,7 +344,7 @@ if __name__ == "__main__":
     print(f"  [{status}] Early warning : 5 secteurs ({len(ew)})")
     all_ok &= ok
 
-    ok = all(0 <= v <= 1 for v in ew["ew_score"])
+    ok = all(0 <= v <= 1 for v in ew["ew_score"].to_list())
     status = "PASS" if ok else "FAIL"
     print(f"  [{status}] EW scores dans [0,1] "
           f"(min={ew['ew_score'].min():.4f}, max={ew['ew_score'].max():.4f})")

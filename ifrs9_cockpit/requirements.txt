@@ -1,5 +1,6 @@
 numpy
 pandas
+polars>=1.0
 scipy
 scikit-learn
 statsmodels
@@ -18,3 +19,8 @@ structlog
 # --- Dash Frontend ---
 dash>=2.14
 dash-bootstrap-components>=1.5
+# --- Causal ML (Etape 3) ---
+econml>=0.15
+dowhy>=0.11
+lifelines>=0.29
+graphviz

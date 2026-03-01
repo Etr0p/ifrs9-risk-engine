@@ -188,7 +188,7 @@ class TestDefaultFlag:
 
     def test_global_default_rate_reasonable(self, df_credit):
         dr = df_credit["default_flag"].mean()
-        assert 0.02 <= dr <= 0.12, f"Taux de défaut global: {dr:.2%}"
+        assert 0.005 <= dr <= 0.08, f"Taux de défaut global: {dr:.2%}"
 
     def test_tech_higher_default_rate(self, df_credit):
         """Technologie doit avoir un taux de défaut élevé (poche de vulnérabilité)."""
@@ -274,8 +274,9 @@ class TestRealism:
 class TestUtilitiesAndReproducibility:
     def test_generate_dataset_function(self):
         result = generate_dataset(n_clients=100, seed=42)
-        assert len(result) == 3
+        assert len(result) == 4  # df_credit, df_pe, df_history, df_balance_sheet
         assert len(result[0]) == 100
+        assert len(result[3]) == 14  # 14 asset classes
 
     def test_reproducibility(self):
         """Deux exécutions avec le même seed produisent le même résultat."""
@@ -298,8 +299,9 @@ class TestUtilitiesAndReproducibility:
 
     def test_standalone_runs(self):
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.data.generator"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.data.generator"],
             capture_output=True, text=True, timeout=60,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
         assert "Generation valide" in result.stdout

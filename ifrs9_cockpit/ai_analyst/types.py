@@ -7,9 +7,9 @@ types au lieu de naviguer un dictionnaire opaque.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-import pandas as pd
+import polars as pl
 
 
 @dataclass
@@ -85,36 +85,37 @@ class AnalyticsState:
     """
 
     # Couche 1 — Croisement
-    asymmetry_matrix: Optional[pd.DataFrame] = None
-    marginal_contributions: Optional[pd.DataFrame] = None
+    asymmetry_matrix: Optional[pl.DataFrame] = None
+    marginal_contributions: Optional[pl.DataFrame] = None
 
     # Couche 2 — Allocation proportionnelle
-    proportional_contributions: Optional[pd.DataFrame] = None
-    factor_attribution: Optional[pd.DataFrame] = None
+    proportional_contributions: Optional[pl.DataFrame] = None
+    factor_attribution: Optional[pl.DataFrame] = None
 
     # Couche 3 — Seuils & RST
-    tipping_points: Optional[pd.DataFrame] = None
+    tipping_points: Optional[pl.DataFrame] = None
     rst_result: Optional[Dict[str, float]] = None
     rst_distance: float = 0.0
+    pareto_front: Optional[List[Dict]] = None
 
     # Couche 4 — Regime
     regime: Optional[RegimeClassification] = None
 
     # Couche 5 — Prospective
-    trajectories: Optional[pd.DataFrame] = None
-    risk_appetite_matrix: Optional[pd.DataFrame] = None
-    early_warning: Optional[pd.DataFrame] = None
+    trajectories: Optional[pl.DataFrame] = None
+    risk_appetite_matrix: Optional[pl.DataFrame] = None
+    early_warning: Optional[pl.DataFrame] = None
 
     # Synthese
     recommendations: List[Recommendation] = field(default_factory=list)
-    narrative: str = ""
+    narrative: Any = ""
     pass_number: int = 1
 
     # Backward-compat aliases (RJ audit: Euler → Proportional)
     @property
-    def euler_contributions(self) -> Optional[pd.DataFrame]:
+    def euler_contributions(self) -> Optional[pl.DataFrame]:
         return self.proportional_contributions
 
     @euler_contributions.setter
-    def euler_contributions(self, value: Optional[pd.DataFrame]) -> None:
+    def euler_contributions(self, value: Optional[pl.DataFrame]) -> None:
         self.proportional_contributions = value

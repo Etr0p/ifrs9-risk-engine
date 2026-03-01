@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import List, Tuple
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
 from ifrs9_cockpit.config import (
@@ -24,6 +24,7 @@ from ifrs9_cockpit.config import (
     REQUIRED_PE_COLS,
     SECTORS,
 )
+from ifrs9_cockpit.data.generator import generate_dataset
 
 
 # ──────────────────────────────────────────────
@@ -57,7 +58,7 @@ def _check(name: str, condition: bool, detail: str = "") -> bool:
 # VALIDATION DU REALISME (FR4)
 # ──────────────────────────────────────────────
 
-def validate_realism(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
+def validate_realism(df_credit: pl.DataFrame, df_pe: pl.DataFrame) -> bool:
     """Valide les ordres de grandeur des donnees generees.
 
     Verifie par secteur que les PD, multiples PE, et distributions
@@ -72,11 +73,11 @@ def validate_realism(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
     """
     ok = True
 
-    # PD par secteur : 2-15% (FR4) — tolerance 1-20% pour variabilite stochastique
+    # PD par secteur — tolerance 0.5-15% pour variabilite stochastique (EBA-calibrated base rates)
     for sector in SECTORS:
-        mask = df_credit["sector"] == sector.name
-        dr = df_credit.loc[mask, "default_flag"].mean()
-        passed = 0.01 <= dr <= 0.20
+        sec_df = df_credit.filter(pl.col("sector") == sector.name)
+        dr = sec_df["default_flag"].mean()
+        passed = 0.005 <= dr <= 0.15
         ok &= _check(
             f"PD {sector.name}",
             passed,
@@ -85,8 +86,8 @@ def validate_realism(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
 
     # Multiples PE par secteur : dans la fourchette config
     for sector in SECTORS:
-        mask = df_pe["sector"] == sector.name
-        multiples = df_pe.loc[mask, "entry_multiple"]
+        sec_pe = df_pe.filter(pl.col("sector") == sector.name)
+        multiples = sec_pe["entry_multiple"]
         lo, hi = sector.entry_multiple_range
         in_range = (multiples >= lo).all() and (multiples <= hi).all()
         ok &= _check(
@@ -96,10 +97,14 @@ def validate_realism(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
         )
 
     # Correlations plausibles (v4: credit_score genere independamment, correlation faible)
-    corr_cs_dr = df_credit[["credit_score", "debt_ratio"]].corr().iloc[0, 1]
+    corr_cs_dr = np.corrcoef(
+        df_credit["credit_score"].to_numpy(), df_credit["debt_ratio"].to_numpy()
+    )[0, 1]
     ok &= _check("Corr credit_score/debt_ratio faible", abs(corr_cs_dr) < 0.3, f"{corr_cs_dr:.3f}")
 
-    corr_rev_ebitda = df_credit[["revenue", "ebitda"]].corr().iloc[0, 1]
+    corr_rev_ebitda = np.corrcoef(
+        df_credit["revenue"].to_numpy(), df_credit["ebitda"].to_numpy()
+    )[0, 1]
     ok &= _check("Corr revenue/ebitda > 0.5", corr_rev_ebitda > 0.5, f"{corr_rev_ebitda:.3f}")
 
     return ok
@@ -109,7 +114,7 @@ def validate_realism(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
 # INVARIANTS FINANCIERS (FR56)
 # ──────────────────────────────────────────────
 
-def validate_invariants(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
+def validate_invariants(df_credit: pl.DataFrame, df_pe: pl.DataFrame) -> bool:
     """Valide les invariants financiers sur les donnees generees.
 
     Args:
@@ -183,9 +188,9 @@ def validate_invariants(df_credit: pd.DataFrame, df_pe: pd.DataFrame) -> bool:
 # ──────────────────────────────────────────────
 
 def validate_contracts(
-    df_credit: pd.DataFrame,
-    df_pe: pd.DataFrame,
-    df_history: pd.DataFrame,
+    df_credit: pl.DataFrame,
+    df_pe: pl.DataFrame,
+    df_history: pl.DataFrame,
 ) -> bool:
     """Valide les contrats DataFrame AR4 et la coherence inter-modules.
 
@@ -234,7 +239,7 @@ def validate_contracts(
 # INVARIANTS POST-PIPELINE (framework pour stories 2.x+)
 # ──────────────────────────────────────────────
 
-def validate_ecl_results(df_results: pd.DataFrame) -> bool:
+def validate_ecl_results(df_results: pl.DataFrame) -> bool:
     """Valide les invariants sur les resultats ECL du pipeline credit.
 
     A appeler apres le calcul ECL (Stories 2.x). Verifie :
@@ -319,11 +324,13 @@ def print_report() -> Tuple[int, int]:
 # ──────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
-def generated_data():
-    """Genere les 3 DataFrames pour les tests d'invariants."""
-    from ifrs9_cockpit.data.generator import generate_dataset
-    df_credit, df_pe, df_history = generate_dataset(seed=RANDOM_SEED)
-    return df_credit, df_pe, df_history
+def generated_data(global_pipeline_results):
+    """Reutilise le pipeline session (zero recalcul)."""
+    return (
+        global_pipeline_results["df_credit"],
+        global_pipeline_results["df_pe"],
+        global_pipeline_results["df_history"],
+    )
 
 
 class TestRealism:
@@ -333,8 +340,8 @@ class TestRealism:
         """PD par secteur dans [1%, 20%] (FR4)."""
         df_credit, _, _ = generated_data
         for sector in SECTORS:
-            mask = df_credit["sector"] == sector.name
-            dr = df_credit.loc[mask, "default_flag"].mean()
+            sec_df = df_credit.filter(pl.col("sector") == sector.name)
+            dr = sec_df["default_flag"].mean()
             assert 0.01 <= dr <= 0.20, (
                 f"PD {sector.name} = {dr:.2%}, hors [1%, 20%]"
             )
@@ -343,8 +350,8 @@ class TestRealism:
         """Multiples PE dans la fourchette config par secteur."""
         _, df_pe, _ = generated_data
         for sector in SECTORS:
-            mask = df_pe["sector"] == sector.name
-            multiples = df_pe.loc[mask, "entry_multiple"]
+            sec_df = df_pe.filter(pl.col("sector") == sector.name)
+            multiples = sec_df["entry_multiple"]
             lo, hi = sector.entry_multiple_range
             assert (multiples >= lo).all() and (multiples <= hi).all(), (
                 f"Multiple PE {sector.name} hors [{lo}, {hi}]"
@@ -353,13 +360,19 @@ class TestRealism:
     def test_corr_credit_score_debt_ratio_weak(self, generated_data):
         """Correlation credit_score / debt_ratio faible (bridge genere independamment)."""
         df_credit, _, _ = generated_data
-        corr = df_credit[["credit_score", "debt_ratio"]].corr().iloc[0, 1]
+        corr = np.corrcoef(
+            df_credit["credit_score"].to_numpy(),
+            df_credit["debt_ratio"].to_numpy(),
+        )[0, 1]
         assert abs(corr) < 0.3, f"Corr credit_score/debt_ratio = {corr:.3f} trop forte"
 
     def test_corr_revenue_ebitda_positive(self, generated_data):
         """Correlation revenue / ebitda > 0.5."""
         df_credit, _, _ = generated_data
-        corr = df_credit[["revenue", "ebitda"]].corr().iloc[0, 1]
+        corr = np.corrcoef(
+            df_credit["revenue"].to_numpy(),
+            df_credit["ebitda"].to_numpy(),
+        )[0, 1]
         assert corr > 0.5, f"Corr revenue/ebitda = {corr:.3f} <= 0.5"
 
 
@@ -433,38 +446,51 @@ class TestFinancialInvariants:
 
 
 class TestContractsAR4:
-    """Tests des contrats DataFrame AR4."""
+    """Tests des contrats DataFrame AR4.
 
-    def test_required_credit_cols(self, generated_data):
+    Ces tests verifient les contrats de taille exacte (N_CLIENTS=30000).
+    Ils utilisent leur propre fixture independante au lieu de la session
+    partagee (qui genere 1000 clients pour la rapidite).
+    """
+
+    @pytest.fixture(scope="class")
+    def contract_data(self):
+        """Genere un dataset a la taille N_CLIENTS pour valider les contrats de shape."""
+        df_credit, df_pe, df_history, _ = generate_dataset(
+            n_clients=N_CLIENTS, seed=RANDOM_SEED
+        )
+        return df_credit, df_pe, df_history
+
+    def test_required_credit_cols(self, contract_data):
         """REQUIRED_CREDIT_COLS presentes dans df_credit."""
-        df_credit, _, _ = generated_data
+        df_credit, _, _ = contract_data
         missing = REQUIRED_CREDIT_COLS - set(df_credit.columns)
         assert not missing, f"Colonnes credit manquantes : {missing}"
 
-    def test_required_pe_cols(self, generated_data):
+    def test_required_pe_cols(self, contract_data):
         """REQUIRED_PE_COLS presentes dans df_pe."""
-        _, df_pe, _ = generated_data
+        _, df_pe, _ = contract_data
         missing = REQUIRED_PE_COLS - set(df_pe.columns)
         assert not missing, f"Colonnes PE manquantes : {missing}"
 
-    def test_df_credit_shape(self, generated_data):
+    def test_df_credit_shape(self, contract_data):
         """df_credit a N_CLIENTS lignes."""
-        df_credit, _, _ = generated_data
+        df_credit, _, _ = contract_data
         assert len(df_credit) == N_CLIENTS
 
-    def test_df_pe_shape(self, generated_data):
+    def test_df_pe_shape(self, contract_data):
         """df_pe a N_CLIENTS lignes."""
-        _, df_pe, _ = generated_data
+        _, df_pe, _ = contract_data
         assert len(df_pe) == N_CLIENTS
 
-    def test_df_history_shape(self, generated_data):
+    def test_df_history_shape(self, contract_data):
         """df_history a N_CLIENTS x N_MONTHS lignes."""
-        _, _, df_history = generated_data
+        _, _, df_history = contract_data
         assert len(df_history) == N_CLIENTS * N_MONTHS
 
-    def test_enterprise_ids_coherent(self, generated_data):
+    def test_enterprise_ids_coherent(self, contract_data):
         """enterprise_id coherent entre df_credit et df_pe."""
-        df_credit, df_pe, _ = generated_data
+        df_credit, df_pe, _ = contract_data
         assert set(df_credit["enterprise_id"]) == set(df_pe["enterprise_id"])
 
 

@@ -38,9 +38,11 @@ L'analyste peut selectionner le modele actif (FR6) via select_model().
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+from ifrs9_cockpit.utils.frame_compat import to_pandas, to_polars
 
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.linear_model import LogisticRegression
@@ -59,6 +61,15 @@ from ifrs9_cockpit.config import (
     RANDOM_SEED,
     TARGET,
     TRAIN_RATIO,
+)
+from ifrs9_cockpit.config.models import (
+    CORPORATE_INTERACTION_FEATURES,
+    DEBT_HI_THRESHOLD,
+    VOL_HI_THRESHOLD,
+    ICR_LO_THRESHOLD,
+    MARGIN_LO_THRESHOLD,
+    UTIL_HI_THRESHOLD,
+    NDE_QUAD_THRESHOLD,
 )
 from ifrs9_cockpit.models.woe import WoEBinner
 from ifrs9_cockpit.analytics.metrics import ModelMetrics
@@ -213,21 +224,39 @@ class PDModelSuite:
 
     AVAILABLE_MODELS: Tuple[str, ...] = ("LR_WoE", "TabNet", "XGBoost")
 
-    def __init__(self, seed: int = RANDOM_SEED) -> None:
+    def __init__(
+        self,
+        seed: int = RANDOM_SEED,
+        numerical_features: Optional[List[str]] = None,
+        categorical_features: Optional[List[str]] = None,
+        available_models: Optional[Tuple[str, ...]] = None,
+        clipping_bounds: Optional[Dict[str, Tuple[Optional[float], Optional[float]]]] = None,
+        tabnet_variant: str = "full",
+    ) -> None:
         """Initialise la suite de modeles.
 
         Args:
             seed: Graine pour reproductibilite.
+            numerical_features: Liste de features numeriques (defaut: NUMERICAL_FEATURES corporate).
+            categorical_features: Liste de features categorielles (defaut: CATEGORICAL_FEATURES corporate).
+            available_models: Tuple de modeles disponibles (defaut: LR_WoE, TabNet, XGBoost).
+            clipping_bounds: Dict de bornes de clipping (defaut: CLIPPING_BOUNDS corporate).
+            tabnet_variant: "full" (120k params, corporate) ou "light" (8k params, consumer/mortgage).
         """
         self.seed = seed
+        self._tabnet_variant = tabnet_variant
+        self._numerical_features = numerical_features or list(NUMERICAL_FEATURES)
+        self._categorical_features = categorical_features or list(CATEGORICAL_FEATURES)
+        self._available_models = available_models or self.AVAILABLE_MODELS
+        self._clipping_bounds = clipping_bounds if clipping_bounds is not None else dict(CLIPPING_BOUNDS)
         self.woe_binner = WoEBinner()
         self.label_encoders: Dict[str, LabelEncoder] = {}
         self.results: Dict[str, PDModelResult] = {}
         self.active_model_name: str = "LR_WoE"
 
-        # Donnees (remplies par fit)
-        self.X_train: Optional[pd.DataFrame] = None
-        self.X_test: Optional[pd.DataFrame] = None
+        # Donnees (remplies par fit — pandas DataFrames internes)
+        self.X_train: Optional[Any] = None
+        self.X_test: Optional[Any] = None
         self.y_train: Optional[np.ndarray] = None
         self.y_test: Optional[np.ndarray] = None
 
@@ -249,21 +278,23 @@ class PDModelSuite:
 
     def fit(
         self,
-        df: pd.DataFrame,
+        df,
         models: tuple[str, ...] | None = None,
     ) -> PDModelSuite:
         """Pipeline principal : split, encode, train, calibrate, evaluate.
 
         Args:
-            df: DataFrame credit complet avec features et target.
+            df: DataFrame credit complet avec features et target (Polars ou Pandas).
             models: Tuple de noms de modeles a entrainer (defaut: tous).
                 Ex: ("LR_WoE", "XGBoost") pour skip TabNet.
 
         Returns:
             Self (pattern fluent).
         """
+        import pandas as pd  # noqa: F811 — pandas requis pour sklearn pipeline interne
+        df = to_pandas(df)
         if models is None:
-            models = self.AVAILABLE_MODELS
+            models = self._available_models
 
         self._split_data(df)
         self._encode_categoricals()
@@ -293,15 +324,16 @@ class PDModelSuite:
             )
         self.active_model_name = name
 
-    def predict(self, df: pd.DataFrame) -> Dict[str, np.ndarray]:
+    def predict(self, df) -> Dict[str, np.ndarray]:
         """Predit les PD avec chaque modele pour de nouvelles donnees.
 
         Args:
-            df: DataFrame avec les memes features que l'entrainement.
+            df: DataFrame avec les memes features que l'entrainement (Polars ou Pandas).
 
         Returns:
             Dictionnaire {model_name: array de PD predites}.
         """
+        df = to_pandas(df)
         df_encoded = self._apply_encoding(df)
         predictions: Dict[str, np.ndarray] = {}
 
@@ -311,6 +343,8 @@ class PDModelSuite:
                 X = df_woe[self._woe_features].values
             elif name == "TabNet" and self._scaler is not None:
                 X = self._scaler.transform(df_encoded[self._raw_features].values)
+            elif name == "XGBoost" and hasattr(self, "_xgb_features") and self._xgb_features:
+                X = df_encoded[self._xgb_features].values
             else:
                 X = df_encoded[self._raw_features].values
 
@@ -318,30 +352,32 @@ class PDModelSuite:
 
         return predictions
 
-    def predict_active(self, df: pd.DataFrame) -> np.ndarray:
+    def predict_active(self, df) -> np.ndarray:
         """Predit les PD avec le modele actif uniquement.
 
         Args:
-            df: DataFrame avec les memes features que l'entrainement.
+            df: DataFrame avec les memes features que l'entrainement (Polars ou Pandas).
 
         Returns:
             Array de PD predites par le modele actif.
         """
+        df = to_pandas(df)
         all_preds = self.predict(df)
         return all_preds[self.active_model_name]
 
-    def predict_scores(self, df: pd.DataFrame) -> np.ndarray:
+    def predict_scores(self, df) -> np.ndarray:
         """Predit les scores scorecard pour le modele LR_WoE.
 
         Score = Offset + Factor × ln(p / (1-p)) avec p = PD calibree.
         Convention : score eleve = bon dossier (PD faible).
 
         Args:
-            df: DataFrame avec les memes features que l'entrainement.
+            df: DataFrame avec les memes features que l'entrainement (Polars ou Pandas).
 
         Returns:
             Array de scores. Retourne un array vide si LR_WoE absent.
         """
+        df = to_pandas(df)
         if "LR_WoE" not in self.results:
             return np.array([])
 
@@ -407,12 +443,13 @@ class PDModelSuite:
         # Convention: score haut = bon dossier, donc Factor = -PDO/ln(2)
         return offset + factor * logit_p
 
-    def get_comparison_table(self) -> pd.DataFrame:
+    def get_comparison_table(self) -> pl.DataFrame:
         """Genere un tableau comparatif des 3 modeles.
 
         Returns:
-            DataFrame avec metriques train/test pour chaque modele.
+            pl.DataFrame avec metriques train/test pour chaque modele.
         """
+        import pandas as pd  # noqa: F811 — pandas pour construction interne
         records = []
         for name, result in self.results.items():
             records.append({
@@ -424,18 +461,25 @@ class PDModelSuite:
                 "ks_train": result.metrics_train["ks"],
                 "ks_test": result.metrics_test["ks"],
                 "psi": result.metrics_test["psi"],
+                "brier_test": result.metrics_test.get("brier", 0.0),
+                "logloss_test": result.metrics_test.get("logloss", 0.0),
+                "precision_test": result.metrics_test.get("precision", 0.0),
+                "recall_test": result.metrics_test.get("recall", 0.0),
+                "f1_test": result.metrics_test.get("f1", 0.0),
                 "overfit_gap": round(
                     result.metrics_train["auc"] - result.metrics_test["auc"], 4
                 ),
             })
-        return pd.DataFrame(records).sort_values("auc_test", ascending=False)
+        result_pd = pd.DataFrame(records).sort_values("auc_test", ascending=False)
+        return pl.from_pandas(result_pd)
 
-    def get_feature_importance_table(self) -> pd.DataFrame:
+    def get_feature_importance_table(self) -> pl.DataFrame:
         """Retourne l'importance des features pour chaque modele.
 
         Returns:
-            DataFrame avec l'importance relative par feature et par modele.
+            pl.DataFrame avec l'importance relative par feature et par modele.
         """
+        import pandas as pd  # noqa: F811 — pandas pour construction interne
         records = []
         for name, result in self.results.items():
             if result.feature_importance is not None:
@@ -445,41 +489,110 @@ class PDModelSuite:
                         "feature": feat,
                         "importance": round(imp, 4),
                     })
-        return pd.DataFrame(records)
+        return pl.from_pandas(pd.DataFrame(records))
 
     # ──────────────────────────────────────────
     # METHODES PRIVEES
     # ──────────────────────────────────────────
 
-    def _clip_and_engineer(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _clip_and_engineer(self, df):
         """Clippe les outliers et calcule les features engineered.
 
         Args:
-            df: DataFrame avec les features brutes.
+            df: DataFrame pandas avec les features brutes.
 
         Returns:
-            DataFrame avec outliers clippes et features engineered ajoutees.
+            DataFrame pandas avec outliers clippes et features engineered ajoutees.
         """
+        import pandas as pd  # noqa: F811 — pandas requis pour pd.Series fallback
         df = df.copy()
 
         # Clipping outliers
-        for col, (lo, hi) in CLIPPING_BOUNDS.items():
+        for col, (lo, hi) in self._clipping_bounds.items():
             if col in df.columns:
                 df[col] = df[col].clip(lower=lo, upper=hi)
 
-        # Feature engineering
+        # ── Corporate feature engineering ──
         if "loan_amount" in df.columns and "revenue" in df.columns:
             df["loan_to_revenue"] = df["loan_amount"] / df["revenue"].clip(lower=1.0)
         if "collateral" in df.columns and "loan_amount" in df.columns:
             df["collateral_coverage"] = df["collateral"] / df["loan_amount"].clip(lower=1.0)
 
+        # Corporate interactions (conditionnel — colonnes absentes pour consumer/mortgage)
+        if "debt_ratio" in df.columns and "cf_volatility" in df.columns:
+            hi_debt = (df["debt_ratio"] > DEBT_HI_THRESHOLD).astype(float)
+            hi_vol = (df["cf_volatility"] > VOL_HI_THRESHOLD).astype(float)
+            lo_icr = (
+                (df["interest_coverage_ratio"] < ICR_LO_THRESHOLD).astype(float)
+                if "interest_coverage_ratio" in df.columns
+                else 0.0
+            )
+            lo_margin = (
+                (df["ebitda_margin"] < MARGIN_LO_THRESHOLD).astype(float)
+                if "ebitda_margin" in df.columns
+                else 0.0
+            )
+
+            df["debt_x_hi_vol"] = df["debt_ratio"] * hi_vol
+            df["debt_x_lo_icr"] = df["debt_ratio"] * lo_icr
+            df["debt_x_lo_margin"] = df["debt_ratio"] * lo_margin
+            df["margin_neg_x_hi_debt"] = (
+                np.maximum(0.0, -df.get("ebitda_margin", 0.0)) * hi_debt
+            )
+            df["vol_x_hi_debt"] = df["cf_volatility"] * hi_debt
+            df["icr_low_x_hi_debt"] = (
+                np.maximum(0.0, 2.0 - df.get("interest_coverage_ratio", 2.0)) * hi_debt
+            )
+            nb_inc = df.get("nb_incidents_12m", pd.Series(0, index=df.index))
+            df["incidents_x_hi_debt"] = nb_inc * hi_debt
+            df["util_x_hi_vol"] = (
+                np.maximum(0.0, df.get("utilization_rate", 0.0) - UTIL_HI_THRESHOLD) * hi_vol
+            )
+            df["icr_low_AND_margin_low"] = lo_icr * lo_margin
+            df["debt_hi_AND_vol_hi"] = hi_debt * hi_vol
+            df["util_hi_AND_incidents"] = (
+                (df.get("utilization_rate", 0.0) > UTIL_HI_THRESHOLD).astype(float)
+                * (nb_inc >= 2).astype(float)
+            )
+            nde = df.get("net_debt_to_ebitda", pd.Series(0.0, index=df.index))
+            df["nde_squared_excess"] = np.maximum(0.0, nde - NDE_QUAD_THRESHOLD) ** 2
+
+        # ── Consumer interactions ──
+        if "borrower_income" in df.columns and "interest_rate" in df.columns and "dti" in df.columns:
+            if "loan_to_revenue" not in df.columns:  # avoid overwriting corporate
+                df["income_to_loan"] = df["borrower_income"] / df["loan_amount"].clip(lower=1.0)
+                df["revol_to_income"] = (
+                    df.get("revolving_balance", pd.Series(0.0, index=df.index))
+                    / df["borrower_income"].clip(lower=1.0)
+                )
+                df["payment_burden"] = (
+                    df["loan_amount"] * df["interest_rate"]
+                    / df["borrower_income"].clip(lower=1.0)
+                )
+                df["dti_x_util"] = df["dti"] * df.get("utilization_rate", pd.Series(0.0, index=df.index))
+                df["rate_x_dti"] = df["interest_rate"] * df["dti"]
+                df["rate_x_util"] = df["interest_rate"] * df.get("utilization_rate", pd.Series(0.0, index=df.index))
+
+        # ── Mortgage interactions ──
+        if "ltv" in df.columns and "property_value" in df.columns:
+            bi = df.get("borrower_income", pd.Series(1.0, index=df.index)).clip(lower=1.0)
+            df["loan_to_income"] = df["loan_amount"] / bi
+            df["payment_to_income"] = (
+                df["loan_amount"]
+                * df.get("interest_rate_margin", pd.Series(0.0, index=df.index))
+                / bi
+            )
+            df["ltv_x_dti"] = df["ltv"] * df.get("dti", pd.Series(0.0, index=df.index))
+            df["ltv_x_dpd"] = df["ltv"] * df.get("dpd", pd.Series(0.0, index=df.index))
+            df["ltv_squared"] = df["ltv"] ** 2
+
         return df
 
-    def _split_data(self, df: pd.DataFrame) -> None:
+    def _split_data(self, df) -> None:
         """Split stratifie train/test.
 
         Args:
-            df: DataFrame credit complet.
+            df: DataFrame pandas credit complet.
         """
         train_df, test_df = train_test_split(
             df,
@@ -505,7 +618,7 @@ class PDModelSuite:
 
     def _encode_categoricals(self) -> None:
         """Encode les variables categorielles avec LabelEncoder."""
-        cat_cols = [c for c in CATEGORICAL_FEATURES if c in self.X_train.columns]
+        cat_cols = [c for c in self._categorical_features if c in self.X_train.columns]
 
         for col in cat_cols:
             le = LabelEncoder()
@@ -521,12 +634,13 @@ class PDModelSuite:
 
     def _get_numeric_cols(self) -> List[str]:
         """Retourne les colonnes numeriques presentes dans X_train."""
+        feats = self._numerical_features if hasattr(self, "_numerical_features") else NUMERICAL_FEATURES
         if self.X_train is not None:
-            return [c for c in NUMERICAL_FEATURES if c in self.X_train.columns]
+            return [c for c in feats if c in self.X_train.columns]
         # Apres load() X_train est None — utiliser _raw_features (persiste)
         if hasattr(self, "_raw_features") and self._raw_features:
-            return [c for c in NUMERICAL_FEATURES if c in self._raw_features]
-        return list(NUMERICAL_FEATURES)
+            return [c for c in feats if c in self._raw_features]
+        return list(feats)
 
     def _prepare_features(self) -> None:
         """Prepare les features WoE et brutes.
@@ -536,7 +650,7 @@ class PDModelSuite:
         - Filtre les features par IV >= iv_min_threshold
         """
         numeric_cols = self._get_numeric_cols()
-        cat_cols = [c for c in CATEGORICAL_FEATURES if c in self.X_train.columns]
+        cat_cols = [c for c in self._categorical_features if c in self.X_train.columns]
 
         # WoE binning AVANT imputation mediane (pour conserver les NaN dans le bin NaN)
         train_with_target = self.X_train.copy()
@@ -627,11 +741,16 @@ class PDModelSuite:
         # Un beta > 0 inattendu est souvent le symptome d'une multicolinearite
         # severe. Le filtrage VIF stabilise les signes des beta sans rejeter
         # arbitrairement des variables predictives (Anderson, 2007).
+        # Les interaction features sont exclues du VIF check car elles sont
+        # correlees par construction avec les features de base.
+        _interaction_woe = {f"{f}_woe" for f in CORPORATE_INTERACTION_FEATURES}
+        vif_candidates = [f for f in current_features if f not in _interaction_woe]
+        vif_protected = [f for f in current_features if f in _interaction_woe]
         vif_threshold = PD_CONFIG.vif_max_threshold
-        if len(current_features) >= 2:
+        if len(vif_candidates) >= 2:
             keep_going = True
-            while keep_going and len(current_features) >= 2:
-                X_vif = self.X_train[current_features].values
+            while keep_going and len(vif_candidates) >= 2:
+                X_vif = self.X_train[vif_candidates].values
                 vifs = []
                 for i in range(X_vif.shape[1]):
                     try:
@@ -642,16 +761,21 @@ class PDModelSuite:
 
                 max_vif_idx = int(np.argmax(vifs))
                 if vifs[max_vif_idx] > vif_threshold:
-                    dropped = current_features.pop(max_vif_idx)
+                    dropped = vif_candidates.pop(max_vif_idx)
                     self._vif_dropped.append(dropped)
                 else:
                     keep_going = False
+        current_features = vif_candidates + vif_protected
 
         self._woe_features = current_features
 
         # --- Etape 4 : Contrainte de signe beta < 0 ---
         # WoE = ln(Sains/Defauts) => WoE eleve = bon dossier
         # beta < 0 => WoE monte => P(defaut) baisse (coherent)
+        #
+        # Exception : les interaction features (DGP Block 2/3) peuvent avoir
+        # beta > 0 car leur WoE encode un signal de risque conditionnel
+        # (ex: icr_low_AND_margin_low : WoE eleve = combinaison dangereuse).
         base_lr = None
         for _iteration in range(len(current_features)):
             if not current_features:
@@ -668,15 +792,15 @@ class PDModelSuite:
             )
             base_lr.fit(X_train_woe, self.y_train)
 
-            # Verifier les signes
+            # Verifier les signes (interactions exemptees — beta > 0 accepte)
             positive_mask = base_lr.coef_[0] > 0
-            if not positive_mask.any():
+            to_drop = [
+                f for f, pos in zip(current_features, positive_mask)
+                if pos and f not in _interaction_woe
+            ]
+            if not to_drop:
                 break
 
-            # Supprimer les features avec beta > 0
-            to_drop = [
-                f for f, pos in zip(current_features, positive_mask) if pos
-            ]
             self._sign_dropped.extend(to_drop)
             current_features = [f for f in current_features if f not in to_drop]
 
@@ -788,27 +912,68 @@ class PDModelSuite:
         # Reproductibilite
         torch.manual_seed(self.seed)
 
+        if getattr(self, "_tabnet_variant", "full") == "light":
+            _nd = PD_CONFIG.tabnet_light_n_d
+            _na = PD_CONFIG.tabnet_light_n_a
+            _ns = PD_CONFIG.tabnet_light_n_steps
+            _gm = PD_CONFIG.tabnet_light_gamma
+            _ls = PD_CONFIG.tabnet_light_lambda_sparse
+            _lr = PD_CONFIG.tabnet_light_lr
+            _bs = PD_CONFIG.tabnet_light_batch_size
+            _vbs = PD_CONFIG.tabnet_light_virtual_batch_size
+            _ep = PD_CONFIG.tabnet_light_max_epochs
+            _pa = PD_CONFIG.tabnet_light_patience
+        else:
+            _nd = PD_CONFIG.tabnet_n_d
+            _na = PD_CONFIG.tabnet_n_a
+            _ns = PD_CONFIG.tabnet_n_steps
+            _gm = PD_CONFIG.tabnet_gamma
+            _ls = PD_CONFIG.tabnet_lambda_sparse
+            _lr = PD_CONFIG.tabnet_lr
+            _bs = PD_CONFIG.tabnet_batch_size
+            _vbs = PD_CONFIG.tabnet_virtual_batch_size
+            _ep = PD_CONFIG.tabnet_max_epochs
+            _pa = PD_CONFIG.tabnet_patience
+
         base_tabnet = _TabNetSklearnWrapper(
-            n_d=PD_CONFIG.tabnet_n_d,
-            n_a=PD_CONFIG.tabnet_n_a,
-            n_steps=PD_CONFIG.tabnet_n_steps,
-            gamma=PD_CONFIG.tabnet_gamma,
-            lambda_sparse=PD_CONFIG.tabnet_lambda_sparse,
-            lr=PD_CONFIG.tabnet_lr,
-            batch_size=PD_CONFIG.tabnet_batch_size,
-            virtual_batch_size=PD_CONFIG.tabnet_virtual_batch_size,
-            max_epochs=PD_CONFIG.tabnet_max_epochs,
-            patience=PD_CONFIG.tabnet_patience,
+            n_d=_nd,
+            n_a=_na,
+            n_steps=_ns,
+            gamma=_gm,
+            lambda_sparse=_ls,
+            lr=_lr,
+            batch_size=_bs,
+            virtual_batch_size=_vbs,
+            max_epochs=_ep,
+            patience=_pa,
             seed=self.seed,
         )
 
-        calibrated, y_pred_train, y_pred_test = self._calibrate_model(
-            base_tabnet, X_train_scaled, X_test_scaled,
-        )
+        # Subsample calibration for large datasets (CUDA OOM prevention)
+        _MAX_CALIB = 200_000
+        if len(X_train_scaled) > _MAX_CALIB:
+            rng = np.random.RandomState(self.seed)
+            idx_sub = rng.choice(len(X_train_scaled), _MAX_CALIB, replace=False)
+            X_calib = X_train_scaled[idx_sub]
+            y_calib = self.y_train[idx_sub]
+            # Temporarily swap y_train for calibration
+            y_orig = self.y_train
+            self.y_train = y_calib
+            calibrated, _, _ = self._calibrate_model(
+                base_tabnet, X_calib, X_test_scaled,
+            )
+            self.y_train = y_orig
+            # Predict on full sets with calibrated model
+            y_pred_train = calibrated.predict_proba(X_train_scaled)[:, 1]
+            y_pred_test = calibrated.predict_proba(X_test_scaled)[:, 1]
+        else:
+            calibrated, y_pred_train, y_pred_test = self._calibrate_model(
+                base_tabnet, X_train_scaled, X_test_scaled,
+            )
 
-        # Feature importance native via masques d'attention TabNet
-        base_tabnet.fit(X_train_scaled, self.y_train)
-        feat_imp_raw = base_tabnet.feature_importances_
+        # Feature importance from calibrated model (avoid redundant GPU fit)
+        base_fitted = calibrated.calibrated_classifiers_[0].estimator
+        feat_imp_raw = base_fitted.feature_importances_
         feat_imp_norm = feat_imp_raw / feat_imp_raw.sum() if feat_imp_raw.sum() > 0 else feat_imp_raw
         feat_imp = dict(zip(self._raw_features, feat_imp_norm))
 
@@ -828,10 +993,18 @@ class PDModelSuite:
     def _fit_xgboost(self) -> None:
         """Entraine un XGBoost + calibration isotonique.
 
-        Parametres fixes depuis PD_CONFIG (config-driven, NFR13).
+        Les interaction features explicites sont exclues pour eviter la dilution
+        des splits — XGBoost decouvre les interactions via sa structure d'arbre.
+        Les interactions sont conservees pour LR_WoE (ne peut pas les apprendre)
+        et TabNet (aide l'attention mechanism).
         """
-        X_train_raw = self.X_train[self._raw_features].values
-        X_test_raw = self.X_test[self._raw_features].values
+        # Exclure les interaction features — XGBoost les apprend nativement
+        _interaction_set = set(CORPORATE_INTERACTION_FEATURES)
+        xgb_features = [f for f in self._raw_features if f not in _interaction_set]
+        self._xgb_features = xgb_features
+
+        X_train_raw = self.X_train[xgb_features].values
+        X_test_raw = self.X_test[xgb_features].values
 
         # Ratio de desequilibre pour scale_pos_weight
         n_neg = (self.y_train == 0).sum()
@@ -850,6 +1023,9 @@ class PDModelSuite:
             max_depth=PD_CONFIG.xgb_max_depth,
             learning_rate=PD_CONFIG.xgb_learning_rate,
             subsample=PD_CONFIG.xgb_subsample,
+            colsample_bytree=PD_CONFIG.xgb_colsample_bytree,
+            min_child_weight=PD_CONFIG.xgb_min_child_weight,
+            reg_lambda=PD_CONFIG.xgb_reg_lambda,
             random_state=self.seed,
             eval_metric="logloss",
             verbosity=0,
@@ -863,7 +1039,7 @@ class PDModelSuite:
 
         # Feature importance depuis le modele de base (re-fit)
         base_xgb.fit(X_train_raw, self.y_train)
-        feat_imp = dict(zip(self._raw_features, base_xgb.feature_importances_))
+        feat_imp = dict(zip(xgb_features, base_xgb.feature_importances_))
 
         metrics_train, metrics_test = self._compute_metrics(y_pred_train, y_pred_test)
 
@@ -874,18 +1050,18 @@ class PDModelSuite:
             metrics_test=metrics_test,
             y_pred_train=y_pred_train,
             y_pred_test=y_pred_test,
-            feature_names=self._raw_features,
+            feature_names=xgb_features,
             feature_importance=feat_imp,
         )
 
-    def _apply_encoding(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply_encoding(self, df):
         """Applique l'encodage categoriel et l'imputation a un nouveau DataFrame.
 
         Args:
-            df: DataFrame brut avec les memes colonnes.
+            df: DataFrame pandas brut avec les memes colonnes.
 
         Returns:
-            DataFrame avec categorielles encodees et NaN imputes.
+            DataFrame pandas avec categorielles encodees et NaN imputes.
         """
         df_out = df.copy()
 
@@ -917,7 +1093,7 @@ if __name__ == "__main__":
 
     # Generer les donnees (nouveau API : 3 DataFrames)
     print("\n[1/5] Generation du dataset...")
-    df_credit, df_pe, df_history = generate_dataset()
+    df_credit, df_pe, df_history, _ = generate_dataset()
     print(f"       {len(df_credit):,} entreprises | DR = {df_credit[TARGET].mean():.2%}")
 
     # Entrainer les modeles
@@ -956,7 +1132,7 @@ if __name__ == "__main__":
     # Comparaison
     print(f"\n[4/5] Benchmark comparatif :")
     comparison = suite.get_comparison_table()
-    print(comparison.to_string(index=False))
+    print(comparison.to_pandas().to_string(index=False))
 
     # Scorecard distribution
     print(f"\n[5/5] Scorecard distribution :")

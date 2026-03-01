@@ -13,10 +13,16 @@ import subprocess
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
-from ifrs9_cockpit.config import TARGET, RANDOM_SEED
+from ifrs9_cockpit.config import (
+    TARGET, RANDOM_SEED,
+    CORPORATE_INTERACTION_FEATURES,
+    CONSUMER_NUMERICAL_FEATURES,
+    CONSUMER_CATEGORICAL_FEATURES,
+    CONSUMER_ENGINEERED_FEATURES,
+)
 from ifrs9_cockpit.data.generator import generate_dataset
 from ifrs9_cockpit.models.pd_model import PDModelSuite, PDModelResult
 
@@ -28,7 +34,7 @@ from ifrs9_cockpit.models.pd_model import PDModelSuite, PDModelResult
 @pytest.fixture(scope="module")
 def dataset():
     """Genere un dataset credit pour les tests (5000 pour AUC fiable)."""
-    df_credit, _, _ = generate_dataset(n_clients=5000, seed=RANDOM_SEED)
+    df_credit, _, _, _ = generate_dataset(n_clients=5000, seed=RANDOM_SEED)
     return df_credit
 
 
@@ -150,9 +156,9 @@ class TestMetrics:
                 assert key in result.metrics_train, f"{name}: {key} absent du train"
 
     def test_comparison_table(self, trained_suite):
-        """get_comparison_table retourne un DataFrame valide."""
+        """get_comparison_table retourne un pl.DataFrame valide."""
         table = trained_suite.get_comparison_table()
-        assert isinstance(table, pd.DataFrame)
+        assert isinstance(table, pl.DataFrame)
         assert len(table) == 3
         assert "auc_test" in table.columns
         assert "psi" in table.columns
@@ -189,9 +195,10 @@ class TestPredictions:
     def test_feature_importance_available(self, trained_suite):
         """L'importance des features est disponible pour chaque modele."""
         table = trained_suite.get_feature_importance_table()
-        assert isinstance(table, pd.DataFrame)
+        assert isinstance(table, pl.DataFrame)
         assert len(table) > 0
 
+    @pytest.mark.slow
     def test_reproducibility_with_seed(self, dataset):
         """Deux entrainements avec le meme seed donnent les memes PD (AC#1)."""
         suite1 = PDModelSuite(seed=RANDOM_SEED)
@@ -225,12 +232,12 @@ class TestExpertReviewImprovements:
         assert PD_CONFIG.vif_max_threshold > 0
 
     def test_all_final_betas_negative_or_zero(self, trained_suite):
-        """Tous les beta du LR final sont <= 0 (post VIF + sign constraint)."""
+        """Tous les beta base du LR final sont <= 0 (interactions exemptees)."""
         if trained_suite._base_lr is not None:
-            coefs = trained_suite._base_lr.coef_[0]
-            assert all(c <= 0 for c in coefs), (
-                f"Positive beta found: {dict(zip(trained_suite._woe_features, coefs))}"
-            )
+            interaction_woe = {f"{f}_woe" for f in CORPORATE_INTERACTION_FEATURES}
+            for feat, coef in zip(trained_suite._woe_features, trained_suite._base_lr.coef_[0]):
+                if feat not in interaction_woe:
+                    assert coef <= 0, f"Positive beta on base feature: {feat} = {coef:+.4f}"
 
     def test_woe_bins_respect_min_pct(self, trained_suite):
         """Chaque bin WoE contient >= min_bin_pct de la population (post-PAV)."""
@@ -269,15 +276,132 @@ class TestExpertReviewImprovements:
 
 
 # ============================================================
+# T6 — Corporate Interaction Features
+# ============================================================
+
+class TestCorporateInteractionFeatures:
+    def test_interaction_features_exist_in_train(self, trained_suite):
+        """Les 12 features d'interaction sont presentes dans X_train."""
+        for feat in CORPORATE_INTERACTION_FEATURES:
+            assert feat in trained_suite.X_train.columns, f"Missing: {feat}"
+
+    def test_interaction_features_no_nan(self, trained_suite):
+        """Aucun NaN dans les features d'interaction."""
+        for feat in CORPORATE_INTERACTION_FEATURES:
+            if feat in trained_suite.X_train.columns:
+                nan_count = trained_suite.X_train[feat].isna().sum()
+                assert nan_count == 0, f"{feat}: {nan_count} NaN"
+
+    def test_auc_above_075_with_interactions(self, trained_suite):
+        """AUC test > 0.75 on 5k rows (0.87+ expected on 1.5M production)."""
+        for name in ("LR_WoE", "XGBoost"):
+            if name in trained_suite.results:
+                auc = trained_suite.results[name].metrics_test["auc"]
+                assert auc > 0.75, f"{name}: AUC test = {auc:.4f} < 0.75"
+
+    def test_interaction_features_not_vif_dropped(self, trained_suite):
+        """Les interaction features ne sont pas supprimees par VIF."""
+        interaction_woe = {f"{f}_woe" for f in CORPORATE_INTERACTION_FEATURES}
+        dropped_set = set(trained_suite._vif_dropped)
+        wrongly_dropped = interaction_woe & dropped_set
+        assert not wrongly_dropped, f"Interaction features VIF-dropped: {wrongly_dropped}"
+
+
+# ============================================================
+# T7 — Parametrized Suite
+# ============================================================
+
+class TestParametrizedSuite:
+    def test_custom_features(self, dataset):
+        """Suite avec features custom fonctionne sans erreur."""
+        suite = PDModelSuite(
+            seed=RANDOM_SEED,
+            numerical_features=["revenue", "debt_ratio", "credit_score", "dpd"],
+            categorical_features=["sector"],
+            available_models=("LR_WoE",),
+        )
+        suite.fit(dataset, models=("LR_WoE",))
+        assert "LR_WoE" in suite.results
+        auc = suite.results["LR_WoE"].metrics_test["auc"]
+        assert auc > 0.55, f"AUC too low: {auc:.4f}"
+
+    def test_default_backward_compat(self, dataset):
+        """Suite sans arguments = comportement corporate identique."""
+        suite = PDModelSuite(seed=RANDOM_SEED)
+        from ifrs9_cockpit.config import NUMERICAL_FEATURES, CATEGORICAL_FEATURES
+        assert suite._numerical_features == list(NUMERICAL_FEATURES)
+        assert suite._categorical_features == list(CATEGORICAL_FEATURES)
+
+    def test_available_models_override(self, dataset):
+        """available_models override entraine seulement les modeles specifies."""
+        suite = PDModelSuite(
+            seed=RANDOM_SEED,
+            available_models=("LR_WoE", "XGBoost"),
+        )
+        suite.fit(dataset)
+        assert "LR_WoE" in suite.results
+        assert "XGBoost" in suite.results
+        assert "TabNet" not in suite.results
+
+
+# ============================================================
+# T8 — TabNet Light variant
+# ============================================================
+
+class TestTabNetLightVariant:
+    def test_tabnet_light_trains(self, dataset):
+        """TabNet Light (8k params) s'entraine sans erreur."""
+        suite = PDModelSuite(
+            seed=RANDOM_SEED,
+            available_models=("TabNet",),
+            tabnet_variant="light",
+        )
+        suite.fit(dataset, models=("TabNet",))
+        assert "TabNet" in suite.results
+
+    def test_tabnet_light_auc_above_070(self, dataset):
+        """TabNet Light AUC test > 0.70 sur 5k lignes."""
+        suite = PDModelSuite(
+            seed=RANDOM_SEED,
+            available_models=("TabNet",),
+            tabnet_variant="light",
+        )
+        suite.fit(dataset, models=("TabNet",))
+        auc = suite.results["TabNet"].metrics_test["auc"]
+        assert auc > 0.70, f"TabNet Light AUC = {auc:.4f} < 0.70"
+
+    def test_tabnet_light_pd_in_01(self, dataset):
+        """TabNet Light PD dans [0, 1]."""
+        suite = PDModelSuite(
+            seed=RANDOM_SEED,
+            available_models=("TabNet",),
+            tabnet_variant="light",
+        )
+        suite.fit(dataset, models=("TabNet",))
+        result = suite.results["TabNet"]
+        assert result.y_pred_test.min() >= 0.0
+        assert result.y_pred_test.max() <= 1.0
+
+    def test_tabnet_variant_stored(self, dataset):
+        """Le variant est stocke dans la suite."""
+        suite = PDModelSuite(seed=RANDOM_SEED, tabnet_variant="light")
+        assert suite._tabnet_variant == "light"
+        suite2 = PDModelSuite(seed=RANDOM_SEED, tabnet_variant="full")
+        assert suite2._tabnet_variant == "full"
+
+
+# ============================================================
 # Standalone
 # ============================================================
 
+@pytest.mark.slow
 class TestStandalone:
     def test_module_runs_standalone(self):
         """Le module pd_model.py s'execute sans erreur."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.models.pd_model"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.models.pd_model"],
             capture_output=True, text=True, timeout=600,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr[-500:]}"
         assert "Tous les modeles PD valides" in result.stdout

@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
 from ifrs9_cockpit.config import (
@@ -36,16 +36,20 @@ from ifrs9_cockpit.models.pe_model import PEModel
 # ============================================================
 
 @pytest.fixture(scope="module")
-def dataset():
-    """Genere le dataset complet une seule fois."""
-    df_credit, df_pe, df_history = generate_dataset()
-    return df_credit, df_pe, df_history
+def dataset(global_pipeline_results):
+    """Reutilise le pipeline session (zero recalcul)."""
+    return (
+        global_pipeline_results["df_credit"],
+        global_pipeline_results["df_pe"],
+        global_pipeline_results["df_history"],
+    )
 
 
 @pytest.fixture(scope="module")
 def df_pe(dataset):
-    """DataFrame PE brut."""
-    return dataset[1]
+    """DataFrame PE brut (Polars)."""
+    from ifrs9_cockpit.utils.frame_compat import to_polars
+    return to_polars(dataset[1])
 
 
 @pytest.fixture(scope="module")
@@ -57,7 +61,8 @@ def pe_model():
 @pytest.fixture(scope="module")
 def nav_baseline(pe_model, df_pe):
     """NAV et multiples baseline."""
-    nav, mult = pe_model.calculate_nav(df_pe)
+    from ifrs9_cockpit.utils.frame_compat import to_pandas
+    nav, mult = pe_model.calculate_nav(to_pandas(df_pe))
     return nav, mult
 
 
@@ -117,34 +122,34 @@ class TestPEModelIPEVMethods:
 
     def test_technologie_uses_ev_revenue(self, df_pe):
         """Technologie utilise EV/Revenue."""
-        tech = df_pe[df_pe["sector"] == "Technologie"]
+        tech = df_pe.filter(pl.col("sector") == "Technologie")
         assert (tech["valuation_method"] == "EV/Revenue").all()
 
     def test_industrie_uses_ev_ebitda(self, df_pe):
         """Industrie utilise EV/EBITDA."""
-        ind = df_pe[df_pe["sector"] == "Industrie"]
+        ind = df_pe.filter(pl.col("sector") == "Industrie")
         assert (ind["valuation_method"] == "EV/EBITDA").all()
 
     def test_sante_uses_ev_ebitda(self, df_pe):
         """Sante utilise EV/EBITDA."""
-        sante = df_pe[df_pe["sector"] == "Sante"]
+        sante = df_pe.filter(pl.col("sector") == "Sante")
         assert (sante["valuation_method"] == "EV/EBITDA").all()
 
     def test_services_uses_ev_ebitda(self, df_pe):
         """Services utilise EV/EBITDA."""
-        services = df_pe[df_pe["sector"] == "Services"]
+        services = df_pe.filter(pl.col("sector") == "Services")
         assert (services["valuation_method"] == "EV/EBITDA").all()
 
     def test_immobilier_uses_cap_rate_noi(self, df_pe):
         """Immobilier utilise Cap_rate/NOI."""
-        immo = df_pe[df_pe["sector"] == "Immobilier"]
+        immo = df_pe.filter(pl.col("sector") == "Immobilier")
         assert (immo["valuation_method"] == "Cap_rate/NOI").all()
 
     def test_all_valuation_methods_config_driven(self, df_pe):
         """Les methodes de valorisation correspondent aux config des secteurs."""
         for sector in SECTORS:
-            mask = df_pe["sector"] == sector.name
-            actual = df_pe.loc[mask, "valuation_method"].unique()
+            filtered = df_pe.filter(pl.col("sector") == sector.name)
+            actual = filtered["valuation_method"].unique().to_list()
             assert len(actual) == 1
             assert actual[0] == sector.valuation_method
 
@@ -156,7 +161,7 @@ class TestPEModelMultipleCompression:
         """Multiples de sortie dans les fourchettes IPEV elargies."""
         _, mult = nav_baseline
         for sector in SECTORS:
-            mask = df_pe["sector"].values == sector.name
+            mask = df_pe["sector"].to_numpy() == sector.name
             if mask.sum() == 0:
                 continue
             low, high = sector.entry_multiple_range
@@ -169,10 +174,12 @@ class TestPEModelMultipleCompression:
 
     def test_monotonicity_rate_up_multiple_down(self, df_pe):
         """Monotone : hausse taux -> baisse multiple de sortie."""
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
+        df_pe_pd = to_pandas(df_pe)
         m1 = PEModel(seed=RANDOM_SEED)
-        _, mult_low = m1.calculate_nav(df_pe, interest_rate_override=2.0)
+        _, mult_low = m1.calculate_nav(df_pe_pd, interest_rate_override=2.0)
         m2 = PEModel(seed=RANDOM_SEED)
-        _, mult_high = m2.calculate_nav(df_pe, interest_rate_override=6.0)
+        _, mult_high = m2.calculate_nav(df_pe_pd, interest_rate_override=6.0)
         assert mult_low.mean() > mult_high.mean(), \
             f"mult(IR=2%)={mult_low.mean():.2f} should > mult(IR=6%)={mult_high.mean():.2f}"
 
@@ -182,20 +189,24 @@ class TestPEModelOverrideZero:
 
     def test_override_zero_not_ignored(self, df_pe):
         """Un override a 0.0 ne doit pas etre traite comme None (bug `or`)."""
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
+        df_pe_pd = to_pandas(df_pe)
         m1 = PEModel(seed=RANDOM_SEED)
-        nav_zero, _ = m1.calculate_nav(df_pe, gdp_override=0.0)
+        nav_zero, _ = m1.calculate_nav(df_pe_pd, gdp_override=0.0)
         m2 = PEModel(seed=RANDOM_SEED)
-        nav_none, _ = m2.calculate_nav(df_pe, gdp_override=None)
+        nav_none, _ = m2.calculate_nav(df_pe_pd, gdp_override=None)
         # gdp_override=0.0 est different de gdp baseline (1.2%), donc les NAV diffèrent
         assert not np.allclose(nav_zero, nav_none, atol=0.01), \
             "override=0.0 est traite comme None (bug falsy)"
 
     def test_override_zero_interest_rate(self, df_pe):
         """Override interest_rate=0.0 doit produire un resultat different de baseline."""
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
+        df_pe_pd = to_pandas(df_pe)
         m1 = PEModel(seed=RANDOM_SEED)
-        nav_zero, _ = m1.calculate_nav(df_pe, interest_rate_override=0.0)
+        nav_zero, _ = m1.calculate_nav(df_pe_pd, interest_rate_override=0.0)
         m2 = PEModel(seed=RANDOM_SEED)
-        nav_base, _ = m2.calculate_nav(df_pe)
+        nav_base, _ = m2.calculate_nav(df_pe_pd)
         # interest_rate baseline = 3.5, donc override=0.0 change le resultat
         assert not np.allclose(nav_zero, nav_base, atol=0.01), \
             "override interest_rate=0.0 ignore"
@@ -206,18 +217,21 @@ class TestPEModelScenarios:
 
     def test_nav_scenario_ordering(self, pe_model, df_pe):
         """Favorable > Base > Adverse en NAV totale."""
-        navs = pe_model.calculate_nav_scenarios(df_pe)
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
+        navs = pe_model.calculate_nav_scenarios(to_pandas(df_pe))
         assert navs["Favorable"].sum() > navs["Base"].sum() > navs["Adverse"].sum()
 
     def test_nav_scenarios_all_positive(self, pe_model, df_pe):
         """NAV >= 0 sous tous les scenarios."""
-        navs = pe_model.calculate_nav_scenarios(df_pe)
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
+        navs = pe_model.calculate_nav_scenarios(to_pandas(df_pe))
         for name, nav in navs.items():
             assert (nav >= 0).all(), f"Scenario {name}: NAV min={nav.min():.4f}"
 
     def test_nav_scenarios_3_keys(self, pe_model, df_pe):
         """3 scenarios : Base, Adverse, Favorable."""
-        navs = pe_model.calculate_nav_scenarios(df_pe)
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
+        navs = pe_model.calculate_nav_scenarios(to_pandas(df_pe))
         assert set(navs.keys()) == {"Base", "Adverse", "Favorable"}
 
 
@@ -226,14 +240,16 @@ class TestPEModelSummary:
 
     def test_summary_has_all_sectors(self, pe_model, df_pe, nav_baseline):
         """Le resume couvre les 5 secteurs."""
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
         nav, _ = nav_baseline
-        summary = pe_model.get_nav_summary(df_pe, nav)
+        summary = pe_model.get_nav_summary(to_pandas(df_pe), nav)
         assert set(summary["sector"].unique()) == {s.name for s in SECTORS}
 
     def test_summary_nav_total_matches(self, pe_model, df_pe, nav_baseline):
         """La NAV totale du resume correspond a la somme des NAV."""
+        from ifrs9_cockpit.utils.frame_compat import to_pandas
         nav, _ = nav_baseline
-        summary = pe_model.get_nav_summary(df_pe, nav)
+        summary = pe_model.get_nav_summary(to_pandas(df_pe), nav)
         assert abs(summary["nav_total"].sum() - nav.sum()) < 1.0
 
 
@@ -243,20 +259,22 @@ class TestPEModelStandalone:
     def test_pe_model_standalone_runs(self):
         """python -m ifrs9_cockpit.models.pe_model retourne 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.models.pe_model"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.models.pe_model"],
             capture_output=True,
             text=True,
             timeout=600,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
 
     def test_pe_model_standalone_output(self):
         """La sortie contient 'PE Model valide'."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.models.pe_model"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.models.pe_model"],
             capture_output=True,
             text=True,
             timeout=600,
+            encoding="utf-8",
         )
         assert "PE Model valide" in result.stdout
 
@@ -273,9 +291,9 @@ class TestPECalculatorPerformanceMetrics:
         assert (pe_result["moic"] >= 0).all()
 
     def test_irr_bounded(self, pe_result):
-        """IRR dans une plage raisonnable [-1, +10]."""
-        assert (pe_result["irr"] >= -1.0).all()
-        assert (pe_result["irr"] <= 10.0).all()
+        """IRR dans une plage raisonnable [-0.50, +0.35]."""
+        assert (pe_result["irr"] >= -0.50).all()
+        assert (pe_result["irr"] <= 0.35).all()
 
     def test_dpi_is_zero(self, pe_result):
         """DPI = 0 (pas de distributions intermediaires)."""
@@ -283,13 +301,13 @@ class TestPECalculatorPerformanceMetrics:
 
     def test_rvpi_equals_moic(self, pe_result):
         """RVPI = MOIC (pas de distributions)."""
-        assert np.allclose(pe_result["rvpi"].values, pe_result["moic"].values, atol=1e-4)
+        assert np.allclose(pe_result["rvpi"].to_numpy(), pe_result["moic"].to_numpy(), atol=1e-4)
 
     def test_tvpi_equals_dpi_plus_rvpi(self, pe_result):
         """TVPI = DPI + RVPI (identite fondamentale)."""
-        tvpi = pe_result["tvpi"].values
-        dpi = pe_result["dpi"].values
-        rvpi = pe_result["rvpi"].values
+        tvpi = pe_result["tvpi"].to_numpy()
+        dpi = pe_result["dpi"].to_numpy()
+        rvpi = pe_result["rvpi"].to_numpy()
         assert np.allclose(tvpi, dpi + rvpi, atol=1e-3)
 
     def test_capital_invested_positive(self, pe_result):
@@ -333,14 +351,16 @@ class TestPECalculatorSensitivities:
     def test_sensitivities_5x5_non_zero(self, pe_calculator, df_pe):
         """Matrice de sensibilites 5x5 : chaque colonne a au moins une valeur non-nulle."""
         sens = pe_calculator.compute_factorial_sensitivities(df_pe, delta=1.0)
-        assert sens.shape == (5, 5), f"Shape: {sens.shape}"
-        for col in sens.columns:
+        # 5 sectors x (1 sector col + 5 macro vars) = (5, 6)
+        assert sens.shape == (5, 6), f"Shape: {sens.shape}"
+        macro_cols = [c for c in sens.columns if c != "sector"]
+        for col in macro_cols:
             assert (sens[col].abs() > 0).any(), f"Colonne {col} entierement nulle"
 
     def test_sensitivities_sectors_match(self, pe_calculator, df_pe):
         """Les secteurs dans les sensibilites correspondent aux secteurs config."""
         sens = pe_calculator.compute_factorial_sensitivities(df_pe)
-        assert set(sens.index) == {s.name for s in SECTORS}
+        assert set(sens["sector"].to_list()) == {s.name for s in SECTORS}
 
 
 class TestPECalculatorDrawdown:
@@ -365,7 +385,7 @@ class TestPECalculatorPerformanceSummary:
     def test_summary_has_all_sectors(self, pe_calculator, pe_result):
         """Le resume couvre les 5 secteurs."""
         summary = pe_calculator.get_performance_summary(pe_result)
-        assert set(summary["sector"].unique()) == {s.name for s in SECTORS}
+        assert set(summary["sector"].unique().to_list()) == {s.name for s in SECTORS}
 
     def test_summary_has_expected_columns(self, pe_calculator, pe_result):
         """Le resume a les colonnes attendues."""
@@ -404,10 +424,10 @@ class TestPECalculatorDistress:
     def test_expected_loss_formula(self, pe_result):
         """EL = P(distress) x LGD_equity x NAV."""
         lgd_eq = PE_CLASSIFICATION_CONFIG.lgd_equity
-        el_calc = pe_result["distress_prob"] * lgd_eq * pe_result["nav"]
+        el_calc = pe_result["distress_prob"].to_numpy() * lgd_eq * pe_result["nav"].to_numpy()
         assert np.allclose(
-            pe_result["expected_loss_pe"].values,
-            el_calc.values,
+            pe_result["expected_loss_pe"].to_numpy(),
+            el_calc,
             rtol=0.01,
         )
 
@@ -418,12 +438,12 @@ class TestPECalculatorClassification:
     def test_risk_categories_valid(self, pe_result):
         """risk_category in {Performing, Watchlist, Distressed}."""
         valid = {"Performing", "Watchlist", "Distressed"}
-        actual = set(pe_result["risk_category"].unique())
+        actual = set(pe_result["risk_category"].unique().to_list())
         assert actual.issubset(valid), f"Categories invalides: {actual - valid}"
 
     def test_performing_below_threshold(self, pe_result):
         """Performing <-> P(distress) < distress_threshold_performing."""
-        perf = pe_result[pe_result["risk_category"] == "Performing"]
+        perf = pe_result.filter(pl.col("risk_category") == "Performing")
         if len(perf) > 0:
             threshold = PE_CLASSIFICATION_CONFIG.distress_threshold_performing
             assert (perf["distress_prob"] < threshold).all(), \
@@ -431,7 +451,7 @@ class TestPECalculatorClassification:
 
     def test_distressed_above_threshold(self, pe_result):
         """Distressed <-> P(distress) >= distress_threshold_watchlist."""
-        distressed = pe_result[pe_result["risk_category"] == "Distressed"]
+        distressed = pe_result.filter(pl.col("risk_category") == "Distressed")
         if len(distressed) > 0:
             threshold = PE_CLASSIFICATION_CONFIG.distress_threshold_watchlist
             assert (distressed["distress_prob"] >= threshold).all(), \
@@ -439,7 +459,7 @@ class TestPECalculatorClassification:
 
     def test_watchlist_between_thresholds(self, pe_result):
         """Watchlist <-> P(distress) in [performing, watchlist[."""
-        wl = pe_result[pe_result["risk_category"] == "Watchlist"]
+        wl = pe_result.filter(pl.col("risk_category") == "Watchlist")
         if len(wl) > 0:
             t_perf = PE_CLASSIFICATION_CONFIG.distress_threshold_performing
             t_watch = PE_CLASSIFICATION_CONFIG.distress_threshold_watchlist
@@ -464,12 +484,12 @@ class TestPECalculatorExitCost:
     def test_exit_cost_formula(self, pe_result):
         """Exit cost = NAV x (1 - DLOM_effectif) avec DLOM ajuste par vintage."""
         cfg = PE_CLASSIFICATION_CONFIG
-        holding = pe_result["holding_years"].values.astype(float)
+        holding = pe_result["holding_years"].to_numpy().astype(float)
         vintage_adj = np.maximum(0, cfg.dlom_vintage_threshold - holding) / cfg.dlom_vintage_threshold
         effective_discount = cfg.secondary_discount * (1 + cfg.dlom_vintage_factor * vintage_adj)
-        expected = pe_result["nav"].values * (1 - effective_discount)
+        expected = pe_result["nav"].to_numpy() * (1 - effective_discount)
         assert np.allclose(
-            pe_result["exit_cost"].values,
+            pe_result["exit_cost"].to_numpy(),
             expected,
             atol=0.1,
         )
@@ -489,7 +509,7 @@ class TestPECalculatorRWA:
     def test_rwa_pe_reasonable_range(self, pe_result):
         """RWA PE = NAV x RW/100, avec RW in {190, 250, 400}."""
         # RWA doit etre entre 1.90 x NAV et 4.00 x NAV
-        ratio = pe_result["rwa_pe"] / pe_result["nav"]
+        ratio = (pe_result["rwa_pe"] / pe_result["nav"]).to_numpy()
         assert (ratio >= 1.88).all(), f"ratio min={ratio.min():.2f}"
         assert (ratio <= 4.01).all(), f"ratio max={ratio.max():.2f}"
 
@@ -520,7 +540,7 @@ class TestPECalculatorCircularImport:
 
     def test_pe_calculator_crr3_rw_used(self, pe_result):
         """Le RWA PE utilise bien compute_crr3_rw (RW in {190, 250, 400})."""
-        ratio = pe_result["rwa_pe"] / pe_result["nav"]
+        ratio = (pe_result["rwa_pe"] / pe_result["nav"]).to_numpy()
         # Chaque ratio doit etre proche de l'un des 3 RW / 100
         # (tolerance pour l'arrondi des colonnes nav et rwa_pe)
         valid_ratios = np.array([1.90, 2.50, 4.00])
@@ -530,26 +550,29 @@ class TestPECalculatorCircularImport:
                 f"Ratio RWA/NAV={r:.4f} n'est pas proche de {valid_ratios}"
 
 
+@pytest.mark.slow
 class TestPECalculatorStandalone:
     """Test bloc __main__."""
 
     def test_pe_calculator_standalone_runs(self):
         """python -m ifrs9_cockpit.engine.pe_calculator retourne 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.engine.pe_calculator"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.engine.pe_calculator"],
             capture_output=True,
             text=True,
             timeout=600,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
 
     def test_pe_calculator_standalone_output(self):
         """La sortie contient les validations PE Calculator."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.engine.pe_calculator"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.engine.pe_calculator"],
             capture_output=True,
             text=True,
             timeout=600,
+            encoding="utf-8",
         )
         assert "PE Calculator" in result.stdout
         assert "valide" in result.stdout

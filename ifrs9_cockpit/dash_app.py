@@ -13,6 +13,7 @@ ou :          gunicorn ifrs9_cockpit.dash_app:server
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -35,8 +36,11 @@ from ifrs9_cockpit.dashboard import callbacks
 # ──────────────────────────────────────────────
 # INITIALISATION (donnees + modeles au demarrage)
 # ──────────────────────────────────────────────
+# Les fonctions load_data / train_pd_models / train_lgd_ead utilisent
+# @lru_cache dans cache.py, donc le reload Werkzeug ne re-calcule rien.
 print("[1/4] Chargement des donnees...")
-df_credit, df_pe, df_history = load_data()
+_bundle = load_data()
+df_credit, df_pe, df_history, df_balance_sheet = _bundle
 
 print("[2/4] Chargement des modeles PD...")
 pd_suite = train_pd_models()
@@ -67,9 +71,26 @@ server = app.server  # Pour gunicorn / production WSGI
 app.layout = build_layout(list(pd_suite.results.keys()))
 
 # Callbacks
-callbacks.register(app, df_credit, df_pe, df_history, pd_suite, lgd_model, ead_model)
+callbacks.register(app, df_credit, df_pe, df_history, pd_suite, lgd_model, ead_model,
+                   df_balance_sheet=df_balance_sheet, dataset_bundle=_bundle)
 
 print("Application prete. Ouverture sur http://localhost:8050")
 
 if __name__ == "__main__":
-    app.run(debug=False, host="localhost", port=8050)
+    app.run(
+        debug=True,
+        host="localhost",
+        port=8050,
+        # Hot reload CSS/JS/assets: le navigateur rafraichit automatiquement.
+        dev_tools_hot_reload=True,
+        dev_tools_hot_reload_interval=2.0,
+        dev_tools_hot_reload_watch_interval=1.0,
+        dev_tools_props_check=False,
+        # Masquer la barre de debug en bas de page
+        dev_tools_ui=False,
+        # use_reloader=False: pas de relance du process Python.
+        # Hot reload CSS/JS fonctionne toujours. Pour les .py, F5 dans le
+        # navigateur suffit car les callbacks importent les modules a chaque appel.
+        # Pour un changement de layout/callback, relancer le serveur manuellement.
+        use_reloader=False,
+    )

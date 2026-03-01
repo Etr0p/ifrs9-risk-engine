@@ -25,7 +25,7 @@ Bruit de dispersion :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, Optional, Tuple
 
 from ifrs9_cockpit.config import (
@@ -37,6 +37,7 @@ from ifrs9_cockpit.config import (
     NOI_OPEX_RATIO,
     PE_NOISE_INTRA_SECTOR_CORR,
 )
+from ifrs9_cockpit.utils.frame_compat import to_pandas, to_polars
 
 
 class PEModel:
@@ -61,7 +62,7 @@ class PEModel:
 
     def calculate_nav(
         self,
-        df_pe: pd.DataFrame,
+        df_pe,
         unemployment_override: Optional[float] = None,
         gdp_override: Optional[float] = None,
         interest_rate_override: Optional[float] = None,
@@ -90,6 +91,7 @@ class PEModel:
         Returns:
             Tuple (nav_array, exit_multiples_array) en M EUR.
         """
+        df_pe = to_pandas(df_pe)
         n = len(df_pe)
         nav = np.zeros(n)
         exit_multiples = np.zeros(n)
@@ -154,7 +156,7 @@ class PEModel:
 
     def calculate_nav_scenarios(
         self,
-        df_pe: pd.DataFrame,
+        df_pe,
     ) -> Dict[str, np.ndarray]:
         """Calcule la NAV sous les 3 scenarios ECL.
 
@@ -179,9 +181,9 @@ class PEModel:
 
     def get_nav_summary(
         self,
-        df_pe: pd.DataFrame,
+        df_pe,
         nav: np.ndarray,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Resume de la NAV par secteur et methode de valorisation.
 
         Args:
@@ -191,11 +193,13 @@ class PEModel:
         Returns:
             DataFrame recapitulatif.
         """
+        df_pe = to_pandas(df_pe)
+        import pandas as pd
         summary_df = df_pe[["sector", "valuation_method"]].copy()
         summary_df["nav"] = nav
         summary_df["entry_multiple"] = df_pe["entry_multiple"].values
 
-        return (
+        result_pd = (
             summary_df.groupby(["sector", "valuation_method"])
             .agg(
                 count=("nav", "size"),
@@ -207,6 +211,7 @@ class PEModel:
             .round(2)
             .reset_index()
         )
+        return pl.from_pandas(result_pd)
 
     # ──────────────────────────────────────────
     # METHODES PRIVEES
@@ -251,7 +256,7 @@ class PEModel:
 
     def _get_valuation_metric(
         self,
-        df_pe: pd.DataFrame,
+        df_pe,
         mask: np.ndarray,
         sector: SectorConfig,
     ) -> np.ndarray:
@@ -338,6 +343,23 @@ class PEModel:
             + deltas["gdp"] * sector.gdp_sensitivity_pe
             + deltas["hpi"] * sector.hpi_sensitivity_pe
         )
+        # Recession dampening: attenuate rate-cut benefit in adverse conditions
+        gdp_shock = deltas.get("gdp", 0.0)
+        ir_shock = deltas.get("interest_rate", 0.0)
+        unemp_shock = deltas.get("unemployment", 0.0)
+
+        # Cancel 85% of IR benefit when economy is deteriorating
+        adverse_signal = max(gdp_shock, unemp_shock)
+        if adverse_signal > 0 and ir_shock < 0:
+            recession_depth = min(adverse_signal / 0.02, 1.0)
+            ir_benefit = ir_shock * sector.interest_rate_sensitivity_pe
+            compression -= ir_benefit * recession_depth * 0.85
+
+        # Growth offsetting: attenuate rate-hike compression when GDP is growing
+        if gdp_shock < 0 and ir_shock > 0:
+            growth_depth = min(abs(gdp_shock) / 0.03, 1.0)
+            ir_compression = ir_shock * sector.interest_rate_sensitivity_pe
+            compression -= ir_compression * growth_depth * 0.50
         # exp(-compression × 2.0) : toujours > 0 par construction (pas de floor artificiel)
         # Scale 2.0 calibre pour qu'un choc taux de +100bp comprime les multiples
         # de ~3-5% (benchmark EBA 2023, sensibilite PE mid-market).
@@ -385,7 +407,7 @@ if __name__ == "__main__":
 
     # 1. Data
     print("\n[1/3] Generation des donnees...")
-    df_credit, df_pe, df_history = generate_dataset()
+    df_credit, df_pe, df_history, _ = generate_dataset()
     print(f"       {len(df_pe):,} positions PE")
 
     # 2. NAV Baseline
@@ -397,7 +419,7 @@ if __name__ == "__main__":
 
     summary = pe_model.get_nav_summary(df_pe, nav_base)
     print("\n--- NAV par secteur ---")
-    print(summary.to_string(index=False))
+    print(summary.to_pandas().to_string(index=False))
 
     # 3. Scenarios
     print("\n[3/3] NAV sous 3 scenarios...")
@@ -424,8 +446,9 @@ if __name__ == "__main__":
     all_ok &= ok_order
 
     # Multiples in range
+    sectors_arr = df_pe["sector"].to_numpy() if hasattr(df_pe, "to_numpy") else df_pe["sector"].values
     for sector in SECTORS:
-        mask = df_pe["sector"].values == sector.name
+        mask = sectors_arr == sector.name
         if mask.sum() == 0:
             continue
         low, high = sector.entry_multiple_range

@@ -101,6 +101,51 @@ def build_layout(pd_model_names: list[str]) -> html.Div:
                 ),
             ], className="mt-3"),
 
+            # Collapsible: Causal Insights (DML)
+            html.Div([
+                build_collapsible_button("Causal Insights (DML)", ids.BTN_CAUSAL),
+                dbc.Collapse(
+                    dcc.Loading(html.Div(id=ids.CAUSAL_CONTENT), type="dot"),
+                    id=ids.COLLAPSE_CAUSAL, is_open=False,
+                ),
+            ], className="mt-3"),
+
+            # Collapsible: Virtual CRO Committee (NeSy MAS)
+            html.Div([
+                build_collapsible_button("Virtual CRO Committee", ids.BTN_VCRO),
+                dbc.Collapse(
+                    dcc.Loading(html.Div(id=ids.VCRO_CONTENT), type="dot"),
+                    id=ids.COLLAPSE_VCRO, is_open=False,
+                ),
+            ], className="mt-3"),
+
+            # Collapsible: Balance Sheet Multi-Asset (Etape 5)
+            html.Div([
+                build_collapsible_button("Balance Sheet Multi-Asset", ids.BTN_MULTIASSET),
+                dbc.Collapse(
+                    dcc.Loading(html.Div(id=ids.MULTIASSET_CONTENT), type="dot"),
+                    id=ids.COLLAPSE_MULTIASSET, is_open=False,
+                ),
+            ], className="mt-3"),
+
+            # Collapsible: Gouvernance Quantitative (Conformal, Sobol, VRP, RMT)
+            html.Div([
+                build_collapsible_button("Gouvernance Quantitative", ids.BTN_GOVERNANCE),
+                dbc.Collapse(
+                    dcc.Loading(html.Div(id=ids.GOVERNANCE_CONTENT), type="dot"),
+                    id=ids.COLLAPSE_GOVERNANCE, is_open=False,
+                ),
+            ], className="mt-3"),
+
+            # Collapsible: Regime Intelligence (HMM + GFlowNet)
+            html.Div([
+                build_collapsible_button("Regime Intelligence", ids.BTN_REGIME),
+                dbc.Collapse(
+                    dcc.Loading(html.Div(id=ids.REGIME_CONTENT), type="dot"),
+                    id=ids.COLLAPSE_REGIME, is_open=False,
+                ),
+            ], className="mt-3"),
+
             # Collapsible: Donnees & Export
             html.Div([
                 build_collapsible_button("Donnees & Export", ids.BTN_EXPORT),

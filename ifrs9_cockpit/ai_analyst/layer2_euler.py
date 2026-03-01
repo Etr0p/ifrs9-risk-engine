@@ -13,7 +13,7 @@ de derivees partielles (Euler-Tasche). Alias backward-compat conserves.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, Optional, Tuple
 
 from ifrs9_cockpit.config import SECTORS, SCENARIO_BASE
@@ -41,11 +41,11 @@ _FACTOR_DELTAS: Dict[str, float] = {
 
 
 def decompose_proportional(
-    result_credit: pd.DataFrame,
-    result_pe: pd.DataFrame,
+    result_credit: pl.DataFrame,
+    result_pe: pl.DataFrame,
     macro_params: Dict[str, float],
     regime: Optional[RegimeClassification] = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pl.DataFrame, pl.DataFrame]:
     """Allocation proportionnelle du risque et facteurs macro (FR27).
 
     La methode appliquee est une allocation proportionnelle :
@@ -76,9 +76,9 @@ def decompose_proportional(
         name = sector.name
 
         # Credit : contribution_i = ECL_i / ECL_total
-        mask_c = result_credit["sector"].values == name
-        ecl_sec = result_credit.loc[mask_c, "ecl_weighted"].sum()
-        rwa_sec = result_credit.loc[mask_c, "rwa_credit"].sum()
+        df_c = result_credit.filter(pl.col("sector") == name)
+        ecl_sec = df_c["ecl_weighted"].sum()
+        rwa_sec = df_c["rwa_credit"].sum()
 
         proportional_records.append({
             "sector": name,
@@ -89,9 +89,9 @@ def decompose_proportional(
         })
 
         # PE : contribution_i = EL_PE_i / EL_PE_total
-        mask_p = result_pe["sector"].values == name
-        el_sec = result_pe.loc[mask_p, "expected_loss_pe"].sum()
-        rwa_pe_sec = result_pe.loc[mask_p, "rwa_pe"].sum()
+        df_p = result_pe.filter(pl.col("sector") == name)
+        el_sec = df_p["expected_loss_pe"].sum()
+        rwa_pe_sec = df_p["rwa_pe"].sum()
 
         proportional_records.append({
             "sector": name,
@@ -102,7 +102,7 @@ def decompose_proportional(
         })
 
     # Colonne euler_share conservee pour compatibilite ascendante
-    proportional_df = pd.DataFrame(proportional_records)
+    proportional_df = pl.DataFrame(proportional_records)
 
     # -- Attribution factorielle OAT (5 vars x 2 canaux) --
     # Mesure la sensibilite du risque a chaque variable macro
@@ -129,15 +129,13 @@ def decompose_proportional(
 
             # Sensibilite credit
             sens_credit = getattr(sector, f"{_sens_key(var)}_credit")
-            mask_c = result_credit["sector"].values == name
-            ecl_sec = result_credit.loc[mask_c, "ecl_weighted"].sum()
+            ecl_sec = result_credit.filter(pl.col("sector") == name)["ecl_weighted"].sum()
             # Attribution normalisee par le delta adaptatif
             credit_contrib += (abs(var_delta) / adaptive_delta) * sens_credit * ecl_sec / max(total_ecl, 1)
 
             # Sensibilite PE
             sens_pe = getattr(sector, f"{_sens_key(var)}_pe")
-            mask_p = result_pe["sector"].values == name
-            el_sec = result_pe.loc[mask_p, "expected_loss_pe"].sum()
+            el_sec = result_pe.filter(pl.col("sector") == name)["expected_loss_pe"].sum()
             if total_el_pe > 0:
                 pe_contrib += (abs(var_delta) / adaptive_delta) * sens_pe * el_sec / total_el_pe
 
@@ -161,7 +159,7 @@ def decompose_proportional(
             "regime_adjusted": regime is not None,
         })
 
-    factor_df = pd.DataFrame(factor_records)
+    factor_df = pl.DataFrame(factor_records)
 
     return proportional_df, factor_df
 
@@ -217,6 +215,7 @@ decompose_euler = decompose_proportional
 
 
 if __name__ == "__main__":
+    import pandas as pd
     from ifrs9_cockpit.data.generator import generate_dataset
     from ifrs9_cockpit.models.pd_model import PDModelSuite
     from ifrs9_cockpit.engine.ecl_calculator import ECLCalculator
@@ -231,7 +230,7 @@ if __name__ == "__main__":
 
     # Pipeline
     print("\n[1/4] Generation + pipelines credit/PE...")
-    df_credit, df_pe, df_history = generate_dataset()
+    df_credit, df_pe, df_history, _ = generate_dataset()
 
     pd_suite = PDModelSuite()
     pd_suite.fit(df_credit)
@@ -258,17 +257,17 @@ if __name__ == "__main__":
     print("\n[2/4] Couche 1 — Croisement (FR26)...")
     asym, marginal = analyze_crossings(result_credit, result_pe, macro_params)
     print("\n--- Matrice d'asymetrie ---")
-    print(asym.to_string(index=False))
+    print(asym.to_pandas().to_string(index=False))
     print("\n--- Contributions marginales ---")
-    print(marginal.to_string(index=False))
+    print(marginal.to_pandas().to_string(index=False))
 
     # Couche 2
     print("\n[3/4] Couche 2 — Allocation proportionnelle du risque (FR27)...")
     euler, factors = decompose_proportional(result_credit, result_pe, macro_params)
     print("\n--- Allocation proportionnelle (contributions) ---")
-    print(euler.to_string(index=False))
+    print(euler.to_pandas().to_string(index=False))
     print("\n--- Attribution factorielle (deltas adaptatifs) ---")
-    print(factors.to_string(index=False))
+    print(factors.to_pandas().to_string(index=False))
 
     # Validations
     print("\n[4/4] Validations...")

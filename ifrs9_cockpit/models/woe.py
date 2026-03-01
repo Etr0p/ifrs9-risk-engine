@@ -243,6 +243,26 @@ class WoEBinner:
                 woe_map[bin_label] = float(woe)
                 iv_total += iv_contrib
 
+            # --- Etape 1e : Re-detection direction depuis WoE final ---
+            # Apres PAV + min_bin_pct + epsilon smoothing, la direction
+            # effective des WoE peut diverger de la direction initiale
+            # (eg. bins tres petits ou epsilon-domines).  On re-detecte
+            # pour garantir la coherence label ↔ valeurs.
+            if n_actual_bins >= 2:
+                _wv = [woe_map[f"bin_{b}"] for b in range(n_actual_bins)]
+                _inc = all(
+                    _wv[i] <= _wv[i + 1] + 1e-10
+                    for i in range(len(_wv) - 1)
+                )
+                _dec = all(
+                    _wv[i] >= _wv[i + 1] - 1e-10
+                    for i in range(len(_wv) - 1)
+                )
+                if _inc and not _dec:
+                    self.directions_[feat] = "increasing"
+                elif _dec and not _inc:
+                    self.directions_[feat] = "decreasing"
+
             # --- Bin NaN : fusion WoE-proximity si sous-peuple ---
             # Si le bin NaN contient < min_bin_pct de la population totale,
             # on le fusionne avec le bin numerique dont le WoE est le plus
@@ -593,6 +613,15 @@ class WoEBinner:
         # Garantir au minimum 2 bins
         if len(breakpoints) < 3:
             median = np.median(x)
+            # Si median == min(x), le bin gauche serait vide car
+            # digitize met x >= median dans le bin droit.  On place
+            # le split entre min et la plus petite valeur strictement
+            # superieure pour garantir des bins non-vides.
+            x_min = np.min(x)
+            if abs(median - x_min) < 1e-12:
+                above = x[x > x_min + 1e-12]
+                if len(above) > 0:
+                    median = (x_min + np.min(above)) / 2.0
             breakpoints = np.array([-np.inf, median, np.inf])
 
         return breakpoints

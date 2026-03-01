@@ -16,7 +16,7 @@ score multi-facteurs (IFRS 9 §B5.5.17) combinant :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, Optional, Tuple
 
 from ifrs9_cockpit.config import IFRS9_CONFIG, SICR_CONFIG, SCENARIO_BASE
@@ -181,10 +181,10 @@ class StagingEngine:
         stages[sicr_score > self.sicr_threshold] = 2
 
         # Stage 3 : Défaut avéré (priorité sur Stage 2)
+        # PD threshold removed — model prediction is not an observed event (IFRS 9 B5.5.21)
         stage3_mask = (
             (default_flag == 1)
             | (dpd >= self.stage3_dpd)
-            | (pd_current >= self.stage3_pd)
         )
         stages[stage3_mask] = 3
 
@@ -194,7 +194,7 @@ class StagingEngine:
         self,
         stages_t0: np.ndarray,
         stages_t1: np.ndarray,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Calcule la matrice de transition entre deux dates.
 
         Args:
@@ -202,7 +202,7 @@ class StagingEngine:
             stages_t1: Stages à la date finale.
 
         Returns:
-            DataFrame 3×3 avec les probabilités de transition.
+            DataFrame 3×4 avec colonne from_stage + probabilités de transition.
         """
         matrix = np.zeros((3, 3))
 
@@ -216,13 +216,18 @@ class StagingEngine:
                 matrix[from_stage - 1, to_stage - 1] = count / total
 
         labels = ["Stage 1", "Stage 2", "Stage 3"]
-        return pd.DataFrame(matrix, index=labels, columns=labels).round(4)
+        return pl.DataFrame({
+            "from_stage": labels,
+            "Stage 1": np.round(matrix[:, 0], 4).tolist(),
+            "Stage 2": np.round(matrix[:, 1], 4).tolist(),
+            "Stage 3": np.round(matrix[:, 2], 4).tolist(),
+        })
 
     def get_stage_summary(
         self,
         stages: np.ndarray,
         ead: np.ndarray,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Résumé de la distribution des stages.
 
         Args:
@@ -244,8 +249,8 @@ class StagingEngine:
                 "stage": f"Stage {stage}",
                 "count": int(count),
                 "pct_count": round(count / total_count, 4) if total_count > 0 else 0,
-                "total_ead": round(stage_ead, 2),
-                "pct_ead": round(stage_ead / total_ead, 4) if total_ead > 0 else 0,
+                "total_ead": round(float(stage_ead), 2),
+                "pct_ead": round(float(stage_ead / total_ead), 4) if total_ead > 0 else 0,
             })
 
-        return pd.DataFrame(records)
+        return pl.DataFrame(records)

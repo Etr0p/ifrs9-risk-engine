@@ -122,7 +122,7 @@ class TestSectorConfig:
         tech = next(s for s in SECTORS if s.name == "Technologie")
         assert tech.unemployment_sensitivity_credit == 2.5
         assert tech.unemployment_sensitivity_pe == -1.5
-        assert tech.base_default_rate == 0.06
+        assert tech.base_default_rate == 0.025
 
     def test_pe_valuation_params(self):
         """Chaque secteur a valuation_method, entry_multiple_range, exit_multiple_base."""
@@ -168,7 +168,7 @@ class TestBaselConfig:
         assert BASEL_CONFIG.cet1_target == 0.13
 
     def test_rwa_budget(self):
-        assert BASEL_CONFIG.rwa_budget == 10_000_000_000.0
+        assert BASEL_CONFIG.rwa_budget == 3_690_000_000_000.0
 
     def test_rw_pe_options_crr3(self):
         assert BASEL_CONFIG.rw_pe_options == (190, 250, 400)
@@ -177,7 +177,7 @@ class TestBaselConfig:
         assert BASEL_CONFIG.rw_pe_default in BASEL_CONFIG.rw_pe_options
 
     def test_pe_max_allocation(self):
-        assert BASEL_CONFIG.pe_max_allocation == 0.40
+        assert BASEL_CONFIG.pe_max_allocation == 0.15
 
     def test_hhi_max(self):
         assert BASEL_CONFIG.hhi_max == 2500
@@ -248,19 +248,23 @@ class TestMacroScenarios:
         assert SCENARIO_ADVERSE.weight == 0.25
         assert SCENARIO_FAVORABLE.weight == 0.25
 
-    def test_8_predefined_scenarios(self):
+    def test_predefined_scenarios_count(self):
         expected = {
             "Central", "Crise financiere (GFC)", "Crise souveraine (2012)",
             "Stagflation", "Choc pandemique (COVID)", "Rupture techno", "Reprise",
-            "Hypercroissance",
+            "Hypercroissance", "Boom immobilier", "Trappe a liquidite",
+            "Transition climatique brutale",
         }
         assert set(PREDEFINED_SCENARIOS.keys()) == expected
 
     def test_predefined_scenario_keys(self):
-        """Chaque scénario prédéfini a les 5 clés slider."""
+        """Chaque scenario predefini a au moins les 5 cles slider de base."""
         required_keys = {"interest_rate_bp", "unemployment_bipolar", "gdp_pct", "hpi_pct", "inflation_pct"}
+        optional_keys = {"carbon_price_shock", "physical_severity"}
         for name, params in PREDEFINED_SCENARIOS.items():
-            assert set(params.keys()) == required_keys, f"Scénario {name}: clés manquantes"
+            assert required_keys <= set(params.keys()), f"Scenario {name}: cles manquantes"
+            extra = set(params.keys()) - required_keys - optional_keys
+            assert not extra, f"Scenario {name}: cles inattendues {extra}"
 
     def test_scenarios_alias(self):
         """ECL_SCENARIOS et SCENARIOS sont le même objet."""
@@ -341,14 +345,23 @@ class TestFeaturesAndDashboard:
     """Tests Task 7 — Features et DashboardConfig."""
 
     def test_credit_numerical_features(self):
-        expected = {"revenue", "ebitda", "debt_ratio", "credit_score",
+        base_expected = {"revenue", "ebitda", "debt_ratio", "credit_score",
                     "dpd", "collateral", "loan_amount", "utilization_rate",
-                    "loan_to_revenue", "collateral_coverage"}
+                    "loan_to_revenue", "collateral_coverage",
+                    "supplier_hhi", "customer_count",
+                    "esg_score", "bank_relationship_years",
+                    "ebitda_margin", "interest_coverage_ratio",
+                    "cf_volatility", "current_ratio",
+                    "working_capital_ratio", "net_debt_to_ebitda",
+                    "nb_incidents_12m", "account_age_months"}
+        from ifrs9_cockpit.config import CORPORATE_INTERACTION_FEATURES
+        expected = base_expected | set(CORPORATE_INTERACTION_FEATURES)
         assert set(CREDIT_NUMERICAL_FEATURES) == expected
 
     def test_credit_categorical_features(self):
         assert "sector" in CREDIT_CATEGORICAL_FEATURES
         assert "loan_type" in CREDIT_CATEGORICAL_FEATURES
+        assert "company_size" in CREDIT_CATEGORICAL_FEATURES
 
     def test_pe_numerical_features(self):
         assert "entry_multiple" in PE_NUMERICAL_FEATURES
@@ -437,7 +450,7 @@ class TestValidation:
         import ifrs9_cockpit.config  # noqa: F401 — aucune exception
 
     def test_seed(self):
-        assert RANDOM_SEED == 42
+        assert RANDOM_SEED == 123
 
     def test_dataset_params_preserved(self):
         """Les paramètres dataset existants sont conservés."""
@@ -529,19 +542,21 @@ class TestStandalone:
     def test_standalone_runs_successfully(self):
         """python -m ifrs9_cockpit.config retourne 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.config"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.config"],
             capture_output=True,
             text=True,
             timeout=30,
+            encoding="utf-8",
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
 
     def test_standalone_output_contains_key_info(self):
         result = subprocess.run(
-            [sys.executable, "-m", "ifrs9_cockpit.config"],
+            [sys.executable, "-X", "utf8", "-m", "ifrs9_cockpit.config"],
             capture_output=True,
             text=True,
             timeout=30,
+            encoding="utf-8",
         )
         assert "5 Secteurs" in result.stdout
         assert "Configuration valide" in result.stdout
@@ -562,11 +577,11 @@ class TestMathRigorStructures:
         assert abs(total - 1.0) < 1e-6
 
     def test_sicr_config_values(self):
-        assert SICR_CONFIG.w_pd_ratio == 0.30
-        assert SICR_CONFIG.w_pd_delta == 0.30
-        assert SICR_CONFIG.w_dpd == 0.25
-        assert SICR_CONFIG.w_macro == 0.15
-        assert SICR_CONFIG.threshold == 0.70
+        assert SICR_CONFIG.w_pd_ratio == 0.25
+        assert SICR_CONFIG.w_pd_delta == 0.25
+        assert SICR_CONFIG.w_dpd == 0.20
+        assert SICR_CONFIG.w_macro == 0.30
+        assert SICR_CONFIG.threshold == 1.65
 
     def test_macro_mean_reversion_5_variables(self):
         assert len(MACRO_MEAN_REVERSION) == 5
@@ -643,7 +658,9 @@ class TestDataContract:
         assert hi == 1.2
 
     def test_engineered_features(self):
-        assert ENGINEERED_FEATURES == ["loan_to_revenue", "collateral_coverage"]
+        from ifrs9_cockpit.config import CORPORATE_INTERACTION_FEATURES
+        expected = ["loan_to_revenue", "collateral_coverage"] + CORPORATE_INTERACTION_FEATURES
+        assert ENGINEERED_FEATURES == expected
 
     def test_engineered_features_in_numerical(self):
         for feat in ENGINEERED_FEATURES:

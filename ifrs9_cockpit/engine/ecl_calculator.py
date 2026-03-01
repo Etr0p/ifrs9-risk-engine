@@ -3,14 +3,14 @@
 Orchestre le calcul complet de l'ECL en combinant :
     - PD (Probability of Default) par stage et horizon
     - LGD (Loss Given Default) TTC ou Downturn
-    - EAD (Exposure At Default) base ou stressée
-    - Discount Factor (actualisation à l'EIR)
-    - Pondération multi-scénarios (Base 50% + Adverse 25% + Favorable 25%)
+    - EAD (Exposure At Default) base ou stressee
+    - Discount Factor (actualisation a l'EIR)
+    - Ponderation multi-scenarios (Base 50% + Adverse 25% + Favorable 25%)
 
 Formule ECL par exposition :
-    ECL = PD × LGD × EAD × DF
+    ECL = PD x LGD x EAD x DF
 
-Où l'horizon PD dépend du stage :
+Ou l'horizon PD depend du stage :
     - Stage 1 : PD 12 mois
     - Stage 2/3 : PD lifetime (cumulative sur l'horizon)
 """
@@ -18,7 +18,7 @@ Où l'horizon PD dépend du stage :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, List, Optional, Tuple
 
 from ifrs9_cockpit.config import (
@@ -32,9 +32,37 @@ from ifrs9_cockpit.config import (
     LOGIT_AMPLITUDE,
 )
 from ifrs9_cockpit.utils.helpers import logit, expit
+from ifrs9_cockpit.utils.frame_compat import to_pandas, ensure_numpy
 from ifrs9_cockpit.engine.staging import StagingEngine
 from ifrs9_cockpit.models.lgd_model import LGDModel
 from ifrs9_cockpit.models.ead_model import EADModel
+
+
+def compute_corporate_rw(df: pl.DataFrame) -> np.ndarray:
+    """CRR3 SA Art. 122 + SME support factor Art. 501.
+    - Credit score -> rating synthetique -> RW de base
+    - Si CA < 50M EUR -> facteur PME 0.7619
+    - Defaut -> 150%
+    """
+    n = len(df)
+    if "credit_score" not in df.columns:
+        return np.full(n, 1.00)
+    cs = df["credit_score"].to_numpy().astype(float)
+    rw = np.full(n, 1.00)          # Unrated = 100%
+    rw[cs >= 750] = 0.20           # AAA/AA equivalent
+    rw[(cs >= 680) & (cs < 750)] = 0.50  # A equivalent
+    rw[(cs >= 600) & (cs < 680)] = 0.75  # BBB equivalent
+    rw[(cs >= 500) & (cs < 600)] = 1.00  # BB equivalent
+    rw[cs < 500] = 1.50            # below BB equivalent
+    # SME support factor (Art. 501) : CA < 50M EUR
+    if "revenue" in df.columns:
+        revenue = df["revenue"].to_numpy().astype(float)
+        sme_mask = revenue < 50_000_000
+        rw[sme_mask] *= 0.7619
+    # Defaut : 150%
+    if "default_flag" in df.columns:
+        rw[df["default_flag"].to_numpy() == 1] = 1.50
+    return rw
 
 
 # Borne superieure PD pour eviter log(0) dans les calculs hazard rate et Merton
@@ -42,22 +70,22 @@ _PD_CLIP_MAX: float = 0.9999
 
 
 class ECLCalculator:
-    """Calculateur ECL multi-scénarios IFRS 9.
+    """Calculateur ECL multi-scenarios IFRS 9.
 
     Pipeline :
-        1. Calcul des PD par scénario (Base + Adverse + Favorable)
+        1. Calcul des PD par scenario (Base + Adverse + Favorable)
         2. Affectation aux stages via StagingEngine
         3. Calcul LGD (TTC pour Base/Favorable, Downturn pour Adverse)
-        4. Calcul EAD (base ou stressée selon scénario)
-        5. Actualisation + pondération des scénarios (50/25/25)
+        4. Calcul EAD (base ou stressee selon scenario)
+        5. Actualisation + ponderation des scenarios (50/25/25)
 
     Attributes:
         staging_engine: Moteur de staging.
-        lgd_model: Modèle LGD calibré.
-        ead_model: Modèle EAD calibré.
+        lgd_model: Modele LGD calibre.
+        ead_model: Modele EAD calibre.
         discount_rate: Taux d'actualisation annuel.
         lifetime_years: Horizon lifetime pour Stage 2/3.
-        scenarios: Liste des scénarios macroéconomiques.
+        scenarios: Liste des scenarios macroeconomiques.
     """
 
     def __init__(
@@ -72,12 +100,12 @@ class ECLCalculator:
         """Initialise le calculateur ECL.
 
         Args:
-            lgd_model: Modèle LGD calibré.
-            ead_model: Modèle EAD calibré.
-            staging_engine: Moteur de staging (créé par défaut si None).
+            lgd_model: Modele LGD calibre.
+            ead_model: Modele EAD calibre.
+            staging_engine: Moteur de staging (cree par defaut si None).
             discount_rate: Taux d'actualisation (EIR proxy).
             lifetime_years: Horizon pour le calcul lifetime.
-            scenarios: Scénarios macro (Base + Adverse + Favorable par défaut).
+            scenarios: Scenarios macro (Base + Adverse + Favorable par defaut).
         """
         self.staging_engine = staging_engine or StagingEngine()
         self.lgd_model = lgd_model
@@ -88,7 +116,7 @@ class ECLCalculator:
 
     def calculate(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         pd_current: np.ndarray,
         pd_origination: np.ndarray,
         unemployment_override: Optional[float] = None,
@@ -96,28 +124,28 @@ class ECLCalculator:
         interest_rate_override: Optional[float] = None,
         hpi_override: Optional[float] = None,
         inflation_override: Optional[float] = None,
-    ) -> pd.DataFrame:
-        """Calcule l'ECL pour chaque exposition avec pondération multi-scénarios.
+    ) -> pl.DataFrame:
+        """Calcule l'ECL pour chaque exposition avec ponderation multi-scenarios.
 
         Args:
-            df: DataFrame clients avec toutes les features nécessaires.
+            df: DataFrame clients avec toutes les features necessaires.
             pd_current: PD courante (Point-In-Time).
-            pd_origination: PD à l'origination.
-            unemployment_override: Override du taux de chômage (stress test).
+            pd_origination: PD a l'origination.
+            unemployment_override: Override du taux de chomage (stress test).
             gdp_override: Override de la croissance PIB (stress test).
             interest_rate_override: Override du taux directeur BCE (stress test).
             hpi_override: Override de la variation prix immobiliers (stress test).
             inflation_override: Override de l'inflation IPC (stress test).
 
         Returns:
-            DataFrame avec colonnes ajoutées : stage, pd_12m, pd_lifetime,
+            DataFrame avec colonnes ajoutees : stage, pd_12m, pd_lifetime,
             lgd, ead, discount_factor, ecl_by_scenario, ecl_weighted.
         """
         n = len(df)
         dpd = self._get_dpd(df)
-        default_flag = df["default_flag"].values if "default_flag" in df.columns else np.zeros(n)
+        default_flag = df["default_flag"].to_numpy() if "default_flag" in df.columns else np.zeros(n)
 
-        # Calculer la PD stressée de référence (scénario Base avec overrides)
+        # Calculer la PD stressee de reference (scenario Base avec overrides)
         # pour le staging et l'affichage des KPI
         has_override = any(v is not None for v in [
             unemployment_override, gdp_override, interest_rate_override,
@@ -148,18 +176,18 @@ class ECLCalculator:
         else:
             _macro_for_sicr = None
 
-        # Staging sur les PD stressées (réagit aux sliders + macro Z-score)
+        # Staging sur les PD stressees (reagit aux sliders + macro Z-score)
         stages = self.staging_engine.assign_stages(
             pd_stressed_ref, pd_origination, dpd, default_flag,
             macro_params=_macro_for_sicr,
         )
 
-        # Calcul ECL par scénario
+        # Calcul ECL par scenario
         ecl_scenarios: Dict[str, np.ndarray] = {}
         scenario_details: Dict[str, Dict[str, np.ndarray]] = {}
 
         for scenario in self.scenarios:
-            # Ajuster les PD selon le scénario macro
+            # Ajuster les PD selon le scenario macro
             pd_adjusted = self._adjust_pd_for_scenario(
                 pd_current, df, scenario,
                 unemployment_override=unemployment_override,
@@ -175,10 +203,10 @@ class ECLCalculator:
 
             # PD effective : 12m pour Stage 1, lifetime pour Stage 2/3
             pd_effective = np.where(stages == 1, pd_12m, pd_lifetime)
-            # Stage 3 : PD = 1.0 (défaut avéré)
+            # Stage 3 : PD = 1.0 (defaut avere)
             pd_effective = np.where(stages == 3, 1.0, pd_effective)
 
-            # LGD selon le type de scénario (HPI impacte la valeur du collatéral)
+            # LGD selon le type de scenario (HPI impacte la valeur du collateral)
             is_adverse = scenario.name == "Adverse"
             scenario_hpi = hpi_override if hpi_override is not None else scenario.hpi_growth
             lgd = self.lgd_model.predict(df, downturn=is_adverse, hpi_override=scenario_hpi)
@@ -189,7 +217,7 @@ class ECLCalculator:
             # Discount factor PD-marginal weighted (C2)
             df_factor = self._compute_discount_factor(stages, pd_12m)
 
-            # ECL = PD × LGD × EAD × DF
+            # ECL = PD x LGD x EAD x DF
             ecl = pd_effective * lgd * ead * df_factor
 
             ecl_scenarios[scenario.name] = ecl
@@ -200,66 +228,70 @@ class ECLCalculator:
                 "discount_factor": df_factor,
             }
 
-        # Pondération des scénarios
+        # Ponderation des scenarios
         ecl_weighted = np.zeros(n)
         for scenario in self.scenarios:
             ecl_weighted += scenario.weight * ecl_scenarios[scenario.name]
 
-        # Construire le résultat
-        result = df.copy()
-        result["stage"] = stages
-        result["pd_12m"] = pd_stressed_ref
-        result["pd_lifetime"] = self._compute_lifetime_pd(pd_stressed_ref, stages)
-
-        # Utiliser les détails du scénario Base pour les colonnes principales
+        # Construire le resultat
         base_details = scenario_details.get("Base", scenario_details[self.scenarios[0].name])
-        result["lgd"] = base_details["lgd"]
-        result["ead"] = base_details["ead"]
-        result["discount_factor"] = base_details["discount_factor"]
 
+        new_cols = [
+            pl.Series("stage", stages),
+            pl.Series("pd_12m", pd_stressed_ref),
+            pl.Series("pd_lifetime", self._compute_lifetime_pd(pd_stressed_ref, stages)),
+            pl.Series("lgd", base_details["lgd"]),
+            pl.Series("ead", base_details["ead"]),
+            pl.Series("discount_factor", base_details["discount_factor"]),
+        ]
         for scenario_name, ecl in ecl_scenarios.items():
-            result[f"ecl_{scenario_name.lower()}"] = np.round(ecl, 2)
+            new_cols.append(pl.Series(f"ecl_{scenario_name.lower()}", np.round(ecl, 2)))
+        # Position-level RW (CRR3 SA Art. 122 + SME Art. 501)
+        rw_position = compute_corporate_rw(df)
 
-        result["ecl_weighted"] = np.round(ecl_weighted, 2)
+        new_cols.extend([
+            pl.Series("ecl_weighted", np.round(ecl_weighted, 2)),
+            pl.Series("rw_crr3", rw_position),
+            pl.Series("rwa_credit", np.round(base_details["ead"] * rw_position, 2)),
+            pl.Series("credit_spread", self._compute_credit_spread(
+                pd_stressed_ref, base_details["lgd"],
+            )),
+        ])
 
-        # RWA credit (SA corporate) = EAD x risk_weight
-        result["rwa_credit"] = np.round(
-            base_details["ead"] * BASEL_CONFIG.rw_credit, 2
-        )
-
-        # Merton credit spread (H4)
-        result["credit_spread"] = self._compute_credit_spread(
-            pd_stressed_ref, base_details["lgd"],
-        )
+        result = df.clone()
+        result = result.with_columns(new_cols)
 
         return result
 
-    def compute_ecl_summary(self, result_df: pd.DataFrame) -> pd.DataFrame:
-        """Résumé de l'ECL par stage et secteur.
+    def compute_ecl_summary(self, result_df: pl.DataFrame) -> pl.DataFrame:
+        """Resume de l'ECL par stage et secteur.
 
         Args:
-            result_df: DataFrame résultat de calculate().
+            result_df: DataFrame resultat de calculate().
 
         Returns:
-            DataFrame agrégé avec ECL total, moyen, coverage ratio.
+            DataFrame agrege avec ECL total, moyen, coverage ratio.
         """
         summary = (
-            result_df.groupby(["stage", "sector"])
+            result_df.group_by(["stage", "sector"])
             .agg(
-                count=("ecl_weighted", "size"),
-                ecl_total=("ecl_weighted", "sum"),
-                ecl_mean=("ecl_weighted", "mean"),
-                ead_total=("ead", "sum"),
-                pd_mean=("pd_12m", "mean"),
+                pl.col("ecl_weighted").count().alias("count"),
+                pl.col("ecl_weighted").sum().alias("ecl_total"),
+                pl.col("ecl_weighted").mean().alias("ecl_mean"),
+                pl.col("ead").sum().alias("ead_total"),
+                pl.col("pd_12m").mean().alias("pd_mean"),
             )
-            .reset_index()
         )
-        summary["coverage_ratio"] = np.where(
-            summary["ead_total"] > 0,
-            summary["ecl_total"] / summary["ead_total"],
-            0,
+        summary = summary.with_columns(
+            pl.when(pl.col("ead_total") > 0)
+            .then(pl.col("ecl_total") / pl.col("ead_total"))
+            .otherwise(0.0)
+            .alias("coverage_ratio")
         )
-        return summary.round(4)
+        # Round numerical columns
+        numerical_cols = ["ecl_total", "ecl_mean", "ead_total", "pd_mean", "coverage_ratio"]
+        summary = summary.with_columns([pl.col(c).round(4) for c in numerical_cols])
+        return summary
 
     def compute_waterfall(
         self,
@@ -268,24 +300,24 @@ class ECLCalculator:
         stages_t0: np.ndarray,
         stages_t1: np.ndarray,
         segments: np.ndarray,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Construit le waterfall de variation ECL entre deux dates.
 
-        Décompose la variation ECL en :
+        Decompose la variation ECL en :
             - New business
             - Stage migration
             - PD/LGD/EAD changes
             - Derecognition
 
         Args:
-            ecl_t0: ECL à la date initiale.
-            ecl_t1: ECL à la date finale.
-            stages_t0: Stages à t0.
-            stages_t1: Stages à t1.
+            ecl_t0: ECL a la date initiale.
+            ecl_t1: ECL a la date finale.
+            stages_t0: Stages a t0.
+            stages_t1: Stages a t1.
             segments: Segments clients.
 
         Returns:
-            DataFrame avec la décomposition du waterfall.
+            DataFrame avec la decomposition du waterfall.
         """
         records = []
 
@@ -312,11 +344,11 @@ class ECLCalculator:
             "amount": round((ecl_t1[upgraded] - ecl_t0[upgraded]).sum(), 2),
         })
         records.append({
-            "component": "Paramètres (PD/LGD/EAD)",
+            "component": "Parametres (PD/LGD/EAD)",
             "amount": round((ecl_t1[stable] - ecl_t0[stable]).sum(), 2),
         })
         records.append({
-            "component": "ECL Clôture",
+            "component": "ECL Cloture",
             "amount": round(total_t1, 2),
         })
         records.append({
@@ -324,14 +356,14 @@ class ECLCalculator:
             "amount": round(delta, 2),
         })
 
-        return pd.DataFrame(records)
+        return pl.DataFrame(records)
 
-    # ──────────────────────────────────────────
-    # MÉTHODES PRIVÉES
-    # ──────────────────────────────────────────
+    # ------------------------------------------
+    # METHODES PRIVEES
+    # ------------------------------------------
 
-    def _get_dpd(self, df: pd.DataFrame) -> np.ndarray:
-        """Extrait les DPD du DataFrame (ou zéro si absent).
+    def _get_dpd(self, df: pl.DataFrame) -> np.ndarray:
+        """Extrait les DPD du DataFrame (ou zero si absent).
 
         Args:
             df: DataFrame clients.
@@ -340,13 +372,13 @@ class ECLCalculator:
             Array de DPD.
         """
         if "dpd" in df.columns:
-            return df["dpd"].values.astype(int)
+            return df["dpd"].to_numpy().astype(int)
         return np.zeros(len(df), dtype=int)
 
     def _adjust_pd_for_scenario(
         self,
         pd_base: np.ndarray,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         scenario: MacroScenario,
         unemployment_override: Optional[float] = None,
         gdp_override: Optional[float] = None,
@@ -354,37 +386,37 @@ class ECLCalculator:
         hpi_override: Optional[float] = None,
         inflation_override: Optional[float] = None,
     ) -> np.ndarray:
-        """Ajuste les PD selon le scénario macroéconomique (logit-space).
+        """Ajuste les PD selon le scenario macroeconomique (logit-space).
 
         Formule Merton-Vasicek :
-            logit(PD_stressed) = logit(PD_base) + LOGIT_AMPLITUDE × Σ(shock_i × sens_i)
+            logit(PD_stressed) = logit(PD_base) + LOGIT_AMPLITUDE x Sum(shock_i x sens_i)
 
         Les chocs sont des deltas normalises (positif = adverse) calcules
         depuis les valeurs absolues des variables macro vs baseline.
-        La transformation logit garantit PD ∈ ]0, 1[ sans clip.
+        La transformation logit garantit PD dans ]0, 1[ sans clip.
 
-        5 canaux de transmission : chômage, PIB, taux directeur,
+        5 canaux de transmission : chomage, PIB, taux directeur,
         prix immobiliers, inflation.
 
         Args:
-            pd_base: PD de base (modèle).
+            pd_base: PD de base (modele).
             df: DataFrame clients (pour les secteurs).
-            scenario: Scénario macroéconomique.
-            unemployment_override: Override chômage pour stress test interactif.
+            scenario: Scenario macroeconomique.
+            unemployment_override: Override chomage pour stress test interactif.
             gdp_override: Override PIB pour stress test interactif.
             interest_rate_override: Override taux directeur BCE.
             hpi_override: Override variation prix immobiliers.
             inflation_override: Override inflation IPC.
 
         Returns:
-            PD ajustées pour le scénario, bornées dans ]0, 1[ par expit.
+            PD ajustees pour le scenario, bornees dans ]0, 1[ par expit.
         """
         # Transformer en espace logit (log-odds)
         logit_pd = logit(pd_base)
 
         base = SCENARIO_BASE
 
-        # Déterminer les valeurs macro effectives
+        # Determiner les valeurs macro effectives
         has_override = any(v is not None for v in [
             unemployment_override, gdp_override, interest_rate_override,
             hpi_override, inflation_override,
@@ -397,24 +429,25 @@ class ECLCalculator:
             hpi_val = hpi_override if hpi_override is not None else base.hpi_growth
             infl_val = inflation_override if inflation_override is not None else base.inflation_rate
         else:
-            # Mode scénario prédéfini : valeurs absolues du scénario
+            # Mode scenario predefini : valeurs absolues du scenario
             unemp_val = scenario.unemployment_rate
             gdp_val = scenario.gdp_growth
             ir_val = scenario.interest_rate
             hpi_val = scenario.hpi_growth
             infl_val = scenario.inflation_rate
 
-        # Deltas normalisés (positif = adverse, symétrique favorable/adverse)
-        # Plus de max(0, ...) : les scénarios favorables réduisent la PD
+        # Deltas normalises (positif = adverse, symetrique favorable/adverse)
+        # Plus de max(0, ...) : les scenarios favorables reduisent la PD
         unemp_shock = (unemp_val - base.unemployment_rate) / 100
-        gdp_shock = (base.gdp_growth - gdp_val) / 100         # Inversé : baisse PIB = adverse
+        gdp_shock = (base.gdp_growth - gdp_val) / 100         # Inverse : baisse PIB = adverse
         ir_shock = (ir_val - base.interest_rate) / 100
-        hpi_shock = (base.hpi_growth - hpi_val) / 100          # Inversé : baisse HPI = adverse
+        hpi_shock = (base.hpi_growth - hpi_val) / 100          # Inverse : baisse HPI = adverse
         infl_shock = (infl_val - base.inflation_rate) / 100
 
         # Appliquer les chocs par secteur dans l'espace logit
+        sectors = df["sector"].to_numpy()
         for sec in SECTORS:
-            mask = df["sector"].values == sec.name
+            mask = sectors == sec.name
             sector_shock = (
                 unemp_shock * sec.unemployment_sensitivity_credit
                 + gdp_shock * sec.gdp_sensitivity_credit
@@ -422,7 +455,7 @@ class ECLCalculator:
                 + hpi_shock * sec.hpi_sensitivity_credit
                 + infl_shock * sec.inflation_sensitivity_credit
             )
-            # Shift additif en logit-space (expit garantit PD ∈ ]0, 1[)
+            # Shift additif en logit-space (expit garantit PD dans ]0, 1[)
             logit_pd[mask] += sector_shock * LOGIT_AMPLITUDE
 
         return expit(logit_pd)
@@ -564,66 +597,65 @@ if __name__ == "__main__":
     from ifrs9_cockpit.utils.helpers import format_euro, format_pct
 
     print("=" * 65)
-    print("IFRS 9 COCKPIT — Phase 3 : ECL Calculation")
+    print("IFRS 9 COCKPIT -- Phase 3 : ECL Calculation")
     print("=" * 65)
 
     # 1. Data
-    print("\n[1/5] Génération des données...")
-    df_credit, df_pe, df_history = generate_dataset()
+    print("\n[1/5] Generation des donnees...")
+    df_credit, df_pe, df_history, _ = generate_dataset()
     print(f"       {len(df_credit):,} entreprises | DR = {df_credit['default_flag'].mean():.2%}")
 
     # 2. PD Models
-    print("\n[2/5] Entraînement des modèles PD...")
+    print("\n[2/5] Entrainement des modeles PD...")
     pd_suite = PDModelSuite()
     pd_suite.fit(df_credit)
     best_model = "LR_WoE"
     pd_predictions = pd_suite.predict(df_credit)
     pd_current = pd_predictions[best_model]
     # Utiliser pd_origination reelle du generateur (H2)
-    pd_origination = df_credit["pd_origination"].values
+    pd_origination = df_credit["pd_origination"].to_numpy()
     print(f"       PD moyenne ({best_model}) : {pd_current.mean():.4f}")
     print(f"       PD origination moyenne    : {pd_origination.mean():.4f}")
 
     # 3. LGD
-    print("\n[3/5] Calibration du modèle LGD...")
+    print("\n[3/5] Calibration du modele LGD...")
     lgd_model = LGDModel()
     lgd_model.fit(df_credit)
     lgd_summary = lgd_model.get_summary(df_credit)
-    print(lgd_summary.to_string(index=False))
+    print(to_pandas(lgd_summary).to_string(index=False))
 
     # 4. EAD
-    print("\n[4/5] Calibration du modèle EAD...")
+    print("\n[4/5] Calibration du modele EAD...")
     ead_model = EADModel()
     ead_model.fit(df_credit)
     ead_summary = ead_model.get_summary(df_credit)
-    print(ead_summary.to_string(index=False))
+    print(to_pandas(ead_summary).to_string(index=False))
 
     # 5. ECL
-    print("\n[5/5] Calcul ECL multi-scénarios...")
+    print("\n[5/5] Calcul ECL multi-scenarios...")
     ecl_calc = ECLCalculator(lgd_model=lgd_model, ead_model=ead_model)
     result = ecl_calc.calculate(df_credit, pd_current, pd_origination)
 
-    # Résultats
+    # Resultats
     print("\n--- Distribution des Stages ---")
     staging = StagingEngine()
-    stages = result["stage"].values
-    ead_values = result["ead"].values
+    stages = result["stage"].to_numpy()
+    ead_values = result["ead"].to_numpy()
     stage_summary = staging.get_stage_summary(stages, ead_values)
-    print(stage_summary.to_string(index=False))
+    print(to_pandas(stage_summary).to_string(index=False))
 
     print(f"\n--- ECL Total ---")
     print(f"  ECL Base       : {format_euro(result['ecl_base'].sum())}")
     print(f"  ECL Adverse    : {format_euro(result['ecl_adverse'].sum())}")
     print(f"  ECL Favorable  : {format_euro(result['ecl_favorable'].sum())}")
-    print(f"  ECL Pondéré    : {format_euro(result['ecl_weighted'].sum())}")
+    print(f"  ECL Pondere    : {format_euro(result['ecl_weighted'].sum())}")
     print(f"  EAD Total      : {format_euro(result['ead'].sum())}")
     print(f"  Coverage       : {format_pct(result['ecl_weighted'].sum() / result['ead'].sum())}")
 
     print("\n--- ECL par Secteur ---")
-    for sec in df_credit["sector"].unique():
-        mask = result["sector"] == sec
-        ecl_sec = result.loc[mask, "ecl_weighted"].sum()
-        ead_sec = result.loc[mask, "ead"].sum()
+    for sec in df_credit["sector"].unique().to_list():
+        ecl_sec = result.filter(pl.col("sector") == sec)["ecl_weighted"].sum()
+        ead_sec = result.filter(pl.col("sector") == sec)["ead"].sum()
         cov = ecl_sec / ead_sec if ead_sec > 0 else 0
         print(f"  {sec:20s} : ECL = {format_euro(ecl_sec):>12s}  |  Coverage = {format_pct(cov)}")
 
@@ -635,4 +667,4 @@ if __name__ == "__main__":
     print(f"  Spread max     : {spread.max() * 10_000:.0f} bps")
 
     print("\n" + "=" * 65)
-    print("Phase 3 validée.")
+    print("Phase 3 validee.")

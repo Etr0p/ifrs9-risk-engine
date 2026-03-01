@@ -23,12 +23,55 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import pickle
+import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
-import pandas as pd
+import polars as pl
+
+from ifrs9_cockpit.utils.dataset_bundle import DatasetBundle
+
+
+# ──────────────────────────────────────────────
+# DISK CACHE (survit aux reloads Werkzeug)
+# ──────────────────────────────────────────────
+_CACHE_DIR = Path(tempfile.gettempdir()) / "ifrs9_cockpit_cache"
+_CACHE_DIR.mkdir(exist_ok=True)
+_CACHE_TTL = 3600  # 1h — invalider si le process a crashe depuis longtemps
+
+
+def _disk_cache_get(key: str):
+    """Charge un objet du cache disque (joblib compress). None si absent/expire."""
+    path = _CACHE_DIR / f"{key}.z"
+    if not path.exists():
+        return None
+    try:
+        if time.time() - path.stat().st_mtime > _CACHE_TTL:
+            path.unlink(missing_ok=True)
+            return None
+        import joblib
+        return joblib.load(path)
+    except Exception:
+        path.unlink(missing_ok=True)
+        return None
+
+
+def _disk_cache_set(key: str, obj):
+    """Sauvegarde un objet sur disque (joblib compress lz4)."""
+    path = _CACHE_DIR / f"{key}.z"
+    try:
+        import joblib
+        joblib.dump(obj, path, compress=("lz4", 1))
+    except Exception:
+        try:
+            import joblib
+            joblib.dump(obj, path, compress=3)  # fallback zlib
+        except Exception:
+            pass
 
 
 # ──────────────────────────────────────────────
@@ -109,17 +152,24 @@ def set_cached_pipeline(key: str, results: Dict[str, Any]) -> None:
 # DATA LOADING (lru_cache — charge une seule fois)
 # ──────────────────────────────────────────────
 @functools.lru_cache(maxsize=1)
-def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Genere et cache le dataset (credit + PE + historique).
+def load_data() -> DatasetBundle:
+    """Genere et cache le dataset (credit + PE + historique + balance sheet).
 
-    Remplace st.cache_data. Le lru_cache(maxsize=1) garantit que la
-    generation n'est executee qu'une seule fois par processus.
+    Premier appel : genere puis sauvegarde sur disque.
+    Reloads suivants : charge depuis le disque (~0.3s au lieu de ~1.1s).
 
     Returns:
-        Tuple (df_credit, df_pe, df_history) de DataFrames.
+        DatasetBundle with (df_credit, df_pe, df_history, df_balance_sheet)
+        and 8 position DataFrames. Supports tuple unpacking for backward compat.
     """
+    cached = _disk_cache_get("dataset")
+    if cached is not None:
+        print("  [cache] Dataset charge depuis le disque")
+        return cached
     from ifrs9_cockpit.data.generator import generate_dataset
-    return generate_dataset()
+    result = generate_dataset()
+    _disk_cache_set("dataset", result)
+    return result
 
 
 # ──────────────────────────────────────────────
@@ -127,11 +177,12 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 # ──────────────────────────────────────────────
 @functools.lru_cache(maxsize=1)
 def train_pd_models():
-    """Charge ou entraine les modeles PD (cache en memoire).
+    """Charge ou entraine les modeles PD.
 
     Ordre de priorite :
-        1. Charger un modele pre-entraine depuis training/models/pd_suite.joblib
-        2. Fallback : entrainer sur les donnees synthetiques 30K
+        1. Modele pre-entraine (training/models/pd_suite.joblib)
+        2. Cache disque (survit aux reloads)
+        3. Fallback : entrainer sur donnees synthetiques
 
     Returns:
         PDModelSuite pre-entrainee ou fraichement entrainee.
@@ -143,9 +194,14 @@ def train_pd_models():
             return PDModelSuite.load(str(pretrained))
         except Exception:
             pass
-    df_credit, _, _ = load_data()
+    cached = _disk_cache_get("pd_suite")
+    if cached is not None:
+        print("  [cache] Modeles PD charges depuis le disque")
+        return cached
+    df_credit, _, _, _ = load_data()
     suite = PDModelSuite()
     suite.fit(df_credit)
+    _disk_cache_set("pd_suite", suite)
     return suite
 
 
@@ -156,14 +212,77 @@ def train_lgd_ead():
     Returns:
         Tuple (LGDModel, EADModel) calibres sur les donnees credit.
     """
+    cached = _disk_cache_get("lgd_ead")
+    if cached is not None:
+        print("  [cache] LGD & EAD charges depuis le disque")
+        return cached
     from ifrs9_cockpit.models.lgd_model import LGDModel
     from ifrs9_cockpit.models.ead_model import EADModel
-    df_credit, _, _ = load_data()
+    df_credit, _, _, _ = load_data()
     lgd = LGDModel()
     lgd.fit(df_credit)
     ead = EADModel()
     ead.fit(df_credit)
+    _disk_cache_set("lgd_ead", (lgd, ead))
     return lgd, ead
+
+
+# ──────────────────────────────────────────────
+# GOVERNANCE ARTIFACTS (lru_cache — charge une seule fois)
+# ──────────────────────────────────────────────
+@functools.lru_cache(maxsize=1)
+def load_consumer_pd_suite():
+    """Charge la suite PD consumer pre-entrainee.
+
+    Returns:
+        PDModelSuite consumer ou None si le fichier n'existe pas.
+    """
+    path = Path("ifrs9_cockpit/training/models/consumer_pd_suite.joblib")
+    if path.exists():
+        try:
+            from ifrs9_cockpit.models.pd_model import PDModelSuite
+            return PDModelSuite.load(str(path))
+        except Exception:
+            return None
+    return None
+
+
+@functools.lru_cache(maxsize=1)
+def load_mortgage_pd_suite():
+    """Charge la suite PD mortgage pre-entrainee.
+
+    Returns:
+        PDModelSuite mortgage ou None si le fichier n'existe pas.
+    """
+    path = Path("ifrs9_cockpit/training/models/mortgage_pd_suite.joblib")
+    if path.exists():
+        try:
+            from ifrs9_cockpit.models.pd_model import PDModelSuite
+            return PDModelSuite.load(str(path))
+        except Exception:
+            return None
+    return None
+
+
+@functools.lru_cache(maxsize=1)
+def load_governance_artifacts() -> Optional[Dict[str, Any]]:
+    """Charge les artefacts de gouvernance pre-calcules.
+
+    Cherche governance_suite.joblib produit par le pipeline offline
+    (train.py --output-governance). Si absent, retourne None et le
+    dashboard calcule inline comme avant (zero regression).
+
+    Returns:
+        Dict d'artefacts ou None si le fichier n'existe pas.
+    """
+    path = Path("ifrs9_cockpit/training/models/governance_suite.joblib")
+    if path.exists():
+        try:
+            import joblib
+            return joblib.load(str(path))
+        except Exception:
+            return None
+    return None
 
 
 # ──────────────────────────────────────────────
@@ -217,7 +336,7 @@ def force_models_cpu(pd_suite) -> None:
             if hasattr(inner, "set_params"):
                 try:
                     inner.set_params(device="cpu")
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, AttributeError):
                     pass
 
 

@@ -80,7 +80,7 @@ st.set_page_config(
 @st.cache_data(show_spinner="Génération des données synthétiques...")
 def load_data() -> tuple:
     """Génère et cache le dataset (credit + PE + historique)."""
-    df_credit, df_pe, df_history = generate_dataset()
+    df_credit, df_pe, df_history, _ = generate_dataset()
     return df_credit, df_pe, df_history
 
 
@@ -570,12 +570,12 @@ def main() -> None:
         with col1:
             st.plotly_chart(charts.plot_roc_curves(roc_data), width="stretch")
         with col2:
-            comparison_df = pd_suite.get_comparison_table()
+            comparison_df = pd_suite.get_comparison_table().to_pandas()
             st.plotly_chart(charts.plot_model_comparison(comparison_df), width="stretch")
 
         # Métriques détaillées
         render_section_title("Metriques Detaillees")
-        comparison_styled = pd_suite.get_comparison_table()
+        comparison_styled = pd_suite.get_comparison_table().to_pandas()
         st.dataframe(
             comparison_styled,
             width="stretch",
@@ -617,7 +617,7 @@ def main() -> None:
         with st.expander("Analyse des Features", expanded=False):
             col3, col4 = st.columns(2)
             with col3:
-                feat_imp_df = pd_suite.get_feature_importance_table()
+                feat_imp_df = pd_suite.get_feature_importance_table().to_pandas()
                 st.plotly_chart(
                     charts.plot_feature_importance(feat_imp_df, selected_model),
                     width="stretch",
@@ -1072,7 +1072,7 @@ def main() -> None:
                 trans_matrix = staging_exp.compute_transition_matrix(
                     result_base["stage"].values, result_stressed["stage"].values,
                 )
-                trans_matrix.to_excel(writer, sheet_name="2_Transitions")
+                trans_matrix.to_pandas().to_excel(writer, sheet_name="2_Transitions", index=False)
                 # 3. Alertes CRO
                 alerts_df = pd.DataFrame([
                     {"severity": a.severity, "title": a.title, "message": a.message, "action": a.action or ""}
@@ -1284,7 +1284,7 @@ def main() -> None:
             ai_report = analyst.generate_full_report(
                 result_stressed=result_stressed,
                 result_base=result_base,
-                model_comparison=pd_suite.get_comparison_table(),
+                model_comparison=pd_suite.get_comparison_table().to_pandas(),
                 macro_params=macro_params,
                 psi_value=psi_value,
                 selected_model=selected_model,

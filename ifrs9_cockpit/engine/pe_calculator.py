@@ -36,7 +36,7 @@ Limites du modele :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Dict, Optional, Tuple
 
 from ifrs9_cockpit.config import (
@@ -51,6 +51,7 @@ from ifrs9_cockpit.config import (
     PE_DISTRESS_LOGIT_SCALE,
 )
 from ifrs9_cockpit.utils.helpers import logit, expit
+from ifrs9_cockpit.utils.frame_compat import to_pandas, to_polars, ensure_numpy
 from ifrs9_cockpit.models.pe_model import PEModel
 
 
@@ -88,14 +89,14 @@ class PECalculator:
 
     def calculate(
         self,
-        df_pe: pd.DataFrame,
+        df_pe: pl.DataFrame,
         unemployment_override: Optional[float] = None,
         gdp_override: Optional[float] = None,
         interest_rate_override: Optional[float] = None,
         hpi_override: Optional[float] = None,
         inflation_override: Optional[float] = None,
         unemployment_crisis: bool = False,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Calcule les metriques PE pour chaque position.
 
         Args:
@@ -113,11 +114,16 @@ class PECalculator:
             DataFrame avec colonnes ajoutees : nav, capital_invested,
             moic, irr, dpi, rvpi, tvpi, delta_nav, nav_drawdown.
         """
+        # Accept both pandas and polars (incremental migration)
+        df_pe = to_polars(df_pe)
         n = len(df_pe)
+
+        # PEModel still expects pandas — convert at boundary
+        df_pe_pd = to_pandas(df_pe)
 
         # NAV baseline (scenario base avec overrides si fournis)
         nav_base, mult_base = self.pe_model.calculate_nav(
-            df_pe,
+            df_pe_pd,
             unemployment_override=unemployment_override,
             gdp_override=gdp_override,
             interest_rate_override=interest_rate_override,
@@ -127,19 +133,21 @@ class PECalculator:
         )
 
         # NAV reference (sans stress) pour calculer delta_nav
-        nav_ref, _ = self.pe_model.calculate_nav(df_pe)
+        nav_ref, _ = self.pe_model.calculate_nav(df_pe_pd)
 
         # Capital investi a l'entree
         capital = self._compute_capital_invested(df_pe)
 
         # Metriques de performance
         moic = np.where(capital > 0, nav_base / capital, 0)
-        holding = df_pe["holding_years"].values.astype(float)
+        holding = df_pe["holding_years"].to_numpy().astype(float)
         irr = np.where(
             (moic > 0) & (holding > 0),
             np.power(moic, 1.0 / holding) - 1,
             0,
         )
+        # Realistic IRR bounds: 35% = top-decile PE vintage (Cambridge Associates)
+        irr = np.clip(irr, -0.50, 0.35)
         dpi = np.zeros(n)  # Pas de distributions intermediaires
         rvpi = moic.copy()
         tvpi = dpi + rvpi
@@ -171,11 +179,11 @@ class PECalculator:
         expected_loss_pe = distress_prob * lgd_eq * nav_base
 
         # Cout de sortie (FR18) avec DLOM ajuste par vintage.
-        # Fonds jeunes (holding < threshold) sont moins liquides → decote plus elevee.
-        # DLOM_eff = base × (1 + factor × max(0, threshold - holding) / threshold)
+        # Fonds jeunes (holding < threshold) sont moins liquides -> decote plus elevee.
+        # DLOM_eff = base x (1 + factor x max(0, threshold - holding) / threshold)
         # Ref: AICPA Practice Aid (2013), Pratt & Grabowski (2014).
         cfg_pe = PE_CLASSIFICATION_CONFIG
-        holding = df_pe["holding_years"].values.astype(float)
+        holding = df_pe["holding_years"].to_numpy().astype(float)
         vintage_adj = np.maximum(0, cfg_pe.dlom_vintage_threshold - holding) / cfg_pe.dlom_vintage_threshold
         effective_discount = cfg_pe.secondary_discount * (1 + cfg_pe.dlom_vintage_factor * vintage_adj)
         exit_cost = nav_base * (1 - effective_discount)
@@ -183,39 +191,45 @@ class PECalculator:
         # H8 : RWA PE via score CRR3 composite (Art. 133) — position par position
         # Remplace le RW fixe par un score gradue (190/250/400)
         from ifrs9_cockpit.engine.comparator import compute_crr3_rw
-        # On construit un DataFrame temporaire avec les colonnes necessaires
-        _tmp_pe = df_pe.copy()
-        _tmp_pe["nav"] = nav_base
-        _tmp_pe["moic"] = moic
-        _tmp_pe["distress_prob"] = distress_prob
-        _tmp_pe["capital_invested"] = capital
-        crr3_rw = compute_crr3_rw(_tmp_pe)
+        # On construit un DataFrame temporaire (pandas) avec les colonnes necessaires
+        # compute_crr3_rw still expects pandas
+        _tmp_pe = df_pe.clone()
+        _tmp_pe = _tmp_pe.with_columns([
+            pl.Series("nav", nav_base),
+            pl.Series("moic", moic),
+            pl.Series("distress_prob", distress_prob),
+            pl.Series("capital_invested", capital),
+        ])
+        crr3_rw = compute_crr3_rw(to_pandas(_tmp_pe))
         rwa_pe = nav_base * crr3_rw / 100.0
 
         # Construire le resultat
-        result = df_pe.copy()
-        result["nav"] = np.round(nav_base, 2)
-        result["exit_multiple"] = mult_base
-        result["capital_invested"] = np.round(capital, 2)
-        result["moic"] = np.round(moic, 4)
-        result["irr"] = np.round(irr, 4)
-        result["dpi"] = dpi
-        result["rvpi"] = np.round(rvpi, 4)
-        result["tvpi"] = np.round(tvpi, 4)
-        result["delta_nav"] = np.round(delta_nav, 2)
-        result["nav_drawdown"] = np.round(nav_drawdown, 4)
-        result["distress_prob"] = np.round(distress_prob, 4)
-        result["risk_category"] = risk_category
-        result["expected_loss_pe"] = np.round(expected_loss_pe, 2)
-        result["exit_cost"] = np.round(exit_cost, 2)
-        result["rwa_pe"] = np.round(rwa_pe, 2)
+        result = df_pe.clone()
+        new_cols = [
+            pl.Series("nav", np.round(nav_base, 2)),
+            pl.Series("exit_multiple", mult_base),
+            pl.Series("capital_invested", np.round(capital, 2)),
+            pl.Series("moic", np.round(moic, 4)),
+            pl.Series("irr", np.round(irr, 4)),
+            pl.Series("dpi", dpi),
+            pl.Series("rvpi", np.round(rvpi, 4)),
+            pl.Series("tvpi", np.round(tvpi, 4)),
+            pl.Series("delta_nav", np.round(delta_nav, 2)),
+            pl.Series("nav_drawdown", np.round(nav_drawdown, 4)),
+            pl.Series("distress_prob", np.round(distress_prob, 4)),
+            pl.Series("risk_category", risk_category),
+            pl.Series("expected_loss_pe", np.round(expected_loss_pe, 2)),
+            pl.Series("exit_cost", np.round(exit_cost, 2)),
+            pl.Series("rwa_pe", np.round(rwa_pe, 2)),
+        ]
+        result = result.with_columns(new_cols)
 
         return result
 
     def calculate_scenario_metrics(
         self,
-        df_pe: pd.DataFrame,
-    ) -> Dict[str, pd.DataFrame]:
+        df_pe: pl.DataFrame,
+    ) -> Dict[str, pl.DataFrame]:
         """Calcule les metriques PE sous les 3 scenarios.
 
         Args:
@@ -224,6 +238,8 @@ class PECalculator:
         Returns:
             Dict {scenario_name: result_DataFrame}.
         """
+        # Accept both pandas and polars (incremental migration)
+        df_pe = to_polars(df_pe)
         results = {}
         for scenario in SCENARIOS:
             result = self.calculate(
@@ -239,9 +255,9 @@ class PECalculator:
 
     def compute_factorial_sensitivities(
         self,
-        df_pe: pd.DataFrame,
+        df_pe: pl.DataFrame,
         delta: float = 1.0,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Calcule la matrice de sensibilites factorielles dNAV/d(macro).
 
         Perturbe chaque variable macro de +delta et mesure l'impact
@@ -254,13 +270,19 @@ class PECalculator:
         Returns:
             DataFrame 5x5 (secteurs x variables macro) avec dNAV en %.
         """
+        # Accept both pandas and polars (incremental migration)
+        df_pe = to_polars(df_pe)
         base = SCENARIO_BASE
 
+        # PEModel expects pandas
+        df_pe_pd = to_pandas(df_pe)
+
         # NAV reference
-        nav_ref, _ = self.pe_model.calculate_nav(df_pe)
+        nav_ref, _ = self.pe_model.calculate_nav(df_pe_pd)
+        sectors_arr = df_pe["sector"].to_numpy()
         nav_ref_by_sector = {}
         for sector in SECTORS:
-            mask = df_pe["sector"].values == sector.name
+            mask = sectors_arr == sector.name
             nav_ref_by_sector[sector.name] = nav_ref[mask].sum()
 
         # Perturbation par variable
@@ -282,7 +304,7 @@ class PECalculator:
 
         records = []
         for sector in SECTORS:
-            mask = df_pe["sector"].values == sector.name
+            mask = sectors_arr == sector.name
             row = {"sector": sector.name}
 
             for var_name in _MACRO_VARS:
@@ -297,7 +319,7 @@ class PECalculator:
                     # Pour chomage, taux, inflation, adverse = hausse
                     overrides[param_key] = overrides_base[param_key] + delta
 
-                nav_perturbed, _ = self.pe_model.calculate_nav(df_pe, **overrides)
+                nav_perturbed, _ = self.pe_model.calculate_nav(df_pe_pd, **overrides)
                 nav_perturbed_sector = nav_perturbed[mask].sum()
 
                 # Sensibilite en % de NAV
@@ -313,12 +335,12 @@ class PECalculator:
 
             records.append(row)
 
-        return pd.DataFrame(records).set_index("sector")
+        return pl.DataFrame(records)
 
     def get_performance_summary(
         self,
-        result_df: pd.DataFrame,
-    ) -> pd.DataFrame:
+        result_df: pl.DataFrame,
+    ) -> pl.DataFrame:
         """Resume des metriques PE par secteur.
 
         Args:
@@ -327,29 +349,29 @@ class PECalculator:
         Returns:
             DataFrame recapitulatif.
         """
+        # Accept both pandas and polars (incremental migration)
+        result_df = to_polars(result_df)
         return (
-            result_df.groupby("sector")
+            result_df.group_by("sector")
             .agg(
-                count=("nav", "size"),
-                nav_total=("nav", "sum"),
-                nav_mean=("nav", "mean"),
-                moic_mean=("moic", "mean"),
-                irr_mean=("irr", "mean"),
-                tvpi_mean=("tvpi", "mean"),
-                drawdown_mean=("nav_drawdown", "mean"),
-                capital_total=("capital_invested", "sum"),
+                pl.col("nav").count().alias("count"),
+                pl.col("nav").sum().alias("nav_total"),
+                pl.col("nav").mean().alias("nav_mean"),
+                pl.col("moic").mean().alias("moic_mean"),
+                pl.col("irr").mean().alias("irr_mean"),
+                pl.col("tvpi").mean().alias("tvpi_mean"),
+                pl.col("nav_drawdown").mean().alias("drawdown_mean"),
+                pl.col("capital_invested").sum().alias("capital_total"),
             )
-            .round(4)
-            .reset_index()
         )
 
-    # ──────────────────────────────────────────
+    # ------------------------------------------
     # METHODES PRIVEES
-    # ──────────────────────────────────────────
+    # ------------------------------------------
 
     def _calculate_distress_prob(
         self,
-        df_pe: pd.DataFrame,
+        df_pe: pl.DataFrame,
         moic: np.ndarray,
         unemployment_override: Optional[float] = None,
         gdp_override: Optional[float] = None,
@@ -362,8 +384,8 @@ class PECalculator:
 
         logit(P_distress) = logit(base) + moic_logit_adj + macro_logit_adj
             - base = 0.05 (taux de defaut implicite PE)
-            - moic_logit_adj : -2 × log(MOIC) pour MOIC < 1 (penalite logarithmique)
-            - macro_logit_adj : stress macro × PE_DISTRESS_LOGIT_SCALE
+            - moic_logit_adj : -2 x log(MOIC) pour MOIC < 1 (penalite logarithmique)
+            - macro_logit_adj : stress macro x PE_DISTRESS_LOGIT_SCALE
 
         P(distress) = expit(logit_sum), automatiquement dans ]0, 1[.
 
@@ -388,8 +410,8 @@ class PECalculator:
         logit_distress = np.full(n, logit(0.05))
 
         # Ajustement MOIC en logit-space (logarithmique)
-        # MOIC < 1 → penalite proportionnelle a -log(MOIC)
-        # MOIC=0.5 → +1.4 logit, MOIC=0.1 → +4.6 logit, MOIC>=1 → 0
+        # MOIC < 1 -> penalite proportionnelle a -log(MOIC)
+        # MOIC=0.5 -> +1.4 logit, MOIC=0.1 -> +4.6 logit, MOIC>=1 -> 0
         moic_logit_adj = np.where(
             moic < 1.0,
             -2.0 * np.log(np.maximum(moic, 0.01)),
@@ -411,8 +433,9 @@ class PECalculator:
         d_hpi = (base.hpi_growth - hpi) / 100          # Inverse : baisse HPI = adverse
         d_infl = (infl - base.inflation_rate) / 100
 
+        sectors_arr = df_pe["sector"].to_numpy()
         for sector in SECTORS:
-            mask = df_pe["sector"].values == sector.name
+            mask = sectors_arr == sector.name
             if mask.sum() == 0:
                 continue
 
@@ -461,11 +484,11 @@ class PECalculator:
 
         return categories
 
-    def _compute_capital_invested(self, df_pe: pd.DataFrame) -> np.ndarray:
+    def _compute_capital_invested(self, df_pe: pl.DataFrame) -> np.ndarray:
         """Calcule le capital investi a l'entree (equity portion du LBO).
 
         Capital = Metric x Entry_Multiple x (1 - Leverage)
-        Pour Cap_rate/NOI (Immobilier) : Metric = EBITDA × (1 - NOI_OPEX_RATIO).
+        Pour Cap_rate/NOI (Immobilier) : Metric = EBITDA x (1 - NOI_OPEX_RATIO).
 
         Args:
             df_pe: DataFrame PE.
@@ -478,21 +501,28 @@ class PECalculator:
         n = len(df_pe)
         capital = np.zeros(n)
 
+        # Pre-extract numpy arrays for masked indexing
+        sectors_arr = df_pe["sector"].to_numpy()
+        revenue_arr = df_pe["revenue"].to_numpy().astype(float)
+        ebitda_arr = df_pe["ebitda"].to_numpy().astype(float)
+        entry_mult_arr = df_pe["entry_multiple"].to_numpy().astype(float)
+        leverage_arr = df_pe["leverage"].to_numpy().astype(float)
+
         for sector in SECTORS:
-            mask = df_pe["sector"].values == sector.name
+            mask = sectors_arr == sector.name
             if mask.sum() == 0:
                 continue
 
             # Metrique d'entree selon la methode IPEV
             if sector.valuation_method == "EV/Revenue":
-                metric = df_pe.loc[mask, "revenue"].values.astype(float)
+                metric = revenue_arr[mask]
             else:
-                metric = df_pe.loc[mask, "ebitda"].values.astype(float)
+                metric = ebitda_arr[mask]
                 if sector.valuation_method == "Cap_rate/NOI":
                     metric = metric * (1 - NOI_OPEX_RATIO)
 
-            entry_mult = df_pe.loc[mask, "entry_multiple"].values.astype(float)
-            leverage = df_pe.loc[mask, "leverage"].values.astype(float)
+            entry_mult = entry_mult_arr[mask]
+            leverage = leverage_arr[mask]
 
             capital[mask] = metric * entry_mult * (1 - leverage)
 
@@ -510,7 +540,10 @@ if __name__ == "__main__":
 
     # 1. Data
     print("\n[1/5] Generation des donnees...")
-    df_credit, df_pe, df_history = generate_dataset()
+    df_credit, df_pe_raw, df_history, _ = generate_dataset()
+    # Ensure Polars (generate_dataset may return either)
+    from ifrs9_cockpit.utils.frame_compat import to_polars
+    df_pe = to_polars(df_pe_raw)
     print(f"       {len(df_pe):,} positions PE")
 
     # 2. Metriques baseline (inclut distress, classification, EL, exit_cost, rwa)
@@ -520,9 +553,10 @@ if __name__ == "__main__":
 
     # Resume classification
     print("\n--- Classification PE (baseline) ---")
-    cat_counts = result["risk_category"].value_counts()
+    vc = result["risk_category"].value_counts()
+    vc_dict = dict(zip(vc["risk_category"].to_list(), vc["count"].to_list()))
     for cat in ["Performing", "Watchlist", "Distressed"]:
-        cnt = cat_counts.get(cat, 0)
+        cnt = vc_dict.get(cat, 0)
         pct = cnt / len(result) * 100
         print(f"  {cat:12s} : {cnt:>5,} positions ({pct:5.1f}%)")
 
@@ -548,20 +582,20 @@ if __name__ == "__main__":
     # 4. Sensibilites factorielles
     print("\n[4/5] Sensibilites factorielles dNAV/d(macro) (%, +1pp adverse) :")
     sensitivities = pe_calc.compute_factorial_sensitivities(df_pe, delta=1.0)
-    print(sensitivities.to_string())
+    print(sensitivities.to_pandas().set_index("sector").to_string())
 
     # 5. Performance par secteur
     print("\n[5/5] Performance par secteur ---")
     summary = pe_calc.get_performance_summary(result)
-    print(summary.to_string(index=False))
+    print(to_pandas(summary).to_string(index=False))
 
-    # ── Validations ──
+    # -- Validations --
     print("\n--- Validations ---")
     all_ok = True
 
     # V1: risk_category in {Performing, Watchlist, Distressed}
     valid_cats = {"Performing", "Watchlist", "Distressed"}
-    actual_cats = set(result["risk_category"].unique())
+    actual_cats = set(result["risk_category"].unique().to_list())
     ok = actual_cats.issubset(valid_cats)
     status = "PASS" if ok else "FAIL"
     print(f"  [{status}] risk_category in {{Performing, Watchlist, Distressed}} "
@@ -609,16 +643,17 @@ if __name__ == "__main__":
     all_ok &= ok
 
     # V7: TVPI = DPI + RVPI
-    tvpi = result["tvpi"].values
-    dpi = result["dpi"].values
-    rvpi = result["rvpi"].values
+    tvpi = result["tvpi"].to_numpy()
+    dpi = result["dpi"].to_numpy()
+    rvpi = result["rvpi"].to_numpy()
     ok = np.allclose(tvpi, dpi + rvpi, atol=0.001)
     status = "PASS" if ok else "FAIL"
     print(f"  [{status}] TVPI = DPI + RVPI (max diff = {np.max(np.abs(tvpi - dpi - rvpi)):.6f})")
     all_ok &= ok
 
     # V8: Sensibilites non-nulles
-    ok = (sensitivities.abs() > 0).any().all()
+    sens_pd = sensitivities.to_pandas().set_index("sector")
+    ok = (sens_pd.abs() > 0).any().all()
     status = "PASS" if ok else "FAIL"
     print(f"  [{status}] Sensibilites 5x5 non-nulles")
     all_ok &= ok

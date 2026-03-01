@@ -10,8 +10,11 @@ Implémente les 4 métriques obligatoires IFRS 9 :
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
-from sklearn.metrics import roc_auc_score, roc_curve
+import polars as pl
+from sklearn.metrics import (
+    roc_auc_score, roc_curve, brier_score_loss, log_loss,
+    precision_score, recall_score, f1_score, accuracy_score,
+)
 from typing import Dict, List, Optional, Tuple
 
 from ifrs9_cockpit.config import PD_CONFIG
@@ -193,6 +196,86 @@ class ModelMetrics:
         return thresholds, cdf_default, cdf_non_default, ks_value
 
     @staticmethod
+    def brier(y_true: np.ndarray, y_score: np.ndarray) -> float:
+        """Calcule le Brier Score (calibration quality).
+
+        Brier = mean((y_score - y_true)^2).
+        0 = parfait, 1 = pire. Pour le radar on utilise 1 - Brier.
+
+        Args:
+            y_true: Labels binaires (0/1).
+            y_score: Probabilités prédites.
+
+        Returns:
+            Brier Score entre 0 et 1 (lower is better).
+        """
+        return float(brier_score_loss(y_true, y_score))
+
+    @staticmethod
+    def logloss(y_true: np.ndarray, y_score: np.ndarray) -> float:
+        """Calcule la Log Loss (cross-entropy).
+
+        Mesure la qualite probabiliste du modele.
+        0 = parfait, +inf = pire. Typiquement < 1.0 pour un bon modele.
+
+        Args:
+            y_true: Labels binaires (0/1).
+            y_score: Probabilités prédites.
+
+        Returns:
+            Log Loss (lower is better).
+        """
+        y_clipped = np.clip(y_score, 1e-15, 1 - 1e-15)
+        return float(log_loss(y_true, y_clipped))
+
+    @staticmethod
+    def classification_metrics(
+        y_true: np.ndarray,
+        y_score: np.ndarray,
+        threshold: float = 0.5,
+    ) -> Dict[str, float]:
+        """Calcule Accuracy, Precision, Recall, F1 a un seuil donne.
+
+        Utilise le seuil optimal (maximisant F1) si threshold=None.
+
+        Args:
+            y_true: Labels binaires (0/1).
+            y_score: Probabilités prédites.
+            threshold: Seuil de classification.
+
+        Returns:
+            Dict avec 'accuracy', 'precision', 'recall', 'f1'.
+        """
+        y_pred = (y_score >= threshold).astype(int)
+        # Guard against edge cases (no positive predictions)
+        if y_pred.sum() == 0:
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0}
+        return {
+            "accuracy": float(accuracy_score(y_true, y_pred)),
+            "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+            "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+            "f1": float(f1_score(y_true, y_pred, zero_division=0)),
+        }
+
+    @staticmethod
+    def _optimal_threshold(y_true: np.ndarray, y_score: np.ndarray) -> float:
+        """Trouve le seuil optimal maximisant le Youden's J statistic.
+
+        J = Sensitivity + Specificity - 1 = TPR - FPR.
+
+        Args:
+            y_true: Labels binaires (0/1).
+            y_score: Probabilités prédites.
+
+        Returns:
+            Seuil optimal.
+        """
+        fpr, tpr, thresholds = roc_curve(y_true, y_score)
+        j_scores = tpr - fpr
+        best_idx = np.argmax(j_scores)
+        return float(thresholds[best_idx])
+
+    @staticmethod
     def compute_all(
         y_true: np.ndarray,
         y_score: np.ndarray,
@@ -200,24 +283,36 @@ class ModelMetrics:
     ) -> Dict[str, float]:
         """Calcule toutes les métriques en une seule passe.
 
+        Retourne 9 metriques : auc, gini, ks, psi (legacy) +
+        brier, logloss, precision, recall, f1 (nouvelles).
+
         Args:
             y_true: Labels binaires (0/1).
             y_score: Probabilités prédites.
             y_score_ref: Scores de référence pour le PSI (si None, PSI = 0).
 
         Returns:
-            Dictionnaire avec les clés 'auc', 'gini', 'ks', 'psi'.
+            Dictionnaire avec 9 cles.
         """
         auc_val = ModelMetrics.auc(y_true, y_score)
         psi_val = 0.0
         if y_score_ref is not None:
             psi_val = ModelMetrics.psi(y_score_ref, y_score)
 
+        # Seuil optimal (Youden's J) pour classification metrics
+        threshold = ModelMetrics._optimal_threshold(y_true, y_score)
+        cls_metrics = ModelMetrics.classification_metrics(y_true, y_score, threshold)
+
         return {
             "auc": round(auc_val, 4),
             "gini": round(2.0 * auc_val - 1.0, 4),
             "ks": round(ModelMetrics.ks_statistic(y_true, y_score), 4),
             "psi": round(psi_val, 4),
+            "brier": round(ModelMetrics.brier(y_true, y_score), 4),
+            "logloss": round(ModelMetrics.logloss(y_true, y_score), 4),
+            "precision": round(cls_metrics["precision"], 4),
+            "recall": round(cls_metrics["recall"], 4),
+            "f1": round(cls_metrics["f1"], 4),
         }
 
     @staticmethod
@@ -225,7 +320,7 @@ class ModelMetrics:
         y_true: np.ndarray,
         y_score: np.ndarray,
         n_folds: int = 6,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Calcule des métriques de backtesting par walk-forward.
 
         Simule une validation temporelle en découpant les données en
@@ -264,7 +359,7 @@ class ModelMetrics:
                 ),
             })
 
-        return pd.DataFrame(records)
+        return pl.DataFrame(records)
 
     @staticmethod
     def hhi(shares: np.ndarray) -> float:
@@ -291,7 +386,7 @@ class ModelMetrics:
         y_true: np.ndarray,
         y_score: np.ndarray,
         n_bins: int = 10,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Construit une table de classement par décile de score.
 
         Utile pour valider la monotonie du modèle : le taux de défaut
@@ -306,6 +401,8 @@ class ModelMetrics:
             DataFrame avec colonnes : bin, count, n_defaults, default_rate,
             avg_score, cumulative_default_rate.
         """
+        import pandas as pd  # local import for qcut (no Polars equivalent)
+
         df = pd.DataFrame({"score": y_score, "default": y_true})
         df["bin"] = pd.qcut(df["score"], q=n_bins, duplicates="drop")
 
@@ -323,4 +420,6 @@ class ModelMetrics:
         table["cumulative_default_rate"] = (
             table["cumulative_defaults"] / table["n_defaults"].sum()
         )
-        return table
+        # Convert Interval bin column to string for Polars compatibility
+        table["bin"] = table["bin"].astype(str)
+        return pl.from_pandas(table)

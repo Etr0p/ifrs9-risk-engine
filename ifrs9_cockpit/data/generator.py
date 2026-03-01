@@ -801,18 +801,19 @@ class SyntheticDataGenerator:
 def generate_dataset(
     n_clients: int = N_CLIENTS,
     seed: int = 123,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Genere le dataset via le DGP v4.5 (bridge).
 
     Delegue a synthetic_generator_v4.generate_dataset() qui produit un
-    3-tuple (df_credit, df_pe, df_history) 100% compatible avec le cockpit.
+    4-tuple (df_credit, df_pe, df_history, df_balance_sheet) compatible
+    avec le cockpit.
 
     Args:
         n_clients: Nombre d'entreprises.
         seed: Graine aleatoire (123 pour le portfolio, 42 pour l'entrainement).
 
     Returns:
-        Tuple (df_credit, df_pe, df_history).
+        Tuple (df_credit, df_pe, df_history, df_balance_sheet).
     """
     from ifrs9_cockpit.synthetic_generator_v4 import (
         generate_dataset as _v4_generate,
