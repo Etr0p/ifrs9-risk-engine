@@ -264,8 +264,15 @@ def register_pipeline(app, df_credit, df_pe, df_history, pd_suite, lgd_model, ea
             raroc_multiclass = comparator.compute_raroc_multiclass()
             asymmetry_matrix = comparator.build_asymmetry_matrix()
 
+            # ── Stage 3b : HMM Regime Detection ──
+            from ifrs9_cockpit.engine.hmm_regime import detect_regime
+            hmm_result = detect_regime(macro_params)
+
             # ── Stage 4 : Optimisation ──
-            optimization = comparator.optimize_allocation(macro_params=macro_params)
+            optimization = comparator.optimize_allocation(
+                macro_params=macro_params,
+                cvar_alpha=hmm_result.cvar_alpha,
+            )
             crr3_sensitivity = comparator.compute_crr3_sensitivity()
 
             # ── Stage 5 : AI Analyst ──
@@ -369,6 +376,7 @@ def register_pipeline(app, df_credit, df_pe, df_history, pd_suite, lgd_model, ea
                 "cro": cro,
                 "psi_value": psi_value,
                 "vcro_result": vcro_result,
+                "hmm_result": hmm_result,
             }
 
             # Scalar data for dcc.Store (JSON-serializable)
@@ -403,6 +411,8 @@ def register_pipeline(app, df_credit, df_pe, df_history, pd_suite, lgd_model, ea
                 "rst_result": analytics_state.rst_result if analytics_state.rst_result else None,
                 "rst_distance": analytics_state.rst_distance,
                 "pareto_front": analytics_state.pareto_front,
+                "hmm_regime": hmm_result.regime,
+                "hmm_cvar_alpha": hmm_result.cvar_alpha,
                 "error": None,
             }
 

@@ -468,7 +468,8 @@ class OptimizerMixin:
     # OPTIMISEUR BL-CVaR N CLASSES — ALLOCATION ENDOGENE
     # ──────────────────────────────────────────────
 
-    def optimize_allocation(self, macro_params: Optional[Dict[str, float]] = None) -> Dict[str, object]:
+    def optimize_allocation(self, macro_params: Optional[Dict[str, float]] = None,
+                            cvar_alpha: float = 0.95) -> Dict[str, object]:
         """Optimise l'allocation sur N classes d'actifs via BL-CVaR endogene.
 
         Architecture Phase 1 / Phase 2 :
@@ -549,6 +550,15 @@ class OptimizerMixin:
         corr_14, lambda_lw = self._build_corr_matrix()
         Sigma = np.outer(vol, vol) * corr_14
         Sigma = (Sigma + Sigma.T) / 2
+
+        # ── RMT denoising (Marchenko-Pastur) ──
+        from ifrs9_cockpit.engine.rmt import denoise_covariance
+        from ifrs9_cockpit.config import MACRO_HISTORY_BASELINE
+        _n_obs = len(next(iter(MACRO_HISTORY_BASELINE.values())))
+        rmt_result = denoise_covariance(Sigma, n_observations=_n_obs)
+        Sigma = rmt_result.covariance_clean
+        Sigma = (Sigma + Sigma.T) / 2
+
         eigvals = np.linalg.eigvalsh(Sigma)
         if eigvals.min() < 1e-8:
             Sigma += np.eye(n) * (1e-6 - min(0, eigvals.min()))
@@ -570,7 +580,7 @@ class OptimizerMixin:
         # Monte Carlo CVaR setup
         rng = np.random.default_rng(42)
         n_scenarios = 5000
-        alpha_cvar = 0.95
+        alpha_cvar = cvar_alpha
         L_chol = np.linalg.cholesky(Sigma)
         Z = rng.standard_normal((n_scenarios, n))
         scenarios_0 = Z @ L_chol.T  # zero-mean
@@ -864,6 +874,7 @@ class OptimizerMixin:
             "feasible": headroom_eur >= 0,
             "method": f"BL-CVaR-{n}C",
             "cvar_95": round(cvar_final, 4),
+            "cvar_alpha": round(alpha_cvar, 2),
             "kappa": round(kappa_base, 4),
             "kappa_pe_eff": round(kappa_eff, 4),
             "n_scenarios": n_scenarios,
@@ -892,6 +903,9 @@ class OptimizerMixin:
                 "irrbb_delta": round(irrbb_delta, 4),
             },
             "covariance_shrinkage_lambda": round(lambda_lw, 4),
+            "rmt_n_signal": rmt_result.n_signal,
+            "rmt_n_noise": rmt_result.n_noise,
+            "rmt_noise_fraction": round(rmt_result.noise_fraction, 4),
             "spread_compression": {
                 name: round(float(-np.log(1.0 - np.clip(
                     best_w[i] * total_ead / ASSET_CLASS_MAP[name].market_capacity_eur,
