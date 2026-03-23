@@ -157,12 +157,10 @@ def _generate_synthetic(n_clients: int) -> pd.DataFrame:
     Returns:
         DataFrame credit synthetique.
     """
-    from ifrs9_cockpit.synthetic_generator_v4 import (
-        generate_dataset as _v4_generate,
-    )
+    from ifrs9_cockpit.data.generator import generate_dataset as _generate
 
     logger.info("generating_synthetic", n_clients=n_clients, dgp="v4.5", seed=42)
-    df_credit, _, _, _ = _v4_generate(n_clients=n_clients, seed=42)
+    df_credit, _, _, _ = _generate(n_clients=n_clients, seed=42)
     logger.info("synthetic_generated", default_rate=f"{df_credit[TARGET].mean():.2%}")
     return df_credit
 
@@ -268,7 +266,6 @@ def _train_governance(df: pd.DataFrame, suite: PDModelSuite) -> dict:
     from ifrs9_cockpit.engine.tda import compute_macro_fragility
     from ifrs9_cockpit.engine.rmt import denoise_covariance
     from ifrs9_cockpit.engine.hmm_regime import GaussianHMM
-    from ifrs9_cockpit.engine.conformal import ConformalPredictor
     from ifrs9_cockpit.engine.sobol_analysis import sobol_analysis
     from ifrs9_cockpit.config import (
         MACRO_COVARIANCE,
@@ -337,7 +334,7 @@ def _train_governance(df: pd.DataFrame, suite: PDModelSuite) -> dict:
     except Exception as e:
         logger.warning("governance_skipped", engine="hmm", error=str(e))
 
-    # PD predictions (shared by conformal + sobol)
+    # PD predictions (shared by sobol)
     try:
         pd_pred = suite.predict_active(df)
     except Exception:
@@ -345,19 +342,7 @@ def _train_governance(df: pd.DataFrame, suite: PDModelSuite) -> dict:
         pd_pred = df["pd_origination"].values if "pd_origination" in df.columns else np.random.default_rng(42).uniform(0.001, 0.15, len(df))
     y_true = df[TARGET].values
 
-    # 4e. Conformal Prediction (calibrate on PD predictions vs default_flag)
-    try:
-        conformal = ConformalPredictor(alpha=0.10)
-        conformal.calibrate(pd_pred, y_true)
-        artifacts["conformal"] = {
-            "q_hat": conformal.quantile_residual,
-            "alpha": conformal.alpha,
-        }
-        logger.info("governance_sub", engine="conformal", q_hat=f"{conformal.quantile_residual:.4f}")
-    except Exception as e:
-        logger.warning("governance_skipped", engine="conformal", error=str(e))
-
-    # 4f. Sobol (N=512 offline — better quality than inline N=256)
+    # 4e. Sobol (N=512 offline — better quality than inline N=256)
     try:
         ecl_calc = ECLCalculator(lgd_model=lgd_model, ead_model=ead_model)
         # Subsample for speed (Sobol calls ecl_fn N*(D+2) times)

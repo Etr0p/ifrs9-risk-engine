@@ -2,8 +2,8 @@
 
 TestGovernanceArtifacts : valide la structure et la qualite des artefacts
     produits par _train_governance().
-TestFallbackWithoutArtifacts : verifie que le dashboard fonctionne
-    sans governance_suite.joblib (calcul inline, zero regression).
+TestGovernanceEnginesInline : verifie que les engines de gouvernance
+    fonctionnent en mode inline (sans artefacts pre-calcules).
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class TestGovernanceArtifacts:
 
     REQUIRED_KEYS = {
         "signatures", "signatures_order3", "tda", "rmt", "hmm",
-        "conformal", "sobol", "gflownet", "lgd_model", "ead_model",
+        "sobol", "gflownet", "lgd_model", "ead_model",
     }
 
     def test_governance_artifacts_keys(self, governance_artifacts):
@@ -93,13 +93,6 @@ class TestGovernanceArtifacts:
         assert hmm.means.shape[0] == 3
         assert hmm.means.shape[1] == 5
 
-    def test_conformal_valid(self, governance_artifacts):
-        """q_hat > 0, alpha = 0.10."""
-        conf = governance_artifacts["conformal"]
-        assert conf["alpha"] == 0.10
-        assert conf["q_hat"] > 0
-        assert np.isfinite(conf["q_hat"])
-
     def test_sobol_valid(self, governance_artifacts):
         """S1/ST indices, sum S1 raisonnable."""
         sobol = governance_artifacts["sobol"]
@@ -143,33 +136,12 @@ class TestGovernanceArtifacts:
 
         loaded = joblib.load(str(path))
         assert set(loaded.keys()) == set(governance_artifacts.keys())
-        assert loaded["conformal"]["q_hat"] == governance_artifacts["conformal"]["q_hat"]
         assert loaded["signatures"].n_features == 30
         assert loaded["hmm"]._fitted
 
 
-# ══════════════════════════════════════════════
-# TestFallbackWithoutArtifacts
-# ══════════════════════════════════════════════
-class TestFallbackWithoutArtifacts:
-    """Dashboard fonctionne sans governance_suite.joblib."""
-
-    def test_load_returns_none(self, tmp_path, monkeypatch):
-        """load_governance_artifacts() retourne None si pas de fichier."""
-        import functools
-        from ifrs9_cockpit.dashboard import cache
-
-        # Clear lru_cache and point to non-existent path
-        cache.load_governance_artifacts.cache_clear()
-        monkeypatch.setattr(
-            "ifrs9_cockpit.dashboard.cache.load_governance_artifacts",
-            functools.lru_cache(maxsize=1)(lambda: None),
-        )
-
-        from ifrs9_cockpit.dashboard.cache import load_governance_artifacts
-        # The monkeypatched version always returns None
-        result = load_governance_artifacts()
-        assert result is None
+class TestGovernanceEnginesInline:
+    """Governance engines fonctionnent en mode inline (sans artefacts)."""
 
     def test_governance_engines_compute_inline(self):
         """Engines de gouvernance fonctionnent en mode inline (sans artefacts)."""

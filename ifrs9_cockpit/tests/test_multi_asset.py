@@ -31,10 +31,10 @@ _BS_CACHE = {}
 
 
 def _get_dataset_v4(n_clients=50, seed=42):
-    """Cache module-level pour generate_dataset (synthetic_generator_v4)."""
+    """Cache module-level pour generate_dataset."""
     key = (n_clients, seed)
     if key not in _BS_CACHE:
-        from ifrs9_cockpit.synthetic_generator_v4 import generate_dataset
+        from ifrs9_cockpit.data.generator import generate_dataset
         _BS_CACHE[key] = generate_dataset(n_clients=n_clients, seed=seed)
     return _BS_CACHE[key]
 
@@ -249,97 +249,6 @@ class TestClimateRisk(unittest.TestCase):
                                msg="Convexity: doubling carbon shock should >2x impact")
 
 
-class TestContagion(unittest.TestCase):
-    """Tests du moteur de contagion Eisenberg-Noe."""
-
-    def setUp(self):
-        from ifrs9_cockpit.engine.contagion import (
-            contagion_propagation,
-            fixed_point_contagion,
-            ContagionEngine,
-            CONTAGION_EDGES,
-        )
-        self.propagation = contagion_propagation
-        self.fixed_point = fixed_point_contagion
-        self.engine_cls = ContagionEngine
-        self.edges = CONTAGION_EDGES
-
-    def test_below_buffer_no_contagion(self):
-        """Severite < buffer : pas de contagion."""
-        c = self.propagation(0.2, 0.30, 0.60)
-        self.assertAlmostEqual(c, 0.0)
-
-    def test_above_buffer_positive_contagion(self):
-        """Severite > buffer : contagion > 0."""
-        c = self.propagation(0.5, 0.30, 0.60)
-        self.assertGreater(c, 0)
-
-    def test_tanh_saturation(self):
-        """Contagion saturee a weight (via tanh -> 1)."""
-        c = self.propagation(10.0, 0.30, 0.60)
-        self.assertLessEqual(c, 0.60 + 0.001)  # approche asymptotique
-
-    def test_contagion_monotone(self):
-        """Contagion croit avec la severite source."""
-        c_low = self.propagation(0.4, 0.30, 0.50)
-        c_high = self.propagation(0.8, 0.30, 0.50)
-        self.assertGreater(c_high, c_low)
-
-    def test_9_edges_defined(self):
-        """9 canaux de contagion principaux."""
-        self.assertEqual(len(self.edges), 9)
-
-    def test_fixed_point_convergence(self):
-        """Point fixe converge (max 20 iterations)."""
-        base = {"a": 0.5, "b": 0.1}
-        from ifrs9_cockpit.engine.contagion import ContagionEdge
-        edges = [ContagionEdge("a", "b", 0.50, 0.20, "test")]
-        result = self.fixed_point(base, edges)
-        self.assertIn("a", result)
-        self.assertIn("b", result)
-        self.assertGreater(result["b"], base["b"],
-                           msg="b should be amplified by a")
-        self.assertAlmostEqual(result["a"], base["a"], delta=0.01,
-                               msg="a has no incoming edges")
-
-    def test_no_contagion_below_all_buffers(self):
-        """Si toutes les severites < buffers, pas d'amplification."""
-        base = {ac.name: 0.01 for ac in ASSET_CLASSES}
-        engine = self.engine_cls()
-        amplified = engine.compute(base)
-        factors = engine.amplification_factors(base, amplified)
-        for name, factor in factors.items():
-            self.assertAlmostEqual(factor, 1.0, delta=0.01,
-                                   msg=f"{name} should not be amplified")
-
-    def test_sovereign_stress_propagates(self):
-        """Stress souverain propage vers interbancaire et covered bonds."""
-        base = {ac.name: 0.1 for ac in ASSET_CLASSES}
-        base["sovereign"] = 0.8  # severe sovereign stress
-        engine = self.engine_cls()
-        amplified = engine.compute(base)
-        # Interbank should be amplified (sovereign -> interbank edge)
-        self.assertGreater(amplified["interbank"], base["interbank"])
-        # Covered bonds should be amplified
-        self.assertGreater(amplified["covered_bonds"], base["covered_bonds"])
-
-    def test_death_spiral_bounded(self):
-        """Meme sous stress extreme, les severites restent bornees."""
-        base = {ac.name: 5.0 for ac in ASSET_CLASSES}  # extreme stress
-        engine = self.engine_cls()
-        amplified = engine.compute(base)
-        for name, sev in amplified.items():
-            self.assertLess(sev, 20.0,  # tanh + damping bound
-                            msg=f"{name} severity unbounded: {sev}")
-
-    def test_contagion_matrix(self):
-        """Matrice de contagion well-formed."""
-        engine = self.engine_cls()
-        matrix = engine.contagion_matrix()
-        self.assertIn("sovereign", matrix)
-        self.assertIn("interbank", matrix["sovereign"])
-
-
 class TestBalanceSheetECL(unittest.TestCase):
     """Tests du pipeline complet balance sheet ECL."""
 
@@ -485,57 +394,6 @@ class TestDGPBalanceSheet(unittest.TestCase):
         corp_ead = df_bs.filter(pl.col("asset_class") == "corporate_loans")["ead_total"][0]
         credit_total = df_credit["loan_amount"].sum()
         self.assertAlmostEqual(corp_ead, credit_total, delta=1.0)
-
-
-class TestDashboardCharts(unittest.TestCase):
-    """Tests des 3 charts multi-asset du dashboard."""
-
-    @classmethod
-    def setUpClass(cls):
-        from ifrs9_cockpit.engine.balance_sheet_ecl import compute_balance_sheet_ecl
-        from ifrs9_cockpit.engine.contagion import ContagionEngine
-        _, _, _, cls.df_bs = _get_dataset_v4(n_clients=50, seed=42)
-        macro = {"gdp_growth": 1.2, "unemployment_rate": 7.5,
-                 "interest_rate": 3.5, "hpi_growth": 2.0, "inflation_rate": 2.5}
-        cls.df_bs_ecl = compute_balance_sheet_ecl(cls.df_bs, macro)
-        base_sev = {r["asset_class"]: r["ecl_ead_ratio"]
-                    for r in cls.df_bs_ecl.iter_rows(named=True)}
-        engine = ContagionEngine()
-        cls.amplified = engine.compute(base_sev)
-        cls.base_sev = base_sev
-        cls.c_matrix = engine.contagion_matrix()
-
-    def test_treemap_renders(self):
-        from ifrs9_cockpit.dashboard.charts import plot_balance_sheet_treemap
-        fig = plot_balance_sheet_treemap(self.df_bs_ecl)
-        self.assertEqual(len(fig.data), 1)
-        self.assertEqual(fig.data[0].type, "treemap")
-
-    def test_contagion_chart_renders(self):
-        from ifrs9_cockpit.dashboard.charts import plot_contagion_network
-        fig = plot_contagion_network(self.base_sev, self.amplified, self.c_matrix)
-        self.assertEqual(len(fig.data), 2)
-        self.assertEqual(fig.data[0].orientation, "h")
-
-    def test_climate_heatmap_renders(self):
-        from ifrs9_cockpit.dashboard.charts import plot_climate_heatmap
-        fig = plot_climate_heatmap(self.df_bs_ecl)
-        self.assertEqual(len(fig.data), 1)
-        self.assertEqual(fig.data[0].type, "heatmap")
-
-    def test_treemap_has_all_classes(self):
-        """Treemap contient les 14 classes d'actifs + 3 categories + racine."""
-        from ifrs9_cockpit.dashboard.charts import plot_balance_sheet_treemap
-        fig = plot_balance_sheet_treemap(self.df_bs_ecl)
-        n_labels = len(fig.data[0].labels)
-        self.assertEqual(n_labels, 18)  # 1 root + 3 cats + 14 classes
-
-    def test_contagion_chart_labels(self):
-        """Contagion chart a des labels pour chaque classe."""
-        from ifrs9_cockpit.dashboard.charts import plot_contagion_network
-        fig = plot_contagion_network(self.base_sev, self.amplified, self.c_matrix)
-        labels = fig.data[0].y
-        self.assertEqual(len(labels), len(self.base_sev))
 
 
 class TestRegulatoryNorms(unittest.TestCase):

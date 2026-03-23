@@ -1,0 +1,303 @@
+\babel@toc {french}{}\relax 
+\contentsline {chapter}{Introduction}{11}{chapter*.2}%
+\contentsline {part}{I\hspace {1em}Fondation sectorielle}{15}{part.1}%
+\contentsline {chapter}{\numberline {1}Données synthétiques et processus générateur}{17}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Architecture générale}{17}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Univers sectoriel}{18}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Sensibilités macroéconomiques}{18}{subsection.1.2.1}%
+\contentsline {section}{\numberline {1.3}Structure de dépendance~: copule de Student}{20}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Pourquoi une copule de Student ?}{21}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}Modèle factoriel}{21}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}Échantillonnage et régime de stress}{21}{subsection.1.3.3}%
+\contentsline {section}{\numberline {1.4}Distributions marginales}{22}{section.1.4}%
+\contentsline {subsection}{\numberline {1.4.1}Ajustements sectoriels}{23}{subsection.1.4.1}%
+\contentsline {section}{\numberline {1.5}Processus générateur de défaut}{23}{section.1.5}%
+\contentsline {subsection}{\numberline {1.5.1}Bloc 1~: effets monotones par paliers ($\sim $40\,\% du signal)}{23}{subsection.1.5.1}%
+\contentsline {subsection}{\numberline {1.5.2}Bloc 2~: interactions multiplicatives ($\sim $35\,\% du signal)}{24}{subsection.1.5.2}%
+\contentsline {subsection}{\numberline {1.5.3}Bloc 3~: conjonctions ($\sim $25\,\% du signal)}{25}{subsection.1.5.3}%
+\contentsline {subsection}{\numberline {1.5.4}Calibration de la PD}{25}{subsection.1.5.4}%
+\contentsline {subsection}{\numberline {1.5.5}Bruit hétéroscédastique et données manquantes}{26}{subsection.1.5.5}%
+\contentsline {section}{\numberline {1.6}Variables d'interaction pour l'apprentissage}{26}{section.1.6}%
+\contentsline {section}{\numberline {1.7}Données de private equity}{27}{section.1.7}%
+\contentsline {section}{\numberline {1.8}Trajectoire macroéconomique}{27}{section.1.8}%
+\contentsline {section}{\numberline {1.9}Historique mensuel et réseau fournisseurs}{28}{section.1.9}%
+\contentsline {subsection}{\numberline {1.9.1}Réseau d'approvisionnement}{28}{subsection.1.9.1}%
+\contentsline {section}{\numberline {1.10}Décomposition du signal et performances attendues}{29}{section.1.10}%
+\contentsline {section}{\numberline {1.11}Synthèse}{29}{section.1.11}%
+\contentsline {chapter}{\numberline {2}Modèles de probabilité de défaut}{31}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Pourquoi trois familles de modèles}{31}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Prétraitement~: du brut au signal}{32}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Écrêtage des valeurs aberrantes}{32}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Ingénierie de variables~: les douze interactions}{32}{subsection.2.2.2}%
+\contentsline {paragraph}{Pourquoi XGBoost n'utilise pas ces interactions.}{33}{table.caption.10}%
+\contentsline {section}{\numberline {2.3}Weight of Evidence~: transformer pour interpréter}{33}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Principe et formule}{33}{subsection.2.3.1}%
+\contentsline {paragraph}{Lissage de Laplace.}{33}{equation.2.1}%
+\contentsline {subsection}{\numberline {2.3.2}Information Value~: sélectionner les variables}{34}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}Pipeline de discrétisation en six étapes}{34}{subsection.2.3.3}%
+\contentsline {section}{\numberline {2.4}Régression logistique~: le socle réglementaire}{35}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}Architecture et contraintes}{35}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}Filtrage VIF~: éliminer la multicolinéarité}{35}{subsection.2.4.2}%
+\contentsline {paragraph}{Exemption des interactions.}{36}{equation.2.6}%
+\contentsline {subsection}{\numberline {2.4.3}Contrainte de signe~: cohérence économique}{36}{subsection.2.4.3}%
+\contentsline {paragraph}{Exception pour les interactions.}{36}{subsection.2.4.3}%
+\contentsline {subsection}{\numberline {2.4.4}Correction du prior (King et Zeng)}{36}{subsection.2.4.4}%
+\contentsline {subsection}{\numberline {2.4.5}Scorecard~: du modèle aux points}{37}{subsection.2.4.5}%
+\contentsline {section}{\numberline {2.5}TabNet~: l'attention au service du crédit}{37}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}Pourquoi un réseau profond sur données tabulaires}{37}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}Architecture et hyperparamètres}{37}{subsection.2.5.2}%
+\contentsline {paragraph}{Pourquoi Full vs Light ?}{38}{table.caption.12}%
+\contentsline {paragraph}{Ghost Batch Normalization.}{38}{table.caption.12}%
+\contentsline {subsection}{\numberline {2.5.3}Détection GPU}{39}{subsection.2.5.3}%
+\contentsline {section}{\numberline {2.6}XGBoost~: la frontière de performance}{39}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Paramétrage}{39}{subsection.2.6.1}%
+\contentsline {paragraph}{Pourquoi $\texttt {max\_depth} = 6$ ?}{39}{table.caption.13}%
+\contentsline {paragraph}{Sous-échantillonnage 80/80.}{39}{table.caption.13}%
+\contentsline {paragraph}{Gestion du déséquilibre.}{40}{table.caption.13}%
+\contentsline {section}{\numberline {2.7}Calibration~: des scores aux probabilités}{40}{section.2.7}%
+\contentsline {subsection}{\numberline {2.7.1}Pourquoi calibrer}{40}{subsection.2.7.1}%
+\contentsline {subsection}{\numberline {2.7.2}Régression isotonique}{40}{subsection.2.7.2}%
+\contentsline {paragraph}{Pourquoi isotonique plutôt que sigmoïde (Platt) ?}{40}{equation.2.10}%
+\contentsline {paragraph}{Validation croisée $k = 3$.}{40}{equation.2.10}%
+\contentsline {section}{\numberline {2.8}Métriques d'évaluation}{41}{section.2.8}%
+\contentsline {subsection}{\numberline {2.8.1}Discrimination~: AUC et Gini}{41}{subsection.2.8.1}%
+\contentsline {subsection}{\numberline {2.8.2}Séparation~: statistique de Kolmogorov-Smirnov}{41}{subsection.2.8.2}%
+\contentsline {subsection}{\numberline {2.8.3}Calibration~: score de Brier et log-loss}{41}{subsection.2.8.3}%
+\contentsline {subsection}{\numberline {2.8.4}Stabilité~: Population Stability Index}{42}{subsection.2.8.4}%
+\contentsline {section}{\numberline {2.9}Résultats comparés}{42}{section.2.9}%
+\contentsline {subsection}{\numberline {2.9.1}Portefeuille corporate (1{,}5M observations)}{42}{subsection.2.9.1}%
+\contentsline {paragraph}{Lecture des résultats.}{42}{table.caption.14}%
+\contentsline {paragraph}{Zéro écart train--test.}{42}{table.caption.14}%
+\contentsline {paragraph}{Hiérarchie structurelle.}{43}{table.caption.14}%
+\contentsline {subsection}{\numberline {2.9.2}Portefeuilles consommateur et hypothécaire}{43}{subsection.2.9.2}%
+\contentsline {paragraph}{Consommateur.}{43}{table.caption.15}%
+\contentsline {paragraph}{Hypothécaire.}{43}{table.caption.15}%
+\contentsline {paragraph}{TabNet Light.}{43}{table.caption.15}%
+\contentsline {subsection}{\numberline {2.9.3}Prévention des fuites de données}{43}{subsection.2.9.3}%
+\contentsline {section}{\numberline {2.10}Fonctions de transformation~: logit et expit}{44}{section.2.10}%
+\contentsline {paragraph}{Stabilité numérique.}{44}{equation.2.17}%
+\contentsline {section}{\numberline {2.11}Synthèse et choix du modèle actif}{44}{section.2.11}%
+\contentsline {chapter}{\numberline {3}Moteur de pertes attendues (ECL) sous IFRS~9}{47}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Le staging IFRS~9~: classifier pour provisionner}{47}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Trois stages, trois horizons}{47}{subsection.3.1.1}%
+\contentsline {paragraph}{Pourquoi le seuil DPD de 90 jours.}{47}{Item.36}%
+\contentsline {paragraph}{Suppression du seuil PD pour le Stage~3.}{48}{Item.36}%
+\contentsline {subsection}{\numberline {3.1.2}Le score SICR~: quatre composantes}{48}{subsection.3.1.2}%
+\contentsline {paragraph}{Pourquoi 50\,\% pour la PD.}{49}{table.caption.17}%
+\contentsline {paragraph}{Pourquoi 30\,\% pour le macro.}{49}{table.caption.17}%
+\contentsline {paragraph}{Seuil $\tau = 1{,}65$.}{49}{table.caption.17}%
+\contentsline {paragraph}{Écrêtage du ratio PD.}{49}{table.caption.17}%
+\contentsline {subsection}{\numberline {3.1.3}Le Z-score macroéconomique}{49}{subsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.1.4}Exemption souveraine (IFRS~9 B5.5.25)}{49}{subsection.3.1.4}%
+\contentsline {section}{\numberline {3.2}La perte en cas de défaut (LGD)}{50}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}LGD de base~: trois ajustements}{50}{subsection.3.2.1}%
+\contentsline {paragraph}{1. LGD sectorielle.}{50}{equation.3.3}%
+\contentsline {paragraph}{2. Multiplicateur par type de prêt.}{50}{equation.3.3}%
+\contentsline {paragraph}{3. Ajustement par score de crédit.}{50}{equation.3.3}%
+\contentsline {subsection}{\numberline {3.2.2}Dispersion par distribution Bêta}{51}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}LGD \emph {downturn}~: le cycle amplifie la perte}{51}{subsection.3.2.3}%
+\contentsline {paragraph}{Exemple.}{51}{table.caption.19}%
+\contentsline {paragraph}{Invariant.}{51}{table.caption.19}%
+\contentsline {subsection}{\numberline {3.2.4}Canal HPI~: le collatéral immobilier}{52}{subsection.3.2.4}%
+\contentsline {paragraph}{Exemple (crise immobilière).}{52}{equation.3.7}%
+\contentsline {section}{\numberline {3.3}L'exposition au défaut (EAD)}{52}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Formule}{53}{subsection.3.3.1}%
+\contentsline {paragraph}{Pourquoi CCF $= 0{,}75$.}{53}{equation.3.8}%
+\contentsline {subsection}{\numberline {3.3.2}Stress de l'EAD}{53}{subsection.3.3.2}%
+\contentsline {section}{\numberline {3.4}Le stress de la PD~: du macro au micro}{53}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}Transformation logit~: garantir les bornes}{53}{subsection.3.4.1}%
+\contentsline {paragraph}{Pourquoi l'espace logit.}{54}{equation.3.9}%
+\contentsline {subsection}{\numberline {3.4.2}Calibration de l'amplitude}{54}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}Sensibilités sectorielles}{54}{subsection.3.4.3}%
+\contentsline {paragraph}{Lecture.}{54}{table.caption.20}%
+\contentsline {subsection}{\numberline {3.4.4}Modèle de Vasicek conditionnel (ASRF)}{54}{subsection.3.4.4}%
+\contentsline {paragraph}{Intuition.}{55}{table.caption.21}%
+\contentsline {section}{\numberline {3.5}Calcul de l'ECL~: assembler les composantes}{55}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}Formule générale}{55}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}PD \emph {lifetime}~: la méthode du taux de hasard}{55}{subsection.3.5.2}%
+\contentsline {paragraph}{Pourquoi la méthode du taux de hasard.}{56}{equation.3.13}%
+\contentsline {paragraph}{Horizon résiduel.}{56}{equation.3.13}%
+\contentsline {subsection}{\numberline {3.5.3}Facteur d'actualisation}{56}{subsection.3.5.3}%
+\contentsline {paragraph}{Stage~1.}{56}{subsection.3.5.3}%
+\contentsline {paragraph}{Stage~2 et 3.}{56}{equation.3.14}%
+\contentsline {paragraph}{Intuition.}{56}{equation.3.15}%
+\contentsline {section}{\numberline {3.6}Pondération multi-scénarios}{57}{section.3.6}%
+\contentsline {paragraph}{Pourquoi pas un maximum.}{57}{table.caption.22}%
+\contentsline {paragraph}{Interaction LGD--scénario.}{57}{table.caption.22}%
+\contentsline {section}{\numberline {3.7}Le spread de crédit~: lien avec le marché}{57}{section.3.7}%
+\contentsline {paragraph}{Exemple.}{58}{equation.3.17}%
+\contentsline {section}{\numberline {3.8}Agrégation et métriques de portefeuille}{58}{section.3.8}%
+\contentsline {subsection}{\numberline {3.8.1}ECL par stage et par secteur}{58}{subsection.3.8.1}%
+\contentsline {subsection}{\numberline {3.8.2}Matrice de transition}{58}{subsection.3.8.2}%
+\contentsline {subsection}{\numberline {3.8.3}Coût du risque annualisé}{58}{subsection.3.8.3}%
+\contentsline {subsection}{\numberline {3.8.4}Ratio Texas synthétique}{58}{subsection.3.8.4}%
+\contentsline {section}{\numberline {3.9}Synthèse du moteur ECL}{59}{section.3.9}%
+\contentsline {chapter}{\numberline {4}Métriques de portefeuille~: du risque à la rentabilité}{61}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Revenu net d'intérêts (NII)}{61}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Formule de base}{61}{subsection.4.1.1}%
+\contentsline {paragraph}{Décomposition du spread.}{61}{equation.4.2}%
+\contentsline {subsection}{\numberline {4.1.2}Impact des taux d'intérêt~: le canal ALM}{62}{subsection.4.1.2}%
+\contentsline {paragraph}{Pourquoi $\beta _{\text {net}} = 0{,}30$.}{62}{equation.4.4}%
+\contentsline {paragraph}{Trois chemins de calcul.}{62}{equation.4.4}%
+\contentsline {subsection}{\numberline {4.1.3}Ajustement du CIR à l'inflation}{62}{subsection.4.1.3}%
+\contentsline {section}{\numberline {4.2}RAROC~: le rendement ajusté du risque}{63}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Formule}{63}{subsection.4.2.1}%
+\contentsline {paragraph}{Pourquoi CET1 $= 13\,\%$.}{63}{equation.4.6}%
+\contentsline {subsection}{\numberline {4.2.2}RAROC du private equity}{64}{subsection.4.2.2}%
+\contentsline {paragraph}{Contrainte de levier.}{64}{equation.4.7}%
+\contentsline {section}{\numberline {4.3}Pondérations en risque (RWA)}{64}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Budget RWA et capital}{64}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Pondérations CRR3 par classe}{64}{subsection.4.3.2}%
+\contentsline {paragraph}{Private equity (CRR3 art.~133).}{64}{subsection.4.3.2}%
+\contentsline {paragraph}{Crédit corporate (CRR3 art.~122 + 501).}{65}{equation.4.9}%
+\contentsline {paragraph}{Hypothécaire résidentiel (CRR3 art.~124--125).}{65}{table.caption.24}%
+\contentsline {paragraph}{Titrisation (CRR3 art.~242--270, SEC-SA).}{65}{table.caption.25}%
+\contentsline {subsection}{\numberline {4.3.3}Dispatch dynamique des pondérations}{66}{subsection.4.3.3}%
+\contentsline {section}{\numberline {4.4}EVA~: la valeur économique ajoutée}{66}{section.4.4}%
+\contentsline {paragraph}{Utilisation.}{66}{equation.4.10}%
+\contentsline {section}{\numberline {4.5}Concentration~: l'indice HHI}{66}{section.4.5}%
+\contentsline {subsection}{\numberline {4.5.1}HHI inter-cellules}{66}{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {4.5.2}HHI de concentration de noms}{67}{subsection.4.5.2}%
+\contentsline {subsection}{\numberline {4.5.3}Pourquoi le HHI plutôt qu'une autre mesure}{67}{subsection.4.5.3}%
+\contentsline {section}{\numberline {4.6}CET1 et contrainte de capital}{67}{section.4.6}%
+\contentsline {subsection}{\numberline {4.6.1}La contrainte qui lie}{67}{subsection.4.6.1}%
+\contentsline {paragraph}{Pas de double déduction ECL.}{67}{equation.4.13}%
+\contentsline {subsection}{\numberline {4.6.2}Interaction PE--CET1}{68}{subsection.4.6.2}%
+\contentsline {section}{\numberline {4.7}Synthèse~: le tableau de bord du CRO}{68}{section.4.7}%
+\contentsline {chapter}{\numberline {5}Private equity sous contraintes réglementaires}{69}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Valorisation~: trois canaux de stress}{69}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Architecture du modèle}{69}{subsection.5.1.1}%
+\contentsline {paragraph}{Canal 1~: stress de la métrique opérationnelle.}{69}{equation.5.1}%
+\contentsline {paragraph}{Canal 2~: compression du multiple de sortie.}{69}{equation.5.2}%
+\contentsline {paragraph}{Canal 3~: stress du levier.}{70}{equation.5.3}%
+\contentsline {paragraph}{Dispersion intra-sectorielle.}{70}{equation.5.4}%
+\contentsline {subsection}{\numberline {5.1.2}Deux corrections asymétriques}{70}{subsection.5.1.2}%
+\contentsline {paragraph}{Amortissement de récession (85\,\%).}{70}{subsection.5.1.2}%
+\contentsline {paragraph}{Pourquoi 85\,\%.}{70}{subsection.5.1.2}%
+\contentsline {paragraph}{Compensation de croissance (50\,\%).}{70}{subsection.5.1.2}%
+\contentsline {subsection}{\numberline {5.1.3}IRR~: du MOIC au rendement annualisé}{71}{subsection.5.1.3}%
+\contentsline {paragraph}{Simplification.}{71}{equation.5.5}%
+\contentsline {section}{\numberline {5.2}Probabilité de détresse~: le signal PE}{71}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Modèle logit}{71}{subsection.5.2.1}%
+\contentsline {paragraph}{Base $= 5\,\%$.}{71}{equation.5.6}%
+\contentsline {paragraph}{Ajustement MOIC (logarithmique).}{72}{equation.5.6}%
+\contentsline {paragraph}{Ajustement macro.}{72}{equation.5.6}%
+\contentsline {subsection}{\numberline {5.2.2}Classification et perte attendue}{72}{subsection.5.2.2}%
+\contentsline {section}{\numberline {5.3}Pondérations CRR3~: le coût du capital PE}{72}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Score composite}{72}{subsection.5.3.1}%
+\contentsline {paragraph}{Pourquoi $E = (L + F)/2$.}{73}{table.caption.30}%
+\contentsline {subsection}{\numberline {5.3.2}Impact sur l'allocation}{73}{subsection.5.3.2}%
+\contentsline {section}{\numberline {5.4}Illiquidité~: le DLOM}{73}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}Décote pour absence de marché}{73}{subsection.5.4.1}%
+\contentsline {paragraph}{Exemples.}{74}{equation.5.9}%
+\contentsline {paragraph}{Sources.}{74}{equation.5.9}%
+\contentsline {section}{\numberline {5.5}L'arbitrage crédit--PE~: un levier étroit}{74}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}Trois contraintes qui se renforcent}{74}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}Le vrai levier~: l'allocation sectorielle}{74}{subsection.5.5.2}%
+\contentsline {section}{\numberline {5.6}Sensibilités sectorielles PE}{75}{section.5.6}%
+\contentsline {paragraph}{Lecture.}{75}{table.caption.31}%
+\contentsline {paragraph}{Méthode d'évaluation.}{75}{table.caption.31}%
+\contentsline {section}{\numberline {5.7}Synthèse}{75}{section.5.7}%
+\contentsline {chapter}{\numberline {6}Analyste CRO et moteurs de gouvernance}{77}{chapter.6}%
+\contentsline {section}{\numberline {6.1}L'analyste CRO local}{77}{section.6.1}%
+\contentsline {subsection}{\numberline {6.1.1}Architecture}{77}{subsection.6.1.1}%
+\contentsline {subsection}{\numberline {6.1.2}Huit sections du rapport}{77}{subsection.6.1.2}%
+\contentsline {subsection}{\numberline {6.1.3}Modèle d'élasticité}{78}{subsection.6.1.3}%
+\contentsline {section}{\numberline {6.2}Prédiction conforme~: intervalles sans hypothèse}{78}{section.6.2}%
+\contentsline {paragraph}{Pourquoi la prédiction conforme.}{78}{equation.6.2}%
+\contentsline {section}{\numberline {6.3}Analyse de sensibilité de Sobol}{79}{section.6.3}%
+\contentsline {paragraph}{Échantillonnage Saltelli.}{79}{equation.6.3}%
+\contentsline {paragraph}{Résultats typiques.}{79}{equation.6.3}%
+\contentsline {section}{\numberline {6.4}Détection de régime (HMM)}{79}{section.6.4}%
+\contentsline {paragraph}{Pourquoi trois régimes.}{79}{table.caption.32}%
+\contentsline {paragraph}{Impact sur le pipeline.}{79}{table.caption.32}%
+\contentsline {section}{\numberline {6.5}GFlowNet~: exploration de scénarios}{80}{section.6.5}%
+\contentsline {subsection}{\numberline {6.5.1}Deux modes}{80}{subsection.6.5.1}%
+\contentsline {subsection}{\numberline {6.5.2}Transformation de Cholesky}{80}{subsection.6.5.2}%
+\contentsline {subsection}{\numberline {6.5.3}Apprentissage par Trajectory Balance}{80}{subsection.6.5.3}%
+\contentsline {section}{\numberline {6.6}Moteurs complémentaires}{81}{section.6.6}%
+\contentsline {subsection}{\numberline {6.6.1}Prime de risque de variance (VRP)}{81}{subsection.6.6.1}%
+\contentsline {subsection}{\numberline {6.6.2}Théorie des matrices aléatoires (RMT)}{81}{subsection.6.6.2}%
+\contentsline {subsection}{\numberline {6.6.3}Signatures de chemins}{81}{subsection.6.6.3}%
+\contentsline {subsection}{\numberline {6.6.4}Analyse topologique (TDA)}{82}{subsection.6.6.4}%
+\contentsline {subsection}{\numberline {6.6.5}Portes de conformité}{82}{subsection.6.6.5}%
+\contentsline {section}{\numberline {6.7}Synthèse~: dix couches de gouvernance}{82}{section.6.7}%
+\contentsline {part}{II\hspace {1em}Validation multi-actifs}{85}{part.2}%
+\contentsline {chapter}{\numberline {7}Extension multi-actifs~: des secteurs aux classes d'actifs}{87}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Pourquoi 14 classes~?}{87}{section.7.1}%
+\contentsline {subsection}{\numberline {7.1.1}Taxonomie en trois niveaux}{88}{subsection.7.1.1}%
+\contentsline {section}{\numberline {7.2}Paramétrisation des 14 classes}{88}{section.7.2}%
+\contentsline {subsection}{\numberline {7.2.1}Justification des corrélations d'actif}{88}{subsection.7.2.1}%
+\contentsline {subsection}{\numberline {7.2.2}Sensibilités macro et convention de signe}{89}{subsection.7.2.2}%
+\contentsline {section}{\numberline {7.3}Générateurs de positions}{90}{section.7.3}%
+\contentsline {subsection}{\numberline {7.3.1}Crédit corporate~: DGP v4.5}{90}{subsection.7.3.1}%
+\contentsline {subsection}{\numberline {7.3.2}Actions cotées~: modèle de Merton}{90}{subsection.7.3.2}%
+\contentsline {subsection}{\numberline {7.3.3}Obligations corporate~: PD par rating}{91}{subsection.7.3.3}%
+\contentsline {subsection}{\numberline {7.3.4}Repos et SFT~: calibration ICMA}{91}{subsection.7.3.4}%
+\contentsline {subsection}{\numberline {7.3.5}Dérivés~: SA-CCR et CVA}{91}{subsection.7.3.5}%
+\contentsline {section}{\numberline {7.4}Bilan multi-actifs et agrégation ECL}{92}{section.7.4}%
+\contentsline {subsection}{\numberline {7.4.1}Transformation macro $\to $ facteur systématique}{92}{subsection.7.4.1}%
+\contentsline {subsection}{\numberline {7.4.2}PD conditionnelle de Vasicek}{92}{subsection.7.4.2}%
+\contentsline {subsection}{\numberline {7.4.3}Staging et ECL par classe}{93}{subsection.7.4.3}%
+\contentsline {section}{\numberline {7.5}Décorrélation du facteur systématique}{93}{section.7.5}%
+\contentsline {subsection}{\numberline {7.5.1}Correction par la matrice de corrélation signée}{94}{subsection.7.5.1}%
+\contentsline {subsection}{\numberline {7.5.2}Impact quantitatif}{94}{subsection.7.5.2}%
+\contentsline {section}{\numberline {7.6}Capacité de marché et impact de prix}{94}{section.7.6}%
+\contentsline {section}{\numberline {7.7}Résultats de la validation multi-actifs}{95}{section.7.7}%
+\contentsline {subsection}{\numberline {7.7.1}Cohérence RAROC}{95}{subsection.7.7.1}%
+\contentsline {subsection}{\numberline {7.7.2}Tests de cohérence économique}{96}{subsection.7.7.2}%
+\contentsline {subsection}{\numberline {7.7.3}Confirmation du résultat sectoriel}{96}{subsection.7.7.3}%
+\contentsline {chapter}{\numberline {8}Optimiseur BL-CVaR~: allocation multi-contraintes}{97}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Architecture en deux phases}{97}{section.8.1}%
+\contentsline {section}{\numberline {8.2}Phase~1~: BL-CVaR avec impact de prix}{97}{section.8.2}%
+\contentsline {subsection}{\numberline {8.2.1}Objectif}{97}{subsection.8.2.1}%
+\contentsline {subsection}{\numberline {8.2.2}Estimation Monte Carlo de la CVaR}{98}{subsection.8.2.2}%
+\contentsline {subsection}{\numberline {8.2.3}Score BL-CVaR et softmax}{98}{subsection.8.2.3}%
+\contentsline {subsection}{\numberline {8.2.4}Kappa pro-cyclique}{98}{subsection.8.2.4}%
+\contentsline {subsection}{\numberline {8.2.5}Volatilité cyclique}{99}{subsection.8.2.5}%
+\contentsline {subsection}{\numberline {8.2.6}Convergence par accélération d'Anderson}{99}{subsection.8.2.6}%
+\contentsline {section}{\numberline {8.3}Phase~2~: contraintes réglementaires}{99}{section.8.3}%
+\contentsline {subsection}{\numberline {8.3.1}CET1~: projection par gradient RW}{99}{subsection.8.3.1}%
+\contentsline {subsection}{\numberline {8.3.2}LCR~: ratio de liquidité à court terme}{100}{subsection.8.3.2}%
+\contentsline {subsection}{\numberline {8.3.3}NSFR~: financement stable}{100}{subsection.8.3.3}%
+\contentsline {subsection}{\numberline {8.3.4}IRRBB~: risque de taux}{100}{subsection.8.3.4}%
+\contentsline {section}{\numberline {8.4}Zéro paramètre arbitraire}{101}{section.8.4}%
+\contentsline {section}{\numberline {8.5}Score de qualité d'allocation (AQS)}{101}{section.8.5}%
+\contentsline {section}{\numberline {8.6}Analyse de sensibilité paramétrique}{102}{section.8.6}%
+\contentsline {subsection}{\numberline {8.6.1}Criblage de Morris}{102}{subsection.8.6.1}%
+\contentsline {subsection}{\numberline {8.6.2}Indices de Sobol}{102}{subsection.8.6.2}%
+\contentsline {chapter}{\numberline {9}Convention de signe du $Z$-score~: la découverte}{103}{chapter.9}%
+\contentsline {section}{\numberline {9.1}Origine du problème}{103}{section.9.1}%
+\contentsline {subsection}{\numberline {9.1.1}Espace des conventions}{103}{subsection.9.1.1}%
+\contentsline {section}{\numberline {9.2}Protocole expérimental}{104}{section.9.2}%
+\contentsline {subsection}{\numberline {9.2.1}Critères d'évaluation}{104}{subsection.9.2.1}%
+\contentsline {section}{\numberline {9.3}Résultats~: élimination en 3 étapes}{104}{section.9.3}%
+\contentsline {subsection}{\numberline {9.3.1}Étape 1~: élimination par HPI adverse (4 conventions)}{104}{subsection.9.3.1}%
+\contentsline {subsection}{\numberline {9.3.2}Étape 2~: élimination par incohérence adverse (2 conventions)}{105}{subsection.9.3.2}%
+\contentsline {paragraph}{Convention A éliminée.}{105}{subsection.9.3.2}%
+\contentsline {paragraph}{Convention D éliminée.}{105}{subsection.9.3.2}%
+\contentsline {subsection}{\numberline {9.3.3}Étape 3~: deux survivantes, miroir de Taylor}{105}{subsection.9.3.3}%
+\contentsline {subsection}{\numberline {9.3.4}Le miroir de Taylor}{105}{subsection.9.3.4}%
+\contentsline {subsection}{\numberline {9.3.5}Interaction IR $\times $ Inflation~: exactement nulle}{106}{subsection.9.3.5}%
+\contentsline {section}{\numberline {9.4}Swing maximal et sensibilité}{106}{section.9.4}%
+\contentsline {paragraph}{Observation clé.}{106}{table.caption.43}%
+\contentsline {section}{\numberline {9.5}Effet marginal par variable}{107}{section.9.5}%
+\contentsline {section}{\numberline {9.6}Décision et justification}{107}{section.9.6}%
+\contentsline {section}{\numberline {9.7}Implications pour la pratique bancaire}{108}{section.9.7}%
+\contentsline {chapter}{\numberline {10}Architecture logicielle et reproductibilité}{109}{chapter.10}%
+\contentsline {section}{\numberline {10.1}Vue d'ensemble}{109}{section.10.1}%
+\contentsline {section}{\numberline {10.2}Configuration déclarative}{109}{section.10.2}%
+\contentsline {section}{\numberline {10.3}Générateurs synthétiques}{110}{section.10.3}%
+\contentsline {section}{\numberline {10.4}Moteur de comparaison multi-actifs}{110}{section.10.4}%
+\contentsline {section}{\numberline {10.5}Dashboard CRO}{111}{section.10.5}%
+\contentsline {section}{\numberline {10.6}Tests et validation}{111}{section.10.6}%
+\contentsline {section}{\numberline {10.7}Migration Polars}{111}{section.10.7}%
+\contentsline {section}{\numberline {10.8}Reproductibilité}{112}{section.10.8}%
+\contentsline {chapter}{Conclusion}{113}{chapter*.46}%
+\contentsline {paragraph}{Niveau 1~: l'arbitrage crédit/PE est réel mais étroit.}{113}{chapter*.46}%
+\contentsline {paragraph}{Niveau 2~: l'arbitrage sectoriel domine.}{113}{chapter*.46}%
+\contentsline {paragraph}{Niveau 3~: la convention de signe est de premier ordre.}{113}{chapter*.46}%
+\contentsline {paragraph}{Données synthétiques.}{114}{Item.94}%
+\contentsline {paragraph}{Liquidité simplifiée.}{114}{Item.94}%
+\contentsline {paragraph}{Horizon statique.}{114}{Item.94}%
+\contentsline {paragraph}{Corrélations déclaratives.}{114}{Item.94}%

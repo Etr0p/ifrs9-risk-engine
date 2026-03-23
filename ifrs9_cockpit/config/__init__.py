@@ -6,7 +6,6 @@ Chaque sous-module est thematique :
     - scenarios.py : scenarios macro, covariance, trajectoires
     - models.py    : modeles PD/LGD/EAD, IFRS9, SICR, contrats de donnees
     - basel.py     : Basel III/CRR3, risk appetite, PE classification, CRO
-    - dashboard.py : UI, couleurs, palettes
     - rules.py     : regles d'incoherence macro, validation
 
 Tous les symboles publics sont re-exportes ici pour compatibilite
@@ -112,16 +111,6 @@ from ifrs9_cockpit.config.basel import (
     CRO_CONFIG,
 )
 
-# ── dashboard.py (6 symbols) ─────────────────────────────────
-from ifrs9_cockpit.config.dashboard import (
-    DashboardConfig,
-    DASHBOARD_CONFIG,
-    CHART_COLORS,
-    CVD_SAFE_COLORS,
-    STAGE_COLORS,
-    PE_CATEGORY_COLORS,
-)
-
 # ── rules.py (3 symbols) ─────────────────────────────────────
 from ifrs9_cockpit.config.rules import (
     MacroIncoherenceRule,
@@ -170,9 +159,6 @@ __all__ = [
     "BaselConfig", "BASEL_CONFIG", "RiskAppetiteConfig", "RISK_APPETITE_CONFIG",
     "PEClassificationConfig", "PE_CLASSIFICATION_CONFIG",
     "CROAlertConfig", "CRO_CONFIG",
-    # dashboard
-    "DashboardConfig", "DASHBOARD_CONFIG",
-    "CHART_COLORS", "CVD_SAFE_COLORS", "STAGE_COLORS", "PE_CATEGORY_COLORS",
     # rules
     "MacroIncoherenceRule", "MACRO_INCOHERENCE_RULES", "validate_config",
 ]

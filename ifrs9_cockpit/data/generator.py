@@ -802,9 +802,9 @@ def generate_dataset(
     n_clients: int = N_CLIENTS,
     seed: int = 123,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Genere le dataset via le DGP v4.5 (bridge).
+    """Genere le dataset via le synthetic_generator (bridge).
 
-    Delegue a synthetic_generator_v4.generate_dataset() qui produit un
+    Delegue a synthetic_generator.generate_dataset() qui produit un
     4-tuple (df_credit, df_pe, df_history, df_balance_sheet) compatible
     avec le cockpit.
 
@@ -815,11 +815,11 @@ def generate_dataset(
     Returns:
         Tuple (df_credit, df_pe, df_history, df_balance_sheet).
     """
-    from ifrs9_cockpit.synthetic_generator_v4 import (
-        generate_dataset as _v4_generate,
+    from ifrs9_cockpit.synthetic_generator import (
+        generate_dataset as _sg_generate,
     )
 
-    return _v4_generate(n_clients=n_clients, seed=seed)
+    return _sg_generate(n_clients=n_clients, seed=seed)
 
 
 if __name__ == "__main__":

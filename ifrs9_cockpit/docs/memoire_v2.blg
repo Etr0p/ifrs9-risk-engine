@@ -1,0 +1,62 @@
+This is BibTeX, Version 0.99e
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: memoire_v2.aux
+Reallocating 'name_of_file' (item size: 1) to 9 items.
+The style file: plainnat.bst
+Reallocating 'name_of_file' (item size: 1) to 14 items.
+Database file #1: bibliographie.bib
+Warning--I didn't find a database entry for "black_litterman1992"
+Warning--I didn't find a database entry for "rockafellar_uryasev2000"
+Warning--I didn't find a database entry for "eba_st_2023"
+Warning--I didn't find a database entry for "longstaff2011"
+Warning--I didn't find a database entry for "kyle1985"
+Warning--I didn't find a database entry for "laloux_potters_bouchaud1999"
+Warning--I didn't find a database entry for "ecb_fsr2023"
+Warning--I didn't find a database entry for "saltelli2002"
+Warning--I didn't find a database entry for "altavilla_boucinha_peydro2018"
+Warning--I didn't find a database entry for "ivashina_2010"
+Warning--I didn't find a database entry for "engle2002"
+Warning--can't use both volume and number fields in arik_pfister2021
+Warning--empty journal in mcneil_frey_embrechts2015
+You've used 19 entries,
+            2773 wiz_defined-function locations,
+            718 strings with 8755 characters,
+and the built_in function-call counts, 7181 in all, are:
+= -- 677
+> -- 283
+< -- 24
++ -- 103
+- -- 84
+* -- 456
+:= -- 1128
+add.period$ -- 70
+call.type$ -- 19
+change.case$ -- 88
+chr.to.int$ -- 19
+cite$ -- 40
+duplicate$ -- 378
+empty$ -- 637
+format.name$ -- 109
+if$ -- 1517
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 12
+newline$ -- 116
+num.names$ -- 76
+pop$ -- 165
+preamble$ -- 1
+purify$ -- 66
+quote$ -- 0
+skip$ -- 287
+stack$ -- 0
+substring$ -- 217
+swap$ -- 50
+text.length$ -- 8
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 199
+warning$ -- 2
+while$ -- 72
+width$ -- 0
+write$ -- 276
+(There were 13 warnings)

@@ -13,14 +13,6 @@ import joblib
 from pathlib import Path
 from filelock import FileLock
 
-# Plugin smart-test : selection intelligente basee sur git diff
-# Les hooks pytest_addoption et pytest_collection_modifyitems sont
-# importes directement pour que pytest les detecte automatiquement.
-from ifrs9_cockpit.tests.smart_test_selector import (
-    pytest_addoption,
-    pytest_collection_modifyitems,
-)
-
 from ifrs9_cockpit.data.generator import generate_dataset
 from ifrs9_cockpit.models.pd_model import PDModelSuite
 from ifrs9_cockpit.models.lgd_model import LGDModel

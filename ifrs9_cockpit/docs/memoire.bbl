@@ -1,0 +1,202 @@
+\begin{thebibliography}{26}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Anderson(2007)]{anderson2007}
+Raymond Anderson.
+\newblock \emph{The Credit Scoring Toolkit: Theory and Practice for Retail
+  Credit Risk Management and Decision Automation}.
+\newblock Oxford University Press, 2007.
+\newblock Référence pour l'imputation WoE par proximité, minimum bin \%,
+  seuils IV.
+
+\bibitem[Ar{\i}k and Pfister(2021)]{arik_pfister2021}
+Sercan~\"{O}. Ar{\i}k and Tomas Pfister.
+\newblock {TabNet}: Attentive interpretable tabular learning.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial
+  Intelligence}, volume~35, pages 6679--6687, 2021.
+\newblock arXiv:1908.07442. Mécanisme d'attention séquentiel pour données
+  tabulaires.
+
+\bibitem[{BCBS}(2017)]{bcbs_d424}
+{BCBS}.
+\newblock Basel {III}: Finalising post-crisis reforms.
+\newblock Technical Report d424, Basel Committee on Banking Supervision,
+  December 2017.
+\newblock Cadre prudentiel final Bâle~III, y compris output floor et approche
+  standard révisée.
+
+\bibitem[Borisov et~al.(2022)Borisov, Leemann, Se{\ss}ler, Haug, Pawelczyk, and
+  Kasneci]{borisov2022}
+Vadim Borisov, Tobias Leemann, Kathrin Se{\ss}ler, Johannes Haug, Martin
+  Pawelczyk, and Gjergji Kasneci.
+\newblock Deep neural networks and tabular data: A survey.
+\newblock \emph{IEEE Transactions on Neural Networks and Learning Systems},
+  2022.
+\newblock Revue complète des architectures deep learning pour données
+  tabulaires.
+
+\bibitem[{Cambridge Associates}(2023)]{cambridge2023}
+{Cambridge Associates}.
+\newblock Private equity index and benchmark statistics.
+\newblock Technical report, Cambridge Associates, 2023.
+\newblock MOIC médian : 1,5--2,0$\times$ selon vintage. Taux de défaut PE :
+  $\sim$5\% base.
+
+\bibitem[Chen and Guestrin(2016)]{chen_guestrin2016}
+Tianqi Chen and Carlos Guestrin.
+\newblock {XGBoost}: A scalable tree boosting system.
+\newblock In \emph{Proceedings of the 22nd ACM SIGKDD International Conference
+  on Knowledge Discovery and Data Mining}, pages 785--794, 2016.
+
+\bibitem[{EBA}(2017)]{eba_gl_2017_06}
+{EBA}.
+\newblock Guidelines on {PD} estimation, {LGD} estimation and the treatment of
+  defaulted exposures.
+\newblock Technical Report GL/2017/06, European Banking Authority, 2017.
+
+\bibitem[{EBA}(2019)]{eba_gl_2019_03}
+{EBA}.
+\newblock Guidelines for the estimation of {LGD} appropriate for an economic
+  downturn.
+\newblock Technical Report GL/2019/03, European Banking Authority, 2019.
+\newblock LGD downturn : $\text{LGD}_\text{DT} = \text{LGD}_\text{TTC} \times
+  (1 + \rho \times |Z|)$.
+
+\bibitem[Gordy(2003)]{gordy2003}
+Michael~B. Gordy.
+\newblock A risk-factor model foundation for ratings-based bank capital rules.
+\newblock \emph{Journal of Financial Intermediation}, 12\penalty0 (3):\penalty0
+  199--232, 2003.
+
+\bibitem[Grinsztajn et~al.(2022)Grinsztajn, Oyallon, and
+  Varoquaux]{grinsztajn2022}
+L\'{e}o Grinsztajn, Edouard Oyallon, and Ga\"{e}l Varoquaux.
+\newblock Why do tree-based models still outperform deep learning on typical
+  tabular data?
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, volume~35, 2022.
+
+\bibitem[Herfindahl(1950)]{herfindahl1950}
+Orris~C. Herfindahl.
+\newblock Concentration in the steel industry.
+\newblock 1950.
+\newblock PhD thesis, Columbia University. Indice HHI pour la mesure de la
+  concentration sectorielle.
+
+\bibitem[Hosmer et~al.(2013)Hosmer, Lemeshow, and
+  Sturdivant]{hosmer_lemeshow2013}
+David~W. Hosmer, Stanley Lemeshow, and Rodney~X. Sturdivant.
+\newblock \emph{Applied Logistic Regression}.
+\newblock John Wiley \& Sons, 3 edition, 2013.
+
+\bibitem[{IASB}(2014)]{ifrs9}
+{IASB}.
+\newblock {IFRS~9} --- financial instruments.
+\newblock International Accounting Standards Board, 2014.
+\newblock Amendé 2022. Sections 5.5.17 (pondération ECL), B5.5.17
+  (forward-looking), IE24 (taux d'actualisation).
+
+\bibitem[{IPEV Board}(2022)]{ipev2022}
+{IPEV Board}.
+\newblock International private equity and venture capital valuation
+  guidelines.
+\newblock Technical report, International Private Equity and Venture Capital
+  Valuation Board, 2022.
+\newblock Méthodes de juste valeur : multiples, DCF, taux de capitalisation.
+
+\bibitem[{Jefferies} and {Lazard}(2023)]{jefferies_lazard2023}
+{Jefferies} and {Lazard}.
+\newblock Global secondary market review.
+\newblock Technical report, Jefferies / Lazard, 2023.
+\newblock Décote marché secondaire PE (DLOM) : 8--12\% fonds matures,
+  15--30\% fonds jeunes.
+
+\bibitem[King and Zeng(2001)]{king_zeng2001}
+Gary King and Langche Zeng.
+\newblock Logistic regression in rare events data.
+\newblock \emph{Political Analysis}, 9\penalty0 (2):\penalty0 137--163, 2001.
+\newblock Correction de biais d'intercept pour événements rares (prior
+  correction).
+
+\bibitem[Ledoit and Wolf(2004)]{ledoit_wolf2004}
+Olivier Ledoit and Michael Wolf.
+\newblock A well-conditioned estimator for large-dimensional covariance
+  matrices.
+\newblock \emph{Journal of Multivariate Analysis}, 88\penalty0 (2):\penalty0
+  365--411, 2004.
+\newblock Shrinkage de covariance. Remplacé dans le projet par matrice experte
+  (circularité sur données synthétiques).
+
+\bibitem[Marquardt(1970)]{marquardt1970}
+Donald~W. Marquardt.
+\newblock Generalized inverses, ridge regression, biased linear estimation, and
+  nonlinear estimation.
+\newblock \emph{Technometrics}, 12\penalty0 (3):\penalty0 591--612, 1970.
+\newblock Seuil VIF $<$ 5 pour la détection de multicolinéarité.
+
+\bibitem[McNeil et~al.(2015)McNeil, Frey, and
+  Embrechts]{mcneil_frey_embrechts2015}
+Alexander~J. McNeil, Rüdiger Frey, and Paul Embrechts.
+\newblock Quantitative risk management: Concepts, techniques and tools.
+\newblock 2015.
+\newblock Référence générale : mesures de risque cohérentes, copules,
+  modèles de portefeuille crédit.
+
+\bibitem[Merton(1974)]{merton1974}
+Robert~C. Merton.
+\newblock On the pricing of corporate debt: The risk structure of interest
+  rates.
+\newblock \emph{The Journal of Finance}, 29\penalty0 (2):\penalty0 449--470,
+  1974.
+
+\bibitem[{Moody's Investors Service}(2023)]{moodys_default2023}
+{Moody's Investors Service}.
+\newblock Annual default study: Corporate default and recovery rates,
+  1920--2022.
+\newblock Technical report, Moody's, 2023.
+\newblock LGD equity $\approx$ 60\% (recovery 40\%). Taux de défaut par
+  notation et secteur.
+
+\bibitem[{Parlement européen et Conseil}(2024)]{crr3}
+{Parlement européen et Conseil}.
+\newblock Règlement ({UE}) 2024/1623 modifiant le règlement ({UE})
+  n°~575/2013 ({CRR3}).
+\newblock Journal officiel de l'Union européenne, 2024.
+\newblock Articles 111 (CCF hors-bilan), 133 (pondération SA equity :
+  190\%/250\%/400\%), 155 (IRB equity). Entrée en vigueur : janvier 2025.
+
+\bibitem[Pratt and Grabowski(2014)]{pratt_grabowski2014}
+Shannon~P. Pratt and Roger~J. Grabowski.
+\newblock \emph{Cost of Capital: Applications and Examples}.
+\newblock John Wiley \& Sons, 5 edition, 2014.
+\newblock Méthodes de décote d'illiquidité (DLOM), primes de risque actions
+  non cotées.
+
+\bibitem[Siddiqi(2006)]{siddiqi2006}
+Naeem Siddiqi.
+\newblock \emph{Credit Risk Scorecards: Developing and Implementing Intelligent
+  Credit Scoring}.
+\newblock John Wiley \& Sons, 2006.
+\newblock Référence pour la méthodologie WoE/IV et la construction de
+  scorecards.
+
+\bibitem[Tasche(2008)]{tasche2008}
+Dirk Tasche.
+\newblock Capital allocation to business units and sub-portfolios: The {Euler}
+  principle.
+\newblock \emph{Pillar {II} in the New Basel Accord: The Challenge of Economic
+  Capital}, pages 423--453, 2008.
+\newblock Allocation proportionnelle (Euler) du capital économique aux
+  sous-portefeuilles.
+
+\bibitem[Vasicek(2002)]{vasicek2002}
+Oldrich~A. Vasicek.
+\newblock The distribution of loan portfolio value.
+\newblock \emph{Risk}, 15\penalty0 (12):\penalty0 160--162, 2002.
+\newblock Fondement du modèle IRB de Bâle~II/III (ASRF).
+
+\end{thebibliography}

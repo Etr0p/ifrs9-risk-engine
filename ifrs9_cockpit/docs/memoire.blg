@@ -1,0 +1,74 @@
+This is BibTeX, Version 0.99e
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: memoire.aux
+Reallocating 'name_of_file' (item size: 1) to 9 items.
+The style file: plainnat.bst
+Reallocating 'name_of_file' (item size: 1) to 14 items.
+Database file #1: bibliographie.bib
+Warning--I didn't find a database entry for "black_litterman1992"
+Warning--I didn't find a database entry for "rockafellar_uryasev2000"
+Warning--I didn't find a database entry for "saltelli2002"
+Warning--I didn't find a database entry for "longstaff2011"
+Warning--I didn't find a database entry for "de-servigny2002"
+Warning--I didn't find a database entry for "mian2009"
+Warning--I didn't find a database entry for "blanc2014"
+Warning--I didn't find a database entry for "gilchrist2012"
+Warning--I didn't find a database entry for "crosbie2003"
+Warning--I didn't find a database entry for "bekaert2014"
+Warning--I didn't find a database entry for "moody2023"
+Warning--I didn't find a database entry for "altman2006"
+Warning--I didn't find a database entry for "brunnermeier2009"
+Warning--I didn't find a database entry for "duffie2007"
+Warning--I didn't find a database entry for "kyle1985"
+Warning--I didn't find a database entry for "almgren2001"
+Warning--I didn't find a database entry for "rockafellar2000"
+Warning--I didn't find a database entry for "black1976"
+Warning--I didn't find a database entry for "walker2011"
+Warning--I didn't find a database entry for "derringer1980"
+Warning--I didn't find a database entry for "morris1991"
+Warning--I didn't find a database entry for "engle2002"
+Warning--can't use both volume and number fields in arik_pfister2021
+Warning--empty journal in herfindahl1950
+Warning--empty journal in mcneil_frey_embrechts2015
+You've used 26 entries,
+            2773 wiz_defined-function locations,
+            773 strings with 10391 characters,
+and the built_in function-call counts, 10064 in all, are:
+= -- 937
+> -- 433
+< -- 30
++ -- 155
+- -- 129
+* -- 666
+:= -- 1585
+add.period$ -- 98
+call.type$ -- 26
+change.case$ -- 123
+chr.to.int$ -- 26
+cite$ -- 55
+duplicate$ -- 517
+empty$ -- 882
+format.name$ -- 167
+if$ -- 2115
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 21
+newline$ -- 158
+num.names$ -- 104
+pop$ -- 234
+preamble$ -- 1
+purify$ -- 95
+quote$ -- 0
+skip$ -- 390
+stack$ -- 0
+substring$ -- 306
+swap$ -- 56
+text.length$ -- 8
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 266
+warning$ -- 3
+while$ -- 99
+width$ -- 0
+write$ -- 377
+(There were 25 warnings)

@@ -1,0 +1,86 @@
+\babel@toc {french}{}\relax 
+\contentsline {chapter}{Introduction}{3}{chapter*.2}%
+\contentsline {chapter}{\numberline {1}Le cadre intégré}{5}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Le portefeuille synthétique}{5}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Trois familles de probabilité de défaut}{6}{section.1.2}%
+\contentsline {paragraph}{Pourquoi trois modèles.}{7}{table.caption.5}%
+\contentsline {section}{\numberline {1.3}Le moteur de pertes attendues}{7}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Staging SICR en 3 stades}{7}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}LGD~: du secteur au cycle}{8}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}EAD et CCF}{8}{subsection.1.3.3}%
+\contentsline {paragraph}{Bilan statique.}{8}{subsection.1.3.3}%
+\contentsline {subsection}{\numberline {1.3.4}L'équation ECL}{8}{subsection.1.3.4}%
+\contentsline {section}{\numberline {1.4}RAROC~: la métrique de décision}{8}{section.1.4}%
+\contentsline {section}{\numberline {1.5}Le private equity~: rentable mais coûteux}{9}{section.1.5}%
+\contentsline {section}{\numberline {1.6}L'arbitrage est scénario-conditionnel}{10}{section.1.6}%
+\contentsline {paragraph}{Le business case PE.}{11}{table.caption.8}%
+\contentsline {paragraph}{La tension EVA.}{11}{table.caption.9}%
+\contentsline {paragraph}{Implications pour la stratégie bancaire.}{11}{table.caption.9}%
+\contentsline {paragraph}{Bilan.}{11}{table.caption.9}%
+\contentsline {chapter}{\numberline {2}L'univers multi-actifs et l'optimiseur}{13}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Pourquoi 14 classes}{13}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Taxonomie et paramétrage}{14}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Décorrélation du facteur systématique}{14}{section.2.3}%
+\contentsline {paragraph}{Illustration~: la loi d'Okun en Stagflation.}{15}{equation.2.1}%
+\contentsline {section}{\numberline {2.4}Capacité de marché et impact de prix}{15}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Philosophie~: zéro paramètre arbitraire}{15}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Phase 1~: allocation économique}{16}{section.2.6}%
+\contentsline {paragraph}{Construction des vues.}{16}{equation.2.3}%
+\contentsline {paragraph}{Estimation de la CVaR.}{16}{equation.2.4}%
+\contentsline {section}{\numberline {2.7}Phase 2~: projection réglementaire}{17}{section.2.7}%
+\contentsline {paragraph}{CET1 $\geq $ 13\,\%.}{17}{section.2.7}%
+\contentsline {paragraph}{IRRBB~: EVE/CET1 $\leq $ 15\,\%.}{17}{section.2.7}%
+\contentsline {paragraph}{LCR $\geq $ 100\,\%.}{17}{section.2.7}%
+\contentsline {paragraph}{NSFR $\geq $ 100\,\%.}{17}{section.2.7}%
+\contentsline {paragraph}{Anatomie de la réallocation.}{17}{section.2.7}%
+\contentsline {chapter}{\numberline {3}L'allocation et le coût de la franchise}{19}{chapter.3}%
+\contentsline {section}{\numberline {3.1}De 5 secteurs à 14 classes~: l'allocation diversifiée}{19}{section.3.1}%
+\contentsline {paragraph}{Une allocation diversifiée et adaptative.}{19}{table.caption.13}%
+\contentsline {paragraph}{Le PE~: marginal en régime normal, relais de diversification en crise.}{20}{table.caption.13}%
+\contentsline {paragraph}{Le coût de la franchise~: mesure et structure.}{20}{table.caption.13}%
+\contentsline {paragraph}{Contrôle~: le FC sur le périmètre crédit/PE.}{21}{table.caption.15}%
+\contentsline {paragraph}{Décomposition par composante P\&L.}{22}{table.caption.16}%
+\contentsline {section}{\numberline {3.2}Score de qualité et validation}{22}{section.3.2}%
+\contentsline {paragraph}{Analyse de sensibilité globale (Sobol).}{23}{section.3.2}%
+\contentsline {chapter}{\numberline {4}Risque de spécification du facteur systématique}{24}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Le problème}{24}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Protocole et résultats}{24}{section.4.2}%
+\contentsline {paragraph}{Effets marginaux par variable.}{25}{table.caption.19}%
+\contentsline {paragraph}{Convention vs optimisation~: ordres de grandeur.}{26}{table.caption.20}%
+\contentsline {section}{\numberline {4.3}Résultat central}{27}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Portée et limites}{27}{section.4.4}%
+\contentsline {paragraph}{La linéarité.}{27}{section.4.4}%
+\contentsline {paragraph}{Le signe global.}{27}{section.4.4}%
+\contentsline {paragraph}{Transférabilité.}{28}{table.caption.23}%
+\contentsline {paragraph}{Implications pratiques.}{28}{table.caption.23}%
+\contentsline {chapter}{Conclusion}{30}{chapter*.24}%
+\contentsline {paragraph}{Niveau 1~: l'arbitrage crédit/PE est scénario-dépendant, mais l'allocation intertemporelle domine.}{30}{chapter*.24}%
+\contentsline {paragraph}{Niveau 2~: à 14 classes, l'allocation est diversifiée et adaptative, et le franchise cost devient structurel.}{30}{chapter*.24}%
+\contentsline {paragraph}{Niveau 3~: le risque de spécification macro est de premier ordre.}{30}{chapter*.24}%
+\contentsline {paragraph}{Données synthétiques.}{31}{Item.10}%
+\contentsline {paragraph}{Bilan statique.}{31}{Item.10}%
+\contentsline {paragraph}{Linéarité et binarité du facteur systématique.}{31}{Item.10}%
+\contentsline {paragraph}{Autres simplifications.}{32}{Item.10}%
+\contentsline {paragraph}{Allocation seule.}{32}{Item.10}%
+\contentsline {paragraph}{CIR non réallouable.}{32}{Item.10}%
+\contentsline {paragraph}{Franchise cost~: bornes et circularité.}{32}{Item.10}%
+\contentsline {chapter}{\numberline {A}Détails techniques}{34}{appendix.A}%
+\contentsline {section}{\numberline {A.1}DGP et génération de données}{34}{section.A.1}%
+\contentsline {paragraph}{Bloc 1 --- Effets monotones (40\,\%).}{34}{equation.A.1}%
+\contentsline {paragraph}{Bloc 2 --- Interactions (35\,\%).}{34}{equation.A.1}%
+\contentsline {paragraph}{Bloc 3 --- Conjonctions (25\,\%).}{34}{equation.A.1}%
+\contentsline {section}{\numberline {A.2}Modèles PD}{35}{section.A.2}%
+\contentsline {section}{\numberline {A.3}Moteur ECL}{36}{section.A.3}%
+\contentsline {section}{\numberline {A.4}Métriques de portefeuille}{37}{section.A.4}%
+\contentsline {section}{\numberline {A.5}Private equity}{37}{section.A.5}%
+\contentsline {section}{\numberline {A.6}Multi-actifs}{38}{section.A.6}%
+\contentsline {section}{\numberline {A.7}Optimiseur BL-CVaR}{38}{section.A.7}%
+\contentsline {section}{\numberline {A.8}Conventions de signe}{39}{section.A.8}%
+\contentsline {section}{\numberline {A.9}Franchise Cost Calculator}{39}{section.A.9}%
+\contentsline {paragraph}{Données de la régression.}{39}{table.caption.27}%
+\contentsline {paragraph}{Interprétation.}{39}{table.caption.28}%
+\contentsline {paragraph}{Deux types de crises.}{41}{figure.caption.29}%
+\contentsline {paragraph}{Limites du calculateur.}{41}{figure.caption.29}%
+\contentsline {paragraph}{Régressions OLS pe-bc.}{42}{table.caption.31}%
+\contentsline {paragraph}{Interprétation.}{42}{table.caption.31}%
+\contentsline {paragraph}{Limites spécifiques au pe-bc.}{43}{Item.21}%
