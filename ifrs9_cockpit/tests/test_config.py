@@ -253,6 +253,7 @@ class TestMacroScenarios:
             "Central", "Crise financiere (GFC)", "Crise souveraine (2012)",
             "Stagflation", "Choc pandemique (COVID)", "Rupture techno", "Reprise",
             "Hypercroissance", "Boom immobilier", "Trappe a liquidite",
+            "Normalisation monetaire (Volcker)",
             "Transition climatique brutale",
         }
         assert set(PREDEFINED_SCENARIOS.keys()) == expected

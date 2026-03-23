@@ -229,6 +229,21 @@ PREDEFINED_SCENARIOS: Dict[str, Dict[str, float]] = {
         "hpi_pct": -3.0,
         "inflation_pct": -0.5,
     },
+    "Normalisation monetaire (Volcker)": {
+        # Fed Volcker 1980-82 transpose en zone euro : taux directeur releve
+        # brutalement pour casser l'inflation (Fed funds 20%, Bunds 10%).
+        # PIB zone euro -1.0% (recession volontaire), chomage +2.5pp,
+        # HPI -5% (credit crunch immobilier), inflation 6% (en baisse
+        # depuis le pic mais encore elevee). Analogue partiel : BCE 2022-23
+        # (taux +450bp en 14 mois, mais sans recession — ici on modelise
+        # le cas ou la recession se materialise).
+        # Sources : Fed FRED, Bundesbank, OCDE, Eurostat.
+        "interest_rate_bp": 500.0,
+        "unemployment_bipolar": -2.5,   # crise eco : +2.5pp chomage
+        "gdp_pct": -1.0,
+        "hpi_pct": -5.0,
+        "inflation_pct": 6.0,
+    },
     "Transition climatique brutale": {
         # NGFS Sudden Wake-Up Call : doublement brutal du prix carbone,
         # recession de transition, chomage sectoriel, HPI affecte (DPE),

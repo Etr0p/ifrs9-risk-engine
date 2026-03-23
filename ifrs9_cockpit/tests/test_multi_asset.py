@@ -457,8 +457,8 @@ class TestPredefinedScenarios(unittest.TestCase):
         self.assertIn("carbon_price_shock", climate)
         self.assertGreater(climate["carbon_price_shock"], 0)
 
-    def test_11_scenarios(self):
-        self.assertEqual(len(PREDEFINED_SCENARIOS), 11)
+    def test_12_scenarios(self):
+        self.assertEqual(len(PREDEFINED_SCENARIOS), 12)
 
     def test_boom_immobilier_exists(self):
         self.assertIn("Boom immobilier", PREDEFINED_SCENARIOS)
