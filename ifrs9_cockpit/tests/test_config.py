@@ -7,7 +7,7 @@ Couvre les 10 tâches de la story :
   T4: 5 scénarios macro prédéfinis
   T5: Règles d'incohérence macro
   T6: Contrats DataFrame
-  T7: Features entreprise et DashboardConfig Steel Blue
+  T7: Features entreprise
   T8: Seuils distress PE et secondary discount
   T9: Validation au chargement (ValueError)
   T10: Validation standalone
@@ -26,12 +26,10 @@ from ifrs9_cockpit.config import (
     ALLOWED_LOAN_TYPES,
     ALLOWED_SECTORS,
     BASEL_CONFIG,
-    CHART_COLORS,
     CLIPPING_BOUNDS,
     CREDIT_CATEGORICAL_FEATURES,
     CREDIT_NUMERICAL_FEATURES,
     CRO_CONFIG,
-    DASHBOARD_CONFIG,
     ENGINEERED_FEATURES,
     EAD_CONFIG,
     ECL_SCENARIOS,
@@ -66,13 +64,10 @@ from ifrs9_cockpit.config import (
     SECTOR_NAMES,
     SEGMENTS,
     SICR_CONFIG,
-    STAGE_COLORS,
-    PE_CATEGORY_COLORS,
     TRAIN_RATIO,
     VALIDATION_RATIO,
     TEST_RATIO,
     BaselConfig,
-    DashboardConfig,
     MacroIncoherenceRule,
     MacroScenario,
     PEClassificationConfig,
@@ -339,11 +334,11 @@ class TestDataFrameContracts:
 
 
 # ============================================================
-# T7 — Features entreprise et DashboardConfig
+# T7 — Features entreprise
 # ============================================================
 
 class TestFeaturesAndDashboard:
-    """Tests Task 7 — Features et DashboardConfig."""
+    """Tests Task 7 — Features entreprise."""
 
     def test_credit_numerical_features(self):
         base_expected = {"revenue", "ebitda", "debt_ratio", "credit_score",
@@ -377,38 +372,6 @@ class TestFeaturesAndDashboard:
 
     def test_categorical_features_alias(self):
         assert CATEGORICAL_FEATURES is CREDIT_CATEGORICAL_FEATURES
-
-    def test_steel_blue_palette(self):
-        assert DASHBOARD_CONFIG.theme_primary == "#3B82F6"
-
-    def test_dark_background(self):
-        assert DASHBOARD_CONFIG.theme_bg_dark == "#0C1222"
-
-    def test_slider_interest_rate_range(self):
-        lo, hi, step = DASHBOARD_CONFIG.stress_interest_rate_range
-        assert lo == -400.0
-        assert hi == 650.0
-        assert step == 25.0
-
-    def test_slider_unemployment_bipolar(self):
-        lo, hi, step = DASHBOARD_CONFIG.stress_unemployment_range
-        assert lo == -7.0
-        assert hi == 7.0
-
-    def test_slider_gdp_range(self):
-        lo, hi, _ = DASHBOARD_CONFIG.stress_gdp_range
-        assert lo == -8.0
-        assert hi == 8.0
-
-    def test_slider_hpi_range(self):
-        lo, hi, _ = DASHBOARD_CONFIG.stress_hpi_range
-        assert lo == -30.0
-        assert hi == 20.0
-
-    def test_slider_inflation_range(self):
-        lo, hi, _ = DASHBOARD_CONFIG.stress_inflation_range
-        assert lo == -2.0
-        assert hi == 8.0
 
 
 # ============================================================
@@ -608,16 +571,6 @@ class TestMathRigorStructures:
 
     def test_pe_distress_logit_scale(self):
         assert PE_DISTRESS_LOGIT_SCALE == 3.0
-
-    def test_chart_colors(self):
-        assert len(CHART_COLORS) >= 6
-        assert CHART_COLORS[0] == "#3B82F6"  # Steel Blue primary
-
-    def test_stage_colors(self):
-        assert set(STAGE_COLORS.keys()) == {1, 2, 3}
-
-    def test_pe_category_colors(self):
-        assert set(PE_CATEGORY_COLORS.keys()) == {"Performing", "Watchlist", "Distressed"}
 
 
 # ============================================================

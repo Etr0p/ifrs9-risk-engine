@@ -3,7 +3,7 @@ from ifrs9_cockpit.config import (
     RANDOM_SEED, N_CLIENTS, N_MONTHS,
     SECTORS, ECL_SCENARIOS, PREDEFINED_SCENARIOS,
     BASEL_CONFIG, RISK_APPETITE_CONFIG,
-    PE_CLASSIFICATION_CONFIG, DASHBOARD_CONFIG,
+    PE_CLASSIFICATION_CONFIG,
     REQUIRED_CREDIT_COLS, REQUIRED_PE_COLS,
     REQUIRED_CREDIT_RESULT_COLS, REQUIRED_PE_RESULT_COLS,
     MACRO_INCOHERENCE_RULES,
@@ -67,10 +67,6 @@ def main() -> None:
     print(f"  Watchlist  : P(distress) < {PE_CLASSIFICATION_CONFIG.distress_threshold_watchlist:.0%}")
     print(f"  Distressed : P(distress) >= {PE_CLASSIFICATION_CONFIG.distress_threshold_watchlist:.0%}")
     print(f"  Secondary discount : {PE_CLASSIFICATION_CONFIG.secondary_discount:.0%}")
-
-    print(f"\n--- Palette ---")
-    print(f"  Primary  : {DASHBOARD_CONFIG.theme_primary}")
-    print(f"  Bg dark  : {DASHBOARD_CONFIG.theme_bg_dark}")
 
     print("\nConfiguration valide.")
 

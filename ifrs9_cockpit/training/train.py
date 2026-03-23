@@ -344,10 +344,12 @@ def _train_governance(df: pd.DataFrame, suite: PDModelSuite) -> dict:
 
     # 4e. Sobol (N=512 offline — better quality than inline N=256)
     try:
+        import polars as pl
         ecl_calc = ECLCalculator(lgd_model=lgd_model, ead_model=ead_model)
         # Subsample for speed (Sobol calls ecl_fn N*(D+2) times)
         _MAX_SOBOL = 5000
-        df_sobol = df.head(_MAX_SOBOL) if len(df) > _MAX_SOBOL else df
+        df_sobol_pd = df.head(_MAX_SOBOL) if len(df) > _MAX_SOBOL else df
+        df_sobol = pl.from_pandas(df_sobol_pd) if isinstance(df_sobol_pd, pd.DataFrame) else df_sobol_pd
         pd_current = pd_pred[:_MAX_SOBOL] if len(pd_pred) > _MAX_SOBOL else pd_pred
         pd_origination = pd_current * 0.8
 

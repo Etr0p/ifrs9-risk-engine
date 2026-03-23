@@ -28,8 +28,9 @@ from ifrs9_cockpit.data.generator import generate_dataset
 def governance_artifacts(global_pipeline_results):
     """Run _train_governance() and return the artifacts dict."""
     from ifrs9_cockpit.training.train import _train_governance
+    from ifrs9_cockpit.utils.frame_compat import to_pandas
 
-    df_credit = global_pipeline_results["df_credit"]
+    df_credit = to_pandas(global_pipeline_results["df_credit"])
     pd_suite = global_pipeline_results["pd_suite"]
     return _train_governance(df_credit, pd_suite)
 

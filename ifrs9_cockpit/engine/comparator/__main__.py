@@ -10,6 +10,7 @@ from ifrs9_cockpit.engine.comparator import PortfolioComparator, compute_crr3_rw
 
 
 if __name__ == "__main__":
+    import polars as pl
     from ifrs9_cockpit.data.generator import generate_dataset
     from ifrs9_cockpit.models.pd_model import PDModelSuite
     from ifrs9_cockpit.engine.ecl_calculator import ECLCalculator
