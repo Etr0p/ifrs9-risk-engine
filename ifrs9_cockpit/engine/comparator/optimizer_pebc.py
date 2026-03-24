@@ -726,6 +726,7 @@ class PebcOptimizerMixin:
             "feasible": headroom_eur >= 0,
             # BL-CVaR specific
             "method": "BL-CVaR-10C",
+            "n_classes": _N_CELLS,
             "class_weights": {
                 cname: round(float(best_w[i]), 6)
                 for i, cname in enumerate(_CELL_NAMES_PEBC)

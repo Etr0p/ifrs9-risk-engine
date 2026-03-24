@@ -10,6 +10,10 @@ Couvre :
     - Stress : impact macro, CVA risk increase, scenario adverse
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

@@ -12,6 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.fourteen
+
 from ifrs9_cockpit.engine.hmm_regime import detect_regime, REGIME_CVAR_ALPHA
 
 

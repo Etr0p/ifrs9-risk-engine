@@ -19,6 +19,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.shared
+
 from ifrs9_cockpit.config import (
     PE_CLASSIFICATION_CONFIG,
     RANDOM_SEED,

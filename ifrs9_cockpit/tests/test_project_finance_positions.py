@@ -10,6 +10,10 @@ Couvre :
       slotting migration, LGD downturn, RW increase
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

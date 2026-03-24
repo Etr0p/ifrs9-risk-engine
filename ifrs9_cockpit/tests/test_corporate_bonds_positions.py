@@ -9,6 +9,10 @@ Couvre :
     - Stress : impact macro sur PD/LGD/RW, scenario adverse severe
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

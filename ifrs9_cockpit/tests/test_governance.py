@@ -7,6 +7,8 @@ Tests rapides uniquement (pas d'entraînement de modèles).
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.shared
+
 
 # ═══════════════════════════════════════════════════════
 # CONFORMAL PREDICTION

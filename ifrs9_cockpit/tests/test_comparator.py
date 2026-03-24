@@ -28,6 +28,8 @@ from ifrs9_cockpit.engine.comparator import (
     compute_crr3_rw,
 )
 
+pytestmark = pytest.mark.fourteen
+
 
 # ============================================================
 # Fixture : pipeline complet (scope=module pour ne calculer qu'une fois)

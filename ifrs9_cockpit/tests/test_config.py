@@ -22,6 +22,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+pytestmark = pytest.mark.shared
+
 from ifrs9_cockpit.config import (
     ALLOWED_LOAN_TYPES,
     ALLOWED_SECTORS,

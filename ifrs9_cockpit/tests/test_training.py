@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.fourteen
+
 from ifrs9_cockpit.config import (
     MACRO_COVARIANCE,
     MACRO_HISTORY_BASELINE,

@@ -16,6 +16,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.shared
+
 from ifrs9_cockpit.config import (
     TARGET, RANDOM_SEED,
     CORPORATE_INTERACTION_FEATURES,

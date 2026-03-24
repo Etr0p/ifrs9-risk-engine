@@ -8,6 +8,10 @@ Couvre :
     - Aggregation : EAD, PD/LGD moyens, schema, integration balance sheet
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 from pathlib import Path
 

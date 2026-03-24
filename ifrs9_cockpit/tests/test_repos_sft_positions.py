@@ -9,6 +9,10 @@ Couvre :
     - Stress : haircut spiral, collateral degradation, scenario adverse
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

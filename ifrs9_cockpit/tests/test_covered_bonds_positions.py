@@ -11,6 +11,10 @@ Couvre :
       LGD downturn, resilience double recours
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

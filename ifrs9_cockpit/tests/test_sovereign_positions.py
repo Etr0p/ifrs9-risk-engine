@@ -10,6 +10,10 @@ Couvre :
     - HQLA : Level 1, exempt staging, RSF 0%
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

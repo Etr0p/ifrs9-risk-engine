@@ -9,6 +9,10 @@ Couvre :
     - Aggregation : EAD, PD/LGD moyens, schema balance sheet
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

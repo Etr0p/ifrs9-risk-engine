@@ -22,6 +22,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.shared
+
 from ifrs9_cockpit.config import (
     MACRO_HISTORY_BASELINE,
     N_CLIENTS,

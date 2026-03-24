@@ -368,6 +368,7 @@ class MetricsMixin:
                     "capital": round(capital_c, 0),
                     "raroc": round(raroc_c, 4),
                     "eva": round(eva_c, 0),
+                    "profit_rate": round(profit_net / max(ead, 1), 6),
                 })
 
             # ── PE ──
@@ -397,6 +398,7 @@ class MetricsMixin:
                     "capital": round(capital_p, 0),
                     "raroc": round(raroc_p, 4),
                     "eva": round(eva_p, 0),
+                    "profit_rate": round(profit_net_pe / max(nav, 1), 6),
                 })
 
         result = pl.DataFrame(records)
@@ -427,6 +429,7 @@ class MetricsMixin:
                 "capital": round(cap, 0),
                 "raroc": round(raroc, 4),
                 "eva": round(eva, 0),
+                "profit_rate": round(profit / max(exp, 1), 6),
             }])])
 
         self._raroc_eva_cache = result

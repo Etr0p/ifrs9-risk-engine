@@ -9,6 +9,10 @@ Couvre :
     - DGP extension : df_balance_sheet generation
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

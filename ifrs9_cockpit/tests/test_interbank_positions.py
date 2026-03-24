@@ -10,6 +10,10 @@ Couvre :
                GFC simulation, LGD downturn, RW Art. 120(2)
 """
 
+import pytest
+
+pytestmark = pytest.mark.fourteen
+
 import unittest
 import numpy as np
 import polars as pl

@@ -18,6 +18,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.shared
+
 from ifrs9_cockpit.config import EAD_CONFIG, LGD_CONFIG, RANDOM_SEED, SECTORS
 from ifrs9_cockpit.data.generator import generate_dataset
 from ifrs9_cockpit.models.lgd_model import LGDModel
