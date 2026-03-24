@@ -253,7 +253,7 @@ def _train_governance(df: pd.DataFrame, suite: PDModelSuite) -> dict:
     """Pre-calcule tous les artefacts de gouvernance.
 
     Args:
-        df: DataFrame credit (pour conformal calibration).
+        df: DataFrame credit (pour calibration gouvernance).
         suite: PDModelSuite entrainee (pour PD predictions).
 
     Returns:

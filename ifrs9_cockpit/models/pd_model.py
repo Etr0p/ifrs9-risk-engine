@@ -27,7 +27,7 @@ Cible modelisee : P(Default = 1 | X), i.e. la probabilite de defaut.
 Architecture Train/Serve :
     - save() : serialise la suite entrainee (sans X_train pour economie memoire)
     - load() : charge une suite pre-entrainee depuis le disque
-    - Le dashboard peut charger des modeles entraines offline sur 1M+ lignes
+    - load() permet de charger des modeles entraines offline sur 1M+ lignes
 
 La classe PDModelSuite encapsule le pipeline complet :
     data split -> WoE binning -> fit 3 modeles -> calibration -> metriques -> comparaison.

@@ -147,12 +147,12 @@ class PEClassificationConfig:
 PE_CLASSIFICATION_CONFIG = PEClassificationConfig()
 
 # ──────────────────────────────────────────────
-# VIRTUAL CRO — SEUILS D'ALERTE
+# SEUILS D'ALERTE CRO
 # ──────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class CROAlertConfig:
-    """Seuils d'alerte pour le module Virtual CRO.
+    """Seuils d'alerte CRO.
 
     Attributes:
         ecl_variation_alert: Variation ECL declenchant une alerte.

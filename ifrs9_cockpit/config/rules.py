@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 # ──────────────────────────────────────────────
 # Chaque regle = (nom, description, dict de conditions).
 # Les conditions utilisent les cles des sliders.
-# L'evaluation est faite dans le dashboard, pas ici.
+# L'evaluation est faite dans le pipeline, pas ici.
 
 @dataclass(frozen=True)
 class MacroIncoherenceRule:

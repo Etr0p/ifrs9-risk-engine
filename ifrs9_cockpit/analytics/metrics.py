@@ -24,7 +24,7 @@ class ModelMetrics:
     """Calcul centralisé des métriques de discrimination et de stabilité.
 
     Fournit des méthodes statiques réutilisables par tous les modèles
-    PD/LGD et par le module Virtual CRO pour le monitoring.
+    PD/LGD pour le monitoring.
 
     Example:
         >>> metrics = ModelMetrics.compute_all(y_true, y_pred_proba)

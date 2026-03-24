@@ -6,7 +6,7 @@ Systeme ambidextre conditionne par le regime HMM :
     - Mode offensif (expansion) : genere des allocations optimales
       R = RORAC(allocation) * (1 - penalty_ECL)
 
-Architecture numpy pure (meme pattern que virtual_cro/agents.py) :
+Architecture numpy pure :
     - Forward policy : MLP genere des actions dans Z-space (Cholesky)
     - Backward policy : MLP inverse pour flow consistency
     - Trajectory Balance loss (Malkin et al. 2022)

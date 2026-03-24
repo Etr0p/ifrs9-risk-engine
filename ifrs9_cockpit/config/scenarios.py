@@ -100,7 +100,7 @@ ECL_SCENARIOS: List[MacroScenario] = [SCENARIO_BASE, SCENARIO_ADVERSE, SCENARIO_
 # Alias de compatibilite — les modules existants importent SCENARIOS
 SCENARIOS: List[MacroScenario] = ECL_SCENARIOS
 
-# --- Scenarios predefinis pour le dropdown dashboard (FR34) ---
+# --- Scenarios predefinis (FR34) ---
 # Valeurs des 5 sliders : interest_rate_bp, unemployment_bipolar, gdp_pct, hpi_pct, inflation_pct
 # Le dropdown pre-remplit les sliders ; l'analyste peut ensuite ajuster a la main.
 

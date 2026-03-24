@@ -1,1 +1,1 @@
-"""Analytics : métriques de performance et module Virtual CRO."""
+"""Analytics : metriques de performance et comparateur de portefeuilles."""
