@@ -91,6 +91,27 @@ class SectorConfig:
     # Source : consensus sectoriel simplifie (declaratif, non audite).
     green_share: float
 
+    # Market impact (optimizer BL-CVaR pe-bc 10 cellules)
+    # Volatilite annuelle des pertes (credit) / rendements (PE)
+    # Sources : EBA Risk Dashboard 2023, Cambridge Associates Q3 2023
+    market_vol_credit: float
+    market_vol_pe: float
+    # Marche adressable en EUR (capacite de marche pour impact Kyle 1985)
+    # Sources : ECB BSI, EBA, Preqin, McKinsey Global PE Report 2023
+    market_capacity_credit_eur: float
+    market_capacity_pe_eur: float
+
+    # Proprietes regulatoires (LCR / NSFR / IRRBB) — pe-bc optimizer
+    # Sources : Basel III LCR (Art. 428r), NSFR (CRR2), IRRBB (BCBS 368)
+    hqla_eligible_credit: bool       # Eligible HQLA (LCR)
+    hqla_level_credit: int           # 0/1/2/3 (haircut level)
+    rsf_weight_credit: float         # NSFR Required Stable Funding weight
+    duration_credit: float           # Modified duration (annees)
+    hqla_eligible_pe: bool
+    hqla_level_pe: int
+    rsf_weight_pe: float
+    duration_pe: float
+
     # Fourchettes de generation pour le portefeuille synthetique
     revenue_range_m: Tuple[float, float]
     ebitda_margin_range: Tuple[float, float]
@@ -125,6 +146,14 @@ SECTORS: List[SectorConfig] = [
         exit_multiple_base=9.0,
         green_share=0.40,
         rho_lgd_cycle=0.25,
+        market_vol_credit=0.035,
+        market_vol_pe=0.20,
+        market_capacity_credit_eur=800e9,
+        market_capacity_pe_eur=60e9,
+        hqla_eligible_credit=False, hqla_level_credit=0,
+        rsf_weight_credit=0.85, duration_credit=3.5,
+        hqla_eligible_pe=False, hqla_level_pe=0,
+        rsf_weight_pe=1.00, duration_pe=5.0,
         revenue_range_m=(5.0, 200.0),
         ebitda_margin_range=(0.05, 0.30),
     ),
@@ -153,6 +182,14 @@ SECTORS: List[SectorConfig] = [
         exit_multiple_base=8.5,
         green_share=0.20,
         rho_lgd_cycle=0.30,
+        market_vol_credit=0.030,
+        market_vol_pe=0.18,
+        market_capacity_credit_eur=1200e9,
+        market_capacity_pe_eur=80e9,
+        hqla_eligible_credit=False, hqla_level_credit=0,
+        rsf_weight_credit=0.85, duration_credit=4.0,
+        hqla_eligible_pe=False, hqla_level_pe=0,
+        rsf_weight_pe=1.00, duration_pe=5.0,
         revenue_range_m=(10.0, 500.0),
         ebitda_margin_range=(0.08, 0.20),
     ),
@@ -181,6 +218,14 @@ SECTORS: List[SectorConfig] = [
         exit_multiple_base=17.0,
         green_share=0.30,
         rho_lgd_cycle=0.10,
+        market_vol_credit=0.020,
+        market_vol_pe=0.15,
+        market_capacity_credit_eur=600e9,
+        market_capacity_pe_eur=50e9,
+        hqla_eligible_credit=False, hqla_level_credit=0,
+        rsf_weight_credit=0.65, duration_credit=3.0,
+        hqla_eligible_pe=False, hqla_level_pe=0,
+        rsf_weight_pe=1.00, duration_pe=5.0,
         revenue_range_m=(5.0, 300.0),
         ebitda_margin_range=(0.10, 0.25),
     ),
@@ -210,6 +255,14 @@ SECTORS: List[SectorConfig] = [
         exit_multiple_base=8.0,
         green_share=0.15,
         rho_lgd_cycle=0.35,
+        market_vol_credit=0.040,
+        market_vol_pe=0.22,
+        market_capacity_credit_eur=1500e9,
+        market_capacity_pe_eur=100e9,
+        hqla_eligible_credit=False, hqla_level_credit=0,
+        rsf_weight_credit=0.85, duration_credit=7.0,
+        hqla_eligible_pe=False, hqla_level_pe=0,
+        rsf_weight_pe=1.00, duration_pe=7.0,
         revenue_range_m=(2.0, 100.0),
         ebitda_margin_range=(0.40, 0.70),
     ),
@@ -238,6 +291,14 @@ SECTORS: List[SectorConfig] = [
         exit_multiple_base=11.0,
         green_share=0.25,
         rho_lgd_cycle=0.20,
+        market_vol_credit=0.025,
+        market_vol_pe=0.16,
+        market_capacity_credit_eur=900e9,
+        market_capacity_pe_eur=70e9,
+        hqla_eligible_credit=False, hqla_level_credit=0,
+        rsf_weight_credit=0.50, duration_credit=3.0,
+        hqla_eligible_pe=False, hqla_level_pe=0,
+        rsf_weight_pe=1.00, duration_pe=5.0,
         revenue_range_m=(3.0, 150.0),
         ebitda_margin_range=(0.08, 0.18),
     ),

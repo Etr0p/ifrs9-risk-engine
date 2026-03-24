@@ -443,6 +443,12 @@ class TestValidation:
                 entry_multiple_range=(6.0, 10.0), exit_multiple_base=8.0,
                 rho_lgd_cycle=0.20,
                 green_share=0.25,
+                market_vol_credit=0.025, market_vol_pe=0.16,
+                market_capacity_credit_eur=900e9, market_capacity_pe_eur=70e9,
+                hqla_eligible_credit=False, hqla_level_credit=0,
+                rsf_weight_credit=0.50, duration_credit=3.0,
+                hqla_eligible_pe=False, hqla_level_pe=0,
+                rsf_weight_pe=1.00, duration_pe=5.0,
                 revenue_range_m=(3.0, 150.0), ebitda_margin_range=(0.08, 0.18),
             )
             cfg.SECTORS[-1] = bad
@@ -487,6 +493,12 @@ class TestValidation:
                 entry_multiple_range=(6.0, 10.0), exit_multiple_base=8.0,
                 rho_lgd_cycle=0.20,
                 green_share=0.25,
+                market_vol_credit=0.025, market_vol_pe=0.16,
+                market_capacity_credit_eur=900e9, market_capacity_pe_eur=70e9,
+                hqla_eligible_credit=False, hqla_level_credit=0,
+                rsf_weight_credit=0.50, duration_credit=3.0,
+                hqla_eligible_pe=False, hqla_level_pe=0,
+                rsf_weight_pe=1.00, duration_pe=5.0,
                 revenue_range_m=(3.0, 150.0), ebitda_margin_range=(0.08, 0.18),
             )
             cfg.SECTORS[-1] = bad

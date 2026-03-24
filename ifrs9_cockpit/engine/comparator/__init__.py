@@ -22,13 +22,14 @@ from ifrs9_cockpit.config import (
 from ifrs9_cockpit.engine.comparator.crr3 import compute_crr3_rw
 from ifrs9_cockpit.engine.comparator.metrics import MetricsMixin
 from ifrs9_cockpit.engine.comparator.optimizer import OptimizerMixin
+from ifrs9_cockpit.engine.comparator.optimizer_pebc import PebcOptimizerMixin
 from ifrs9_cockpit.engine.comparator.sensitivity import SensitivityMixin
 
 # Capital CET1 = BASEL_CONFIG.rwa_budget x cet1_target = 3.69T x 13% = 479.7 Md EUR.
 # rwa_budget represente le RWA total de la banque (pas du portefeuille).
 
 
-class PortfolioComparator(MetricsMixin, OptimizerMixin, SensitivityMixin):
+class PortfolioComparator(OptimizerMixin, PebcOptimizerMixin, MetricsMixin, SensitivityMixin):
     """Comparateur de portefeuilles credit et PE.
 
     Orchestre le calcul des metriques avancees, de la concentration
