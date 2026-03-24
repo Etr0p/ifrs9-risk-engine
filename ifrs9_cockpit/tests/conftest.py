@@ -13,29 +13,11 @@ import joblib
 from pathlib import Path
 from filelock import FileLock
 
-
-# ============================================================
-# Flags --all / --slow
-# ============================================================
-
-def pytest_addoption(parser):
-    parser.addoption("--slow", action="store_true", default=False,
-                     help="Include @pytest.mark.slow tests (subprocess standalones)")
-
-
-def pytest_collection_modifyitems(config, items):
-    run_slow = config.getoption("--slow", default=False)
-    if not run_slow:
-        kept = []
-        slow_deselected = []
-        for item in items:
-            if item.get_closest_marker("slow"):
-                slow_deselected.append(item)
-            else:
-                kept.append(item)
-        if slow_deselected:
-            config.hook.pytest_deselected(items=slow_deselected)
-            items[:] = kept
+# Smart test selector — --smart, --all, --slow flags + git-based selection
+from ifrs9_cockpit.tests.smart_test_selector import (  # noqa: F401
+    pytest_addoption,
+    pytest_collection_modifyitems,
+)
 
 from ifrs9_cockpit.data.generator import generate_dataset
 from ifrs9_cockpit.models.pd_model import PDModelSuite
