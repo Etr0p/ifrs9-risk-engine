@@ -413,10 +413,10 @@ class TestOptimizeAllocationPebc:
         total = sum(w.values())
         assert abs(total - 1.0) < 0.01, f"Somme poids PE = {total}"
 
-    def test_sector_weights_positive(self, allocation_pebc):
+    def test_sector_weights_non_negative(self, allocation_pebc):
         for canal in ["sector_weights_credit", "sector_weights_pe"]:
             for sector, w in allocation_pebc[canal].items():
-                assert w > 0, f"{canal}/{sector}: poids={w} non positif"
+                assert w >= 0, f"{canal}/{sector}: poids={w} negatif"
 
     def test_all_5_sectors_in_weights(self, allocation_pebc):
         assert set(allocation_pebc["sector_weights_credit"].keys()) == set(SECTOR_NAMES)

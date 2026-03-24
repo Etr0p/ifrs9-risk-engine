@@ -19,8 +19,6 @@ from filelock import FileLock
 # ============================================================
 
 def pytest_addoption(parser):
-    parser.addoption("--all", action="store_true", default=False,
-                     help="Include all tests (ignore smart-select)")
     parser.addoption("--slow", action="store_true", default=False,
                      help="Include @pytest.mark.slow tests (subprocess standalones)")
 

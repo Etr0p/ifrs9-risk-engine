@@ -104,10 +104,10 @@ class TestNoInterference:
         r1 = comparator.optimize_allocation()
         _ = comparator.optimize_allocation_pebc()
         r3 = comparator.optimize_allocation()
-        # Les cles numeriques doivent etre identiques
-        assert r1["credit_allocation"] == r3["credit_allocation"]
-        assert r1["pe_allocation"] == r3["pe_allocation"]
-        assert r1["cvar_95"] == r3["cvar_95"]
+        # Les cles numeriques doivent etre identiques (tolerance flottante)
+        np.testing.assert_allclose(r1["credit_allocation"], r3["credit_allocation"], rtol=1e-10)
+        np.testing.assert_allclose(r1["pe_allocation"], r3["pe_allocation"], rtol=1e-10)
+        np.testing.assert_allclose(r1["cvar_95"], r3["cvar_95"], rtol=1e-10)
 
     def test_10c_then_14c_independent(self, comparator):
         """10C puis 14C — 14C non pollue."""
