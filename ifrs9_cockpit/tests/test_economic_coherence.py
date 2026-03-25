@@ -549,6 +549,63 @@ class TestRegulatoryNorms:
             f"> max {BASEL_CONFIG.pe_max_allocation}"
         )
 
+    # ── 10C (pe-bc) regulatory norms ──
+
+    def test_cet1_ratio_positive_10c(self, opt_10c):
+        """10C CET1 ratio should be positive."""
+        assert opt_10c["cet1_ratio"] > 0, (
+            f"CET1 ratio error (10C): cet1_ratio = {opt_10c['cet1_ratio']}"
+        )
+
+    def test_lcr_ratio_positive_10c(self, opt_10c):
+        """10C LCR should be a positive ratio."""
+        assert opt_10c["lcr_ratio"] > 0, (
+            f"LCR computation error (10C): lcr_ratio = {opt_10c['lcr_ratio']}"
+        )
+
+    def test_nsfr_ratio_positive_10c(self, opt_10c):
+        """10C NSFR should be a positive ratio."""
+        assert opt_10c["nsfr_ratio"] > 0, (
+            f"NSFR computation error (10C): nsfr_ratio = {opt_10c['nsfr_ratio']}"
+        )
+
+    def test_lcr_ratio_reasonable_10c(self, opt_10c):
+        """10C LCR should be close to target after regulatory Phase 2.
+
+        pe-bc has no HQLA L1 assets, so LCR convergence is limited.
+        The ratio should improve (>0.80) even if not fully compliant.
+        """
+        assert opt_10c["lcr_ratio"] > 0.80, (
+            f"LCR too low (10C): lcr_ratio = {opt_10c['lcr_ratio']}"
+        )
+
+    def test_nsfr_compliant_10c(self, opt_10c):
+        """10C should be NSFR compliant after regulatory Phase 2."""
+        assert opt_10c["nsfr_compliant"], (
+            f"NSFR non-compliant (10C): nsfr_ratio = {opt_10c['nsfr_ratio']}"
+        )
+
+    def test_irrbb_ratio_finite_10c(self, opt_10c):
+        """10C IRRBB EVE ratio should be finite and positive.
+
+        pe-bc duration structure may not achieve full IRRBB compliance
+        due to limited short-duration assets. Verify the ratio is computed.
+        """
+        assert opt_10c["irrbb_eve_ratio"] > 0, (
+            f"IRRBB ratio error (10C): eve_ratio = {opt_10c['irrbb_eve_ratio']}"
+        )
+        assert np.isfinite(opt_10c["irrbb_eve_ratio"]), (
+            f"IRRBB ratio non-finite (10C): eve_ratio = {opt_10c['irrbb_eve_ratio']}"
+        )
+
+    def test_pe_allocation_below_15_pct_10c(self, opt_10c):
+        """10C PE weight should not exceed 15%."""
+        pe_alloc = opt_10c["pe_allocation"]
+        assert pe_alloc <= BASEL_CONFIG.pe_max_allocation + 1e-4, (
+            f"PE cap not enforced (10C): pe_allocation = {pe_alloc:.4f} "
+            f"> max {BASEL_CONFIG.pe_max_allocation}"
+        )
+
 
 # ──────────────────────────────────────────────
 # CLASS 6: OPTIMIZER ECONOMICS
@@ -683,14 +740,19 @@ class TestCrossModuleCoherence:
         assert np.all(el_pe >= 0), "PE EL should be non-negative"
 
     def test_raroc_feeds_optimizer(self, raroc_df, opt_14c):
-        """Optimizer should read profit rates from RAROC results."""
-        # The optimizer's profit_rate_portfolio should be a weighted average
-        # of individual profit_rates
+        """14C optimizer should read profit rates from RAROC results."""
         pr = opt_14c.get("profit_rate_portfolio")
-        assert pr is not None, "profit_rate_portfolio missing from optimizer"
-        # Should be in a reasonable range
+        assert pr is not None, "profit_rate_portfolio missing from 14C optimizer"
         assert -0.5 < pr < 0.5, (
-            f"RAROC→optimizer link broken: profit_rate_portfolio = {pr}"
+            f"RAROC→optimizer link broken (14C): profit_rate_portfolio = {pr}"
+        )
+
+    def test_raroc_feeds_optimizer_10c(self, raroc_df, opt_10c):
+        """10C optimizer should read profit rates from RAROC results."""
+        pr = opt_10c.get("profit_rate_portfolio")
+        assert pr is not None, "profit_rate_portfolio missing from 10C optimizer"
+        assert -0.5 < pr < 0.5, (
+            f"RAROC→optimizer link broken (10C): profit_rate_portfolio = {pr}"
         )
 
     def test_nii_sign_convention(self, raroc_df):

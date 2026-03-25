@@ -16,9 +16,12 @@ Architecture endogene (v3 — market impact logarithmique) :
 
 from __future__ import annotations
 
+import logging
 import numpy as np
 import polars as pl
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from ifrs9_cockpit.config import (
     ASSET_CLASSES,
@@ -515,8 +518,8 @@ class OptimizerMixin:
                 _hmm_result = detect_regime(macro_params)
                 cvar_alpha = _hmm_result.cvar_alpha
                 _hmm_regime = _hmm_result.regime
-            except Exception:
-                pass  # Graceful fallback to default cvar_alpha
+            except (ImportError, RuntimeError, KeyError, ValueError) as exc:
+                logger.warning("HMM regime detection failed, using default cvar_alpha: %s", exc)
         raroc_mc = self.compute_raroc_multiclass()
         raroc_2ch = self.compute_raroc_eva()  # for backward-compat sector weights
         coc = BASEL_CONFIG.cet1_target

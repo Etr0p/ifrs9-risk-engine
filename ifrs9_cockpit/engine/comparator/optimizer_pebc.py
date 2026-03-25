@@ -15,9 +15,12 @@ dual-channel de SectorConfig (market_vol_credit/pe, market_capacity_credit/pe_eu
 
 from __future__ import annotations
 
+import logging
 import numpy as np
 import polars as pl
 from typing import Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from scipy.linalg import cholesky
 
@@ -489,8 +492,8 @@ class PebcOptimizerMixin:
                 _hmm_result = detect_regime(macro_params)
                 cvar_alpha = _hmm_result.cvar_alpha
                 _hmm_regime = _hmm_result.regime
-            except Exception:
-                pass
+            except (ImportError, RuntimeError, KeyError, ValueError) as exc:
+                logger.warning("HMM regime detection failed, using default cvar_alpha: %s", exc)
         # compute_raroc_eva() is provided by MetricsMixin (already on PortfolioComparator)
         raroc_df: pl.DataFrame = self.compute_raroc_eva()  # type: ignore[attr-defined]
         coc = BASEL_CONFIG.cet1_target
@@ -574,11 +577,14 @@ class PebcOptimizerMixin:
         w_opt = self._softmax_pebc(scores_2, corr_10)
 
         # Grid search alpha : w_trial = (1-alpha)*w_base + alpha*w_opt
+        # Reuse pre-drawn scenarios (same as 14C optimizer pattern)
+        cutoff = max(int(N_MC * (1 - cvar_alpha)), 1)
         best_alpha = 0.0
         best_obj = float("-inf")
         for alpha_trial in np.linspace(0, 1, 201):
             w_trial = (1 - alpha_trial) * w_base + alpha_trial * w_opt
-            cvar_trial, _, _ = self._compute_cvar_pebc(w_trial, Sigma, N_MC, alpha=cvar_alpha)
+            port_losses = scenarios @ w_trial
+            cvar_trial = -float(np.mean(np.sort(port_losses)[:cutoff]))
             mu_trial = self._spread_compression_pebc(w_trial, total_ead, mu)
             obj = float(w_trial @ mu_trial) - kappa * cvar_trial
             if obj > best_obj:
