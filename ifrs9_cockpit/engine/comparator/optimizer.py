@@ -489,14 +489,34 @@ class OptimizerMixin:
             ou mu_eff_i = mu_base_i / (1 + compression_i)
             et compression_i = -ln(1 - share_i)
 
+        HMM regime conditioning (Hamilton 1989) :
+            If macro_params provided and cvar_alpha not explicitly overridden,
+            detect_regime() determines the macro regime and adjusts cvar_alpha:
+            - contraction → cvar_alpha=0.80 (more conservative tail risk)
+            - recovery/expansion → cvar_alpha=0.95 (standard)
+
         Args:
-            macro_params: Dict macro optionnel.
+            macro_params: Dict macro optionnel. Si fourni, conditionne le
+                regime HMM pour ajuster dynamiquement cvar_alpha.
+            cvar_alpha: Niveau de confiance CVaR (defaut 0.95). Si macro_params
+                est fourni et cvar_alpha vaut 0.95 (defaut), le regime HMM
+                peut le surcharger.
 
         Returns:
             Dict avec allocation optimale N classes et metriques BL-CVaR.
             Backward-compatible keys : credit_allocation, pe_allocation,
             sector_weights_credit, sector_weights_pe.
         """
+        # ── HMM regime conditioning ──
+        _hmm_regime = None
+        if macro_params is not None and cvar_alpha == 0.95:
+            try:
+                from ifrs9_cockpit.engine.hmm_regime import detect_regime
+                _hmm_result = detect_regime(macro_params)
+                cvar_alpha = _hmm_result.cvar_alpha
+                _hmm_regime = _hmm_result.regime
+            except Exception:
+                pass  # Graceful fallback to default cvar_alpha
         raroc_mc = self.compute_raroc_multiclass()
         raroc_2ch = self.compute_raroc_eva()  # for backward-compat sector weights
         coc = BASEL_CONFIG.cet1_target
@@ -906,6 +926,7 @@ class OptimizerMixin:
             "rmt_n_signal": rmt_result.n_signal,
             "rmt_n_noise": rmt_result.n_noise,
             "rmt_noise_fraction": round(rmt_result.noise_fraction, 4),
+            "hmm_regime": _hmm_regime,
             "spread_compression": {
                 name: round(float(-np.log(1.0 - np.clip(
                     best_w[i] * total_ead / ASSET_CLASS_MAP[name].market_capacity_eur,

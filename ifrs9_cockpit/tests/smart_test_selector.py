@@ -71,6 +71,7 @@ MODULE_TO_TESTS = {
         "test_config.py::TestMacroScenarios",
         "test_config.py::TestStandalone",
         "test_config.py::TestValidation",
+        "test_economic_coherence.py::TestScenarioMechanics",
     ],
     "ifrs9_cockpit/config/models.py": [
         "test_config.py::TestDataFrameContracts",
@@ -87,6 +88,9 @@ MODULE_TO_TESTS = {
         "test_comparator.py::TestMulticlassAllocation",
         "test_multi_asset.py::TestRegulatoryNorms",
         "test_optimizer_pebc.py",
+        "test_economic_coherence.py::TestPnLComponentCoherence",
+        "test_economic_coherence.py::TestRegulatoryNorms",
+        "test_economic_coherence.py::TestOptimizerEconomics",
     ],
     "ifrs9_cockpit/config/rules.py": [
         "test_config.py::TestMacroIncoherenceRules",
@@ -112,6 +116,8 @@ MODULE_TO_TESTS = {
         "test_comparator.py::TestRAROCMulticlassReasonable",
         "test_metrics.py",
         "test_optimizer_pebc.py",
+        "test_economic_coherence.py::TestPnLComponentCoherence",
+        "test_economic_coherence.py::TestCrossModuleCoherence",
     ],
     "ifrs9_cockpit/engine/comparator/optimizer.py": [
         "test_comparator.py::TestOptimizeAllocation",
@@ -125,10 +131,14 @@ MODULE_TO_TESTS = {
         "test_comparator.py::TestBLConfidence",
         "test_comparator.py::TestCorrelation10x10",
         "test_model_isolation.py",
+        "test_economic_coherence.py::TestOptimizerEconomics",
+        "test_hmm_rmt_wiring.py::TestHMMAutoWiring",
     ],
     "ifrs9_cockpit/engine/comparator/optimizer_pebc.py": [
         "test_optimizer_pebc.py",
         "test_model_isolation.py",
+        "test_economic_coherence.py::TestOptimizerEconomics",
+        "test_hmm_rmt_wiring.py::TestHMMAutoWiring",
     ],
     "ifrs9_cockpit/engine/comparator/regulatory_pebc.py": [
         "test_optimizer_pebc.py::TestLCRPebc",
@@ -162,14 +172,20 @@ MODULE_TO_TESTS = {
         "test_staging_ecl.py::TestStaging",
         "test_staging_ecl.py::TestStandalone",
         "test_invariants.py",
+        "test_economic_coherence.py::TestScenarioMechanics",
+        "test_economic_coherence.py::TestStagingAndECL",
     ],
     "ifrs9_cockpit/engine/ecl_calculator.py": [
         "test_staging_ecl.py::TestECLCalculator",
         "test_invariants.py",
+        "test_economic_coherence.py::TestStagingAndECL",
+        "test_economic_coherence.py::TestCrossModuleCoherence",
     ],
     "ifrs9_cockpit/engine/pe_calculator.py": [
         "test_pe.py",
         "test_comparator.py::TestRAROCEVA",
+        "test_economic_coherence.py::TestPEValuation",
+        "test_economic_coherence.py::TestCrossModuleCoherence",
     ],
 
     # ── Governance engines ──
@@ -259,6 +275,9 @@ MODULE_TO_TESTS = {
     # ── Consumer / Mortgage PD suites ──
     "ifrs9_cockpit/models/consumer_pd_model.py": ["test_consumer_pd_model.py"],
     "ifrs9_cockpit/models/mortgage_pd_model.py": ["test_mortgage_pd_model.py"],
+
+    # ── Economic coherence (self-referencing) ──
+    "ifrs9_cockpit/tests/test_economic_coherence.py": ["test_economic_coherence.py"],
 
     # ── Infra critique → tout relancer ──
     "ifrs9_cockpit/tests/conftest.py": ["__ALL__"],

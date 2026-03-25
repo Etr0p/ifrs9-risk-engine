@@ -451,7 +451,11 @@ class PebcOptimizerMixin:
     # OPTIMISEUR BL-CVaR 10 CELLULES — POINT D'ENTREE
     # ──────────────────────────────────────────────
 
-    def optimize_allocation_pebc(self) -> Dict[str, object]:
+    def optimize_allocation_pebc(
+        self,
+        macro_params: Optional[Dict[str, float]] = None,
+        cvar_alpha: float = 0.95,
+    ) -> Dict[str, object]:
         """Optimise l'allocation BL-CVaR sur 10 cellules (5 secteurs x 2 canaux).
 
         Phase 1 : BL-CVaR (CVaR gradient + spread compression)
@@ -465,10 +469,28 @@ class PebcOptimizerMixin:
 
         Phase 2 : Contraintes reglementaires (CET1, LCR, NSFR, IRRBB)
 
+        HMM regime conditioning (Hamilton 1989) :
+            If macro_params provided and cvar_alpha not explicitly overridden,
+            detect_regime() adjusts cvar_alpha dynamically.
+
+        Args:
+            macro_params: Dict macro optionnel pour conditionnement HMM.
+            cvar_alpha: Niveau de confiance CVaR (defaut 0.95).
+
         Returns:
             Dict backward-compatible + metriques CVaR.
             ``method`` = ``"BL-CVaR-10C"``.
         """
+        # ── HMM regime conditioning ──
+        _hmm_regime = None
+        if macro_params is not None and cvar_alpha == 0.95:
+            try:
+                from ifrs9_cockpit.engine.hmm_regime import detect_regime
+                _hmm_result = detect_regime(macro_params)
+                cvar_alpha = _hmm_result.cvar_alpha
+                _hmm_regime = _hmm_result.regime
+            except Exception:
+                pass
         # compute_raroc_eva() is provided by MetricsMixin (already on PortfolioComparator)
         raroc_df: pl.DataFrame = self.compute_raroc_eva()  # type: ignore[attr-defined]
         coc = BASEL_CONFIG.cet1_target
@@ -529,7 +551,9 @@ class PebcOptimizerMixin:
         mu_eff = self._spread_compression_pebc(w_base, total_ead, mu)
 
         # CVaR sur w_base
-        cvar_base, scenarios, tail_mask = self._compute_cvar_pebc(w_base, Sigma, N_MC)
+        cvar_base, scenarios, tail_mask = self._compute_cvar_pebc(
+            w_base, Sigma, N_MC, alpha=cvar_alpha,
+        )
 
         # Kappa auto-calibre
         mu_portfolio = float(w_base @ mu_eff)
@@ -554,7 +578,7 @@ class PebcOptimizerMixin:
         best_obj = float("-inf")
         for alpha_trial in np.linspace(0, 1, 201):
             w_trial = (1 - alpha_trial) * w_base + alpha_trial * w_opt
-            cvar_trial, _, _ = self._compute_cvar_pebc(w_trial, Sigma, N_MC)
+            cvar_trial, _, _ = self._compute_cvar_pebc(w_trial, Sigma, N_MC, alpha=cvar_alpha)
             mu_trial = self._spread_compression_pebc(w_trial, total_ead, mu)
             obj = float(w_trial @ mu_trial) - kappa * cvar_trial
             if obj > best_obj:
@@ -697,7 +721,7 @@ class PebcOptimizerMixin:
             )
 
         # ── CVaR final ──
-        cvar_final, _, _ = self._compute_cvar_pebc(best_w, Sigma, N_MC)
+        cvar_final, _, _ = self._compute_cvar_pebc(best_w, Sigma, N_MC, alpha=cvar_alpha)
 
         # ── Spread compression final ──
         spread_comp = {}
@@ -732,6 +756,8 @@ class PebcOptimizerMixin:
                 for i, cname in enumerate(_CELL_NAMES_PEBC)
             },
             "cvar_95": round(cvar_final, 6),
+            "cvar_alpha": round(cvar_alpha, 2),
+            "hmm_regime": _hmm_regime,
             "kappa": round(float(kappa), 4),
             "n_scenarios": N_MC,
             "risk_alpha": round(float(best_alpha), 4),

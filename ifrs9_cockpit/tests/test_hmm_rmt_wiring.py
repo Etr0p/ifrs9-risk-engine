@@ -146,3 +146,79 @@ class TestNonRegression:
         assert opt["cet1_ratio"] >= 0.10
         total = sum(opt["class_weights"].values())
         assert abs(total - 1.0) < 0.01
+
+
+# ═══════════════════════════════════════════════════════
+# HMM AUTO-WIRING (macro_params → regime → cvar_alpha)
+# ═══════════════════════════════════════════════════════
+
+
+class TestHMMAutoWiring:
+    """Tests that macro_params auto-triggers HMM regime detection."""
+
+    def test_14c_adverse_macro_detects_contraction(self, global_comparator):
+        """14C optimizer auto-detects contraction when macro_params is adverse."""
+        macro_adverse = {
+            "unemployment_rate": 12.0,
+            "gdp_growth": -4.0,
+            "interest_rate": 1.0,
+            "hpi_growth": -3.0,
+            "inflation_rate": 4.0,
+        }
+        opt = global_comparator.optimize_allocation(macro_params=macro_adverse)
+        assert opt["hmm_regime"] == "contraction"
+        assert opt["cvar_alpha"] == 0.80
+
+    def test_14c_base_macro_detects_recovery(self, global_comparator):
+        """14C optimizer auto-detects recovery for base macro conditions."""
+        macro_base = {
+            "unemployment_rate": 7.5,
+            "gdp_growth": 1.2,
+            "interest_rate": 2.0,
+            "hpi_growth": 2.0,
+            "inflation_rate": 2.0,
+        }
+        opt = global_comparator.optimize_allocation(macro_params=macro_base)
+        assert opt["hmm_regime"] == "recovery"
+        assert opt["cvar_alpha"] == 0.95
+
+    def test_14c_no_macro_no_regime(self, global_comparator):
+        """Without macro_params, hmm_regime is None."""
+        opt = global_comparator.optimize_allocation()
+        assert opt["hmm_regime"] is None
+        assert opt["cvar_alpha"] == 0.95
+
+    def test_14c_explicit_alpha_overrides_hmm(self, global_comparator):
+        """Explicit cvar_alpha != 0.95 should bypass HMM detection."""
+        macro_adverse = {
+            "unemployment_rate": 12.0,
+            "gdp_growth": -4.0,
+            "interest_rate": 1.0,
+            "hpi_growth": -3.0,
+            "inflation_rate": 4.0,
+        }
+        opt = global_comparator.optimize_allocation(
+            macro_params=macro_adverse, cvar_alpha=0.90,
+        )
+        # Explicit alpha overrides: HMM not triggered
+        assert opt["cvar_alpha"] == 0.90
+        assert opt["hmm_regime"] is None
+
+    def test_10c_adverse_macro_detects_contraction(self, global_comparator):
+        """10C pe-bc optimizer auto-detects contraction."""
+        macro_adverse = {
+            "unemployment_rate": 12.0,
+            "gdp_growth": -4.0,
+            "interest_rate": 1.0,
+            "hpi_growth": -3.0,
+            "inflation_rate": 4.0,
+        }
+        opt = global_comparator.optimize_allocation_pebc(macro_params=macro_adverse)
+        assert opt["hmm_regime"] == "contraction"
+        assert opt["cvar_alpha"] == 0.80
+
+    def test_10c_no_macro_no_regime(self, global_comparator):
+        """10C: without macro_params, hmm_regime is None."""
+        opt = global_comparator.optimize_allocation_pebc()
+        assert opt.get("hmm_regime") is None
+        assert opt["cvar_alpha"] == 0.95
