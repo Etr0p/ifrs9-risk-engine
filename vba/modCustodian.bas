@@ -315,45 +315,45 @@ NextFxLine:
         Exit Function
     End If
 
-    fxRates("USD") = eurUsd
-    CustLog "FetchEURRates: EUR/USD = " & Format(eurUsd, "0.0000"), "OK"
+    fxRates("USD") = 1 / eurUsd
+    CustLog "FetchEURRates: USD/EUR = " & Format(1 / eurUsd, "0.000000"), "OK"
 
     If gbpUsd > 0 Then
-        fxRates("GBP") = eurUsd / gbpUsd
-        CustLog "FetchEURRates: EUR/GBP = " & _
-            Format(eurUsd / gbpUsd, "0.0000") & _
-            " (= " & Format(eurUsd, "0.0000") & _
-            " / " & Format(gbpUsd, "0.0000") & ")", "OK"
+        fxRates("GBP") = gbpUsd / eurUsd
+        CustLog "FetchEURRates: GBP/EUR = " & _
+            Format(gbpUsd / eurUsd, "0.000000") & _
+            " (= " & Format(gbpUsd, "0.0000") & _
+            " / " & Format(eurUsd, "0.0000") & ")", "OK"
     Else
         CustLog "FetchEURRates: GBP_USD introuvable!", "WARN"
     End If
 
     If jpyUsd > 0 Then
-        fxRates("JPY") = eurUsd / jpyUsd
-        CustLog "FetchEURRates: EUR/JPY = " & _
-            Format(eurUsd / jpyUsd, "0.0000") & _
-            " (= " & Format(eurUsd, "0.0000") & _
-            " / " & Format(jpyUsd, "0.0000") & ")", "OK"
+        fxRates("JPY") = jpyUsd / eurUsd
+        CustLog "FetchEURRates: JPY/EUR = " & _
+            Format(jpyUsd / eurUsd, "0.000000") & _
+            " (= " & Format(jpyUsd, "0.0000") & _
+            " / " & Format(eurUsd, "0.0000") & ")", "OK"
     Else
         CustLog "FetchEURRates: JPY_USD introuvable!", "WARN"
     End If
 
     If chfUsd > 0 Then
-        fxRates("CHF") = eurUsd / chfUsd
-        CustLog "FetchEURRates: EUR/CHF = " & _
-            Format(eurUsd / chfUsd, "0.0000") & _
-            " (= " & Format(eurUsd, "0.0000") & _
-            " / " & Format(chfUsd, "0.0000") & ")", "OK"
+        fxRates("CHF") = chfUsd / eurUsd
+        CustLog "FetchEURRates: CHF/EUR = " & _
+            Format(chfUsd / eurUsd, "0.000000") & _
+            " (= " & Format(chfUsd, "0.0000") & _
+            " / " & Format(eurUsd, "0.0000") & ")", "OK"
     Else
         CustLog "FetchEURRates: CHF_USD introuvable", "WARN"
     End If
 
     If cadUsd > 0 Then
-        fxRates("CAD") = eurUsd / cadUsd
-        CustLog "FetchEURRates: EUR/CAD = " & _
-            Format(eurUsd / cadUsd, "0.0000") & _
-            " (= " & Format(eurUsd, "0.0000") & _
-            " / " & Format(cadUsd, "0.0000") & ")", "OK"
+        fxRates("CAD") = cadUsd / eurUsd
+        CustLog "FetchEURRates: CAD/EUR = " & _
+            Format(cadUsd / eurUsd, "0.000000") & _
+            " (= " & Format(cadUsd, "0.0000") & _
+            " / " & Format(eurUsd, "0.0000") & ")", "OK"
     Else
         CustLog "FetchEURRates: CAD_USD introuvable", "WARN"
     End If
@@ -375,7 +375,7 @@ Private Sub WriteFxDisplay(fxRates As Object)
 
     If fxRates.Exists("USD") Then
         ws.Cells(r, FX_LABEL_COL).Value = "Rate USD/EUR"
-        ws.Cells(r, FX_VALUE_COL).Value = 1 / CDbl(fxRates("USD"))
+        ws.Cells(r, FX_VALUE_COL).Value = CDbl(fxRates("USD"))
         ws.Cells(r, FX_VALUE_COL).NumberFormat = "0.000000"
         ws.Cells(r, FX_LABEL_COL).Font.Bold = True
         r = r + 1
@@ -383,7 +383,7 @@ Private Sub WriteFxDisplay(fxRates As Object)
 
     If fxRates.Exists("GBP") Then
         ws.Cells(r, FX_LABEL_COL).Value = "Rate GBP/EUR"
-        ws.Cells(r, FX_VALUE_COL).Value = 1 / CDbl(fxRates("GBP"))
+        ws.Cells(r, FX_VALUE_COL).Value = CDbl(fxRates("GBP"))
         ws.Cells(r, FX_VALUE_COL).NumberFormat = "0.000000"
         ws.Cells(r, FX_LABEL_COL).Font.Bold = True
         r = r + 1
@@ -391,7 +391,7 @@ Private Sub WriteFxDisplay(fxRates As Object)
 
     If fxRates.Exists("JPY") Then
         ws.Cells(r, FX_LABEL_COL).Value = "Rate JPY/EUR"
-        ws.Cells(r, FX_VALUE_COL).Value = 1 / CDbl(fxRates("JPY"))
+        ws.Cells(r, FX_VALUE_COL).Value = CDbl(fxRates("JPY"))
         ws.Cells(r, FX_VALUE_COL).NumberFormat = "0.000000"
         ws.Cells(r, FX_LABEL_COL).Font.Bold = True
         r = r + 1
@@ -399,7 +399,7 @@ Private Sub WriteFxDisplay(fxRates As Object)
 
     If fxRates.Exists("CHF") Then
         ws.Cells(r, FX_LABEL_COL).Value = "Rate CHF/EUR"
-        ws.Cells(r, FX_VALUE_COL).Value = 1 / CDbl(fxRates("CHF"))
+        ws.Cells(r, FX_VALUE_COL).Value = CDbl(fxRates("CHF"))
         ws.Cells(r, FX_VALUE_COL).NumberFormat = "0.000000"
         ws.Cells(r, FX_LABEL_COL).Font.Bold = True
         r = r + 1
@@ -407,7 +407,7 @@ Private Sub WriteFxDisplay(fxRates As Object)
 
     If fxRates.Exists("CAD") Then
         ws.Cells(r, FX_LABEL_COL).Value = "Rate CAD/EUR"
-        ws.Cells(r, FX_VALUE_COL).Value = 1 / CDbl(fxRates("CAD"))
+        ws.Cells(r, FX_VALUE_COL).Value = CDbl(fxRates("CAD"))
         ws.Cells(r, FX_VALUE_COL).NumberFormat = "0.000000"
         ws.Cells(r, FX_LABEL_COL).Font.Bold = True
         r = r + 1
@@ -1023,8 +1023,8 @@ Public Function EtapeCust5_WriteLTVResults( _
                         partE = Replace(Format(rawCollateral, "0.00"), ",", ".")
                         partF = Replace(Format(rawCommitted, "0.00"), ",", ".")
                     Else
-                        partE = Replace(Format(rawCollateral, "0.00"), ",", ".") & "/" & Replace(Format(fxRate, "0.0000"), ",", ".")
-                        partF = Replace(Format(rawCommitted, "0.00"), ",", ".") & "/" & Replace(Format(fxRate, "0.0000"), ",", ".")
+                        partE = Replace(Format(rawCollateral, "0.00"), ",", ".") & "*" & Replace(Format(fxRate, "0.000000"), ",", ".")
+                        partF = Replace(Format(rawCommitted, "0.00"), ",", ".") & "*" & Replace(Format(fxRate, "0.000000"), ",", ".")
                     End If
 
                     partE = partE & "+N(""" & CStr(pidKey) & """)"
@@ -1041,12 +1041,12 @@ Public Function EtapeCust5_WriteLTVResults( _
                         rowFormulaF(row) = partF
                     End If
 
-                    convCollateral = rawCollateral / fxRate
-                    convCommitted = rawCommitted / fxRate
+                    convCollateral = rawCollateral * fxRate
+                    convCommitted = rawCommitted * fxRate
                     rowTotalE(row) = CDbl(rowTotalE(row)) + convCollateral
                     rowTotalF(row) = CDbl(rowTotalF(row)) + convCommitted
 
-                    CustLog "EtapeCust5: PID " & pidKey & " (" & pidCcy & ") collateral=" & Format(rawCollateral, "#,##0.00") & "/" & Format(fxRate, "0.0000") & " committed=" & Format(rawCommitted, "#,##0.00") & "/" & Format(fxRate, "0.0000"), "INFO"
+                    CustLog "EtapeCust5: PID " & pidKey & " (" & pidCcy & ") collateral=" & Format(rawCollateral, "#,##0.00") & "*" & Format(fxRate, "0.000000") & " committed=" & Format(rawCommitted, "#,##0.00") & "*" & Format(fxRate, "0.000000"), "INFO"
 
                     crdsVal = CStr(ltvArr(2))
                     If Len(crdsVal) > 0 Then
