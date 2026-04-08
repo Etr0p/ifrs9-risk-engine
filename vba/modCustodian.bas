@@ -1373,6 +1373,11 @@ Private Sub FormatSheet()
 
     On Error GoTo FormatErr
 
+    ' ==== FOND BLANC + SUPPRESSION QUADRILLAGE ====
+    ws.Cells.Interior.Color = RGB(255, 255, 255)
+    ws.Cells.Borders.LineStyle = xlNone
+    ActiveWindow.DisplayGridlines = False
+
     ' lr base sur col E (col A contient aussi le tableau FX plus bas)
     lr = ws.Cells(ws.Rows.Count, CUST_COLLATERAL_COL).End(xlUp).Row
     If lr < CUST_START_ROW Then lr = CUST_START_ROW
