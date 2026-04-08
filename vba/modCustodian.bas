@@ -1316,6 +1316,15 @@ Public Sub RunCustodian()
     End If
     On Error GoTo 0
 
+    ' MISE EN PAGE
+    On Error Resume Next
+    FormatSheet
+    If Err.Number <> 0 Then
+        CustLog "FormatSheet CRASH: " & Err.Description, "ERROR"
+        Err.Clear
+    End If
+    On Error GoTo 0
+
     If crashCount = 0 Then
         CustLog "========== SUCCES ==========", "OK"
     Else
@@ -1332,6 +1341,171 @@ Cleanup:
     Else
         MsgBox crashCount & " erreur(s) en " & Format(elapsed, "0.0") & "s" & vbCrLf & "Voir Log.", vbExclamation
     End If
+End Sub
+
+
+' ================================================================================
+' MISE EN PAGE
+' ================================================================================
+Private Sub FormatSheet()
+    Dim ws As Worksheet
+    Dim lr As Long
+    Dim lastCol As Long
+    Dim dataRange As Range
+    Dim headerRange As Range
+    Dim totalRow As Long
+    Dim r As Long
+
+    On Error Resume Next
+    Set ws = ActiveWorkbook.Sheets(CUST_SHEET)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+
+    On Error GoTo FormatErr
+
+    lr = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row
+    If lr < CUST_START_ROW Then lr = CUST_START_ROW
+    lastCol = CUST_PID_TOTAL_COL ' Col J
+
+    ' ==== EN-TETE LIGNE 1 (A1:J1) ====
+    Set headerRange = ws.Range(ws.Cells(1, 1), ws.Cells(1, lastCol))
+    With headerRange
+        .Interior.Color = RGB(33, 37, 41)       ' gris tres fonce
+        .Font.Color = RGB(255, 255, 255)         ' blanc
+        .Font.Bold = True
+        .Font.Size = 11
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders(xlEdgeBottom).LineStyle = xlContinuous
+        .Borders(xlEdgeBottom).Color = RGB(0, 123, 255)  ' accent bleu
+        .Borders(xlEdgeBottom).Weight = xlMedium
+    End With
+    ws.Rows(1).RowHeight = 28
+
+    ' ==== CORPS DONNEES (lignes 2 a lr) ====
+    ' Detecter si derniere ligne est le total (pas de nom en A)
+    totalRow = 0
+    If Len(Trim(CStr(ws.Cells(lr, CUST_NAME_COL).Value))) = 0 Then
+        totalRow = lr
+    End If
+
+    For r = CUST_START_ROW To lr
+        Dim rowRange As Range
+        Set rowRange = ws.Range(ws.Cells(r, 1), ws.Cells(r, lastCol))
+
+        If r = totalRow Then
+            ' --- Ligne total ---
+            rowRange.Interior.Color = RGB(33, 37, 41)
+            rowRange.Font.Color = RGB(255, 255, 255)
+            rowRange.Font.Bold = True
+            rowRange.Font.Size = 11
+            rowRange.Borders(xlEdgeTop).LineStyle = xlContinuous
+            rowRange.Borders(xlEdgeTop).Color = RGB(0, 123, 255)
+            rowRange.Borders(xlEdgeTop).Weight = xlMedium
+        Else
+            ' --- Lignes alternees ---
+            If (r - CUST_START_ROW) Mod 2 = 0 Then
+                rowRange.Interior.Color = RGB(248, 249, 250) ' gris clair
+            Else
+                rowRange.Interior.Color = RGB(233, 236, 239) ' gris un peu plus
+            End If
+            rowRange.Font.Color = RGB(33, 37, 41)
+            rowRange.Font.Size = 10
+        End If
+
+        ' Bordure basse fine pour toutes les lignes
+        rowRange.Borders(xlEdgeBottom).LineStyle = xlContinuous
+        rowRange.Borders(xlEdgeBottom).Color = RGB(206, 212, 218)
+        rowRange.Borders(xlEdgeBottom).Weight = xlThin
+    Next r
+
+    ' Col A en gras (noms custodians)
+    If totalRow > 0 Then
+        ws.Range(ws.Cells(CUST_START_ROW, CUST_NAME_COL), _
+                 ws.Cells(totalRow - 1, CUST_NAME_COL)).Font.Bold = True
+    Else
+        ws.Range(ws.Cells(CUST_START_ROW, CUST_NAME_COL), _
+                 ws.Cells(lr, CUST_NAME_COL)).Font.Bold = True
+    End If
+
+    ' Format nombre cols E, F
+    ws.Range(ws.Cells(CUST_START_ROW, CUST_COLLATERAL_COL), _
+             ws.Cells(lr, CUST_COLLATERAL_COL)).NumberFormat = "#,##0.00"
+    ws.Range(ws.Cells(CUST_START_ROW, CUST_COMMITTED_COL), _
+             ws.Cells(lr, CUST_COMMITTED_COL)).NumberFormat = "#,##0.00"
+
+    ' Alignement centre cols G, J
+    ws.Range(ws.Cells(CUST_START_ROW, CUST_PID_UNIQUE_COL), _
+             ws.Cells(lr, CUST_PID_UNIQUE_COL)).HorizontalAlignment = xlCenter
+    ws.Range(ws.Cells(CUST_START_ROW, CUST_PID_TOTAL_COL), _
+             ws.Cells(lr, CUST_PID_TOTAL_COL)).HorizontalAlignment = xlCenter
+
+    ' Largeurs colonnes
+    ws.Columns("A").ColumnWidth = 28
+    ws.Columns("B").ColumnWidth = 14
+    ws.Columns("C").ColumnWidth = 14
+    ws.Columns("D").ColumnWidth = 14
+    ws.Columns("E").ColumnWidth = 18
+    ws.Columns("F").ColumnWidth = 18
+    ws.Columns("G").ColumnWidth = 10
+    ws.Columns("H").ColumnWidth = 40
+    ws.Columns("I").ColumnWidth = 20
+    ws.Columns("J").ColumnWidth = 12
+
+    ' ==== TABLEAU FX (M:N) ====
+    Dim fxLastRow As Long
+    fxLastRow = ws.Cells(ws.Rows.Count, FX_LABEL_COL).End(xlUp).Row
+    If fxLastRow < FX_DISPLAY_START_ROW Then fxLastRow = FX_DISPLAY_START_ROW
+
+    ' Titre
+    ws.Cells(FX_DISPLAY_START_ROW - 1, FX_LABEL_COL).Value = "FX Rates"
+    With ws.Range(ws.Cells(FX_DISPLAY_START_ROW - 1, FX_LABEL_COL), _
+                  ws.Cells(FX_DISPLAY_START_ROW - 1, FX_VALUE_COL))
+        .Merge
+        .Interior.Color = RGB(0, 123, 255)       ' bleu accent
+        .Font.Color = RGB(255, 255, 255)
+        .Font.Bold = True
+        .Font.Size = 11
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders(xlEdgeBottom).LineStyle = xlContinuous
+        .Borders(xlEdgeBottom).Color = RGB(0, 86, 179)
+        .Borders(xlEdgeBottom).Weight = xlMedium
+    End With
+    ws.Rows(FX_DISPLAY_START_ROW - 1).RowHeight = 26
+
+    ' Corps FX
+    Dim fxR As Long
+    For fxR = FX_DISPLAY_START_ROW To fxLastRow
+        Dim fxRow As Range
+        Set fxRow = ws.Range(ws.Cells(fxR, FX_LABEL_COL), _
+                             ws.Cells(fxR, FX_VALUE_COL))
+        If (fxR - FX_DISPLAY_START_ROW) Mod 2 = 0 Then
+            fxRow.Interior.Color = RGB(219, 234, 254) ' bleu clair
+        Else
+            fxRow.Interior.Color = RGB(191, 219, 254) ' bleu moyen
+        End If
+        fxRow.Font.Color = RGB(30, 58, 95)
+        fxRow.Font.Size = 10
+        fxRow.Borders(xlEdgeBottom).LineStyle = xlContinuous
+        fxRow.Borders(xlEdgeBottom).Color = RGB(147, 197, 253)
+        fxRow.Borders(xlEdgeBottom).Weight = xlThin
+    Next fxR
+
+    ' Labels FX en gras
+    ws.Range(ws.Cells(FX_DISPLAY_START_ROW, FX_LABEL_COL), _
+             ws.Cells(fxLastRow, FX_LABEL_COL)).Font.Bold = True
+
+    ws.Columns("M").ColumnWidth = 16
+    ws.Columns("N").ColumnWidth = 12
+
+    CustLog "FormatSheet: mise en page appliquee", "OK"
+    Exit Sub
+
+FormatErr:
+    CustLog "FormatSheet: erreur " & Err.Description, "ERROR"
+    Err.Clear
+    On Error GoTo 0
 End Sub
 
 
