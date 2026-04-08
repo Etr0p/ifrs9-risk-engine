@@ -1295,8 +1295,6 @@ Public Sub RunCustodian()
         Dim totalRow As Long
         totalRow = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row + 1
         If totalRow > CUST_START_ROW Then
-            ws.Cells(totalRow, CUST_NAME_COL).Value = "TOTAL"
-            ws.Cells(totalRow, CUST_NAME_COL).Font.Bold = True
             ws.Cells(totalRow, CUST_COLLATERAL_COL).Formula = _
                 "=SUM(" & ws.Cells(CUST_START_ROW, CUST_COLLATERAL_COL).Address(False, False) & _
                 ":" & ws.Cells(totalRow - 1, CUST_COLLATERAL_COL).Address(False, False) & ")"
