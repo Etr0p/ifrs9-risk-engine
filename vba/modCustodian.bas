@@ -587,8 +587,26 @@ NextLine1:
 
     CustLog "EtapeCust1: " & orderedNames.Count & " custodians uniques trouves (BNP filtres)", "OK"
 
-    ' --- Effacer anciennes donnees Sheet1 ---
+    ' --- Sauvegarder cols B:D existantes par nom custodian ---
+    Dim savedBCD As Object
+    Dim oldName As String
+    Set savedBCD = CreateObject("Scripting.Dictionary")
     lr = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row
+    If lr >= CUST_START_ROW Then
+        Dim rr As Long
+        For rr = CUST_START_ROW To lr
+            oldName = UCase(Trim(CStr(ws.Cells(rr, CUST_NAME_COL).Value)))
+            If Len(oldName) > 0 And Not savedBCD.Exists(oldName) Then
+                savedBCD.Add oldName, Array( _
+                    ws.Cells(rr, 2).Value, _
+                    ws.Cells(rr, 3).Value, _
+                    ws.Cells(rr, 4).Value)
+            End If
+        Next rr
+        CustLog "EtapeCust1: " & savedBCD.Count & " custodians B:D sauvegardes", "INFO"
+    End If
+
+    ' --- Effacer anciennes donnees Sheet1 ---
     If lr >= CUST_START_ROW Then
         ws.Range(ws.Cells(CUST_START_ROW, CUST_NAME_COL), _
                  ws.Cells(lr, CUST_PID_TOTAL_COL)).Clear
@@ -599,9 +617,20 @@ NextLine1:
     ' --- Ecrire les noms dans col A (ordre d'apparition RAWRISK) ---
     r = CUST_START_ROW
     Dim k As Variant
+    Dim bcdArr As Variant
     For Each k In orderedNames.Keys
         ws.Cells(r, CUST_NAME_COL).Value = orderedNames(k)  ' casse originale
         custNames.Add CStr(k), r  ' cle = UCase pour le matching
+
+        ' Restaurer B:D si ce custodian existait avant
+        If savedBCD.Exists(CStr(k)) Then
+            bcdArr = savedBCD(CStr(k))
+            ws.Cells(r, 2).Value = bcdArr(0)
+            ws.Cells(r, 3).Value = bcdArr(1)
+            ws.Cells(r, 4).Value = bcdArr(2)
+            CustLog "EtapeCust1: B:D restaures pour " & orderedNames(k) & " (ligne " & r & ")", "INFO"
+        End If
+
         nameList = nameList & orderedNames(k) & ", "
         r = r + 1
     Next k
