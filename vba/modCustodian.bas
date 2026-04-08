@@ -170,7 +170,6 @@ Private Function FindCommonDate() As Boolean
             Exit Function
         End If
 
-        ' Log detaille pour diagnostic
         CustLog "FindCommonDate: " & Format(d, "YYYYMMDD") & _
             " RAW=" & IIf(FileExists(pathRaw), "OK", "NON") & _
             " LTV=" & IIf(FileExists(pathLTV), "OK", "NON") & _
@@ -511,8 +510,15 @@ Public Function EtapeCust1_ReadCustodians( _
     Dim nameList As String
     Dim r As Long
     Dim lr As Long
-    ' -- ordered list (Dictionary preserves insertion order in VBA) --
     Dim orderedNames As Object
+    Dim savedBCD As Object
+    Dim oldName As String
+    Dim rr As Long
+    Dim clearLr As Long
+    Dim c As Long
+    Dim colLr As Long
+    Dim k As Variant
+    Dim bcdArr As Variant
 
     Set custNames = CreateObject("Scripting.Dictionary")
     Set orderedNames = CreateObject("Scripting.Dictionary")
@@ -574,7 +580,7 @@ Public Function EtapeCust1_ReadCustodians( _
         If UCase(Left(custKey, 3)) = "BNP" Then GoTo NextLine1
 
         If Not orderedNames.Exists(UCase(custKey)) Then
-            orderedNames.Add UCase(custKey), custKey  ' garde la casse originale
+            orderedNames.Add UCase(custKey), custKey
         End If
 NextLine1:
     Next i
@@ -585,15 +591,13 @@ NextLine1:
         Exit Function
     End If
 
-    CustLog "EtapeCust1: " & orderedNames.Count & " custodians uniques trouves (BNP filtres)", "OK"
+    CustLog "EtapeCust1: " & orderedNames.Count & _
+        " custodians uniques trouves (BNP filtres)", "OK"
 
     ' --- Sauvegarder cols B:D existantes par nom custodian ---
-    Dim savedBCD As Object
-    Dim oldName As String
     Set savedBCD = CreateObject("Scripting.Dictionary")
     lr = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row
     If lr >= CUST_START_ROW Then
-        Dim rr As Long
         For rr = CUST_START_ROW To lr
             oldName = UCase(Trim(CStr(ws.Cells(rr, CUST_NAME_COL).Value)))
             If Len(oldName) > 0 And Not savedBCD.Exists(oldName) Then
@@ -603,15 +607,13 @@ NextLine1:
                     ws.Cells(rr, 4).Value)
             End If
         Next rr
-        CustLog "EtapeCust1: " & savedBCD.Count & " custodians B:D sauvegardes", "INFO"
+        CustLog "EtapeCust1: " & savedBCD.Count & _
+            " custodians B:D sauvegardes", "INFO"
     End If
 
     ' --- Effacer anciennes donnees Sheet1 (max de toutes les cols A-J) ---
-    Dim clearLr As Long
-    Dim c As Long
     clearLr = lr
     For c = CUST_NAME_COL To CUST_PID_TOTAL_COL
-        Dim colLr As Long
         colLr = ws.Cells(ws.Rows.Count, c).End(xlUp).Row
         If colLr > clearLr Then clearLr = colLr
     Next c
@@ -624,11 +626,9 @@ NextLine1:
 
     ' --- Ecrire les noms dans col A (ordre d'apparition RAWRISK) ---
     r = CUST_START_ROW
-    Dim k As Variant
-    Dim bcdArr As Variant
     For Each k In orderedNames.Keys
-        ws.Cells(r, CUST_NAME_COL).Value = orderedNames(k)  ' casse originale
-        custNames.Add CStr(k), r  ' cle = UCase pour le matching
+        ws.Cells(r, CUST_NAME_COL).Value = orderedNames(k)
+        custNames.Add CStr(k), r
 
         ' Restaurer B:D si ce custodian existait avant
         If savedBCD.Exists(CStr(k)) Then
@@ -636,7 +636,8 @@ NextLine1:
             ws.Cells(r, 2).Value = bcdArr(0)
             ws.Cells(r, 3).Value = bcdArr(1)
             ws.Cells(r, 4).Value = bcdArr(2)
-            CustLog "EtapeCust1: B:D restaures pour " & orderedNames(k) & " (ligne " & r & ")", "INFO"
+            CustLog "EtapeCust1: B:D restaures pour " & _
+                orderedNames(k) & " (ligne " & r & ")", "INFO"
         End If
 
         nameList = nameList & orderedNames(k) & ", "
@@ -697,10 +698,12 @@ Public Function EtapeCust2_ReadRawRisk( _
     CustLog "EtapeCust2: " & (UBound(fields) + 1) & " colonnes", "INFO"
 
     If UBound(fields) >= RAW_COL_PID Then
-        CustLog "EtapeCust2: Col " & RAW_COL_PID & " header=[" & Trim(fields(RAW_COL_PID)) & "]", "INFO"
+        CustLog "EtapeCust2: Col " & RAW_COL_PID & _
+            " header=[" & Trim(fields(RAW_COL_PID)) & "]", "INFO"
     End If
     If UBound(fields) >= RAW_COL_CUSTODIAN Then
-        CustLog "EtapeCust2: Col " & RAW_COL_CUSTODIAN & " header=[" & Trim(fields(RAW_COL_CUSTODIAN)) & "]", "INFO"
+        CustLog "EtapeCust2: Col " & RAW_COL_CUSTODIAN & _
+            " header=[" & Trim(fields(RAW_COL_CUSTODIAN)) & "]", "INFO"
     End If
 
     skipHeader = False
@@ -724,7 +727,9 @@ Public Function EtapeCust2_ReadRawRisk( _
         Exit Function
     End If
 
-    CustLog "EtapeCust2: 1ere donnee -> PID=[" & Trim(fields(RAW_COL_PID)) & "] CUST=[" & Trim(fields(RAW_COL_CUSTODIAN)) & "]", "INFO"
+    CustLog "EtapeCust2: 1ere donnee -> PID=[" & _
+        Trim(fields(RAW_COL_PID)) & "] CUST=[" & _
+        Trim(fields(RAW_COL_CUSTODIAN)) & "]", "INFO"
 
     custList = ""
     For Each k In custNames.Keys
@@ -761,14 +766,18 @@ NextRawLine:
         Else
             pidDebug = ""
             For Each pk In custPIDs(k).Keys
-                pidDebug = pidDebug & CStr(pk) & "(x" & custPIDs(k)(pk) & "), "
+                pidDebug = pidDebug & CStr(pk) & _
+                    "(x" & custPIDs(k)(pk) & "), "
             Next pk
-            If Len(pidDebug) > 2 Then pidDebug = Left(pidDebug, Len(pidDebug) - 2)
-            CustLog "EtapeCust2: " & k & " -> " & cnt & " PIDs: " & pidDebug, "OK"
+            If Len(pidDebug) > 2 Then _
+                pidDebug = Left(pidDebug, Len(pidDebug) - 2)
+            CustLog "EtapeCust2: " & k & " -> " & cnt & _
+                " PIDs: " & pidDebug, "OK"
         End If
     Next k
 
-    CustLog "EtapeCust2: " & (UBound(lines) + 1) & " lignes, " & matchCount & " matches", "OK"
+    CustLog "EtapeCust2: " & (UBound(lines) + 1) & _
+        " lignes, " & matchCount & " matches", "OK"
     EtapeCust2_ReadRawRisk = True
 End Function
 
@@ -816,7 +825,9 @@ Public Function EtapeCust3_WriteRawResults( _
                     rowPIDs(row).Add CStr(pidKey), True
                 End If
             Next pidKey
-            CustLog "EtapeCust3: Alias [" & k & "] -> ligne " & row & " ajoute " & custPIDs(k).Count & " PIDs (total: " & rowPIDs(row).Count & ")", "INFO"
+            CustLog "EtapeCust3: Alias [" & k & "] -> ligne " & row & _
+                " ajoute " & custPIDs(k).Count & _
+                " PIDs (total: " & rowPIDs(row).Count & ")", "INFO"
         End If
     Next k
 
@@ -839,17 +850,20 @@ Public Function EtapeCust3_WriteRawResults( _
                 If custNames(aliasKey) = row Then
                     If custPIDs.Exists(aliasKey) Then
                         If custPIDs(aliasKey).Exists(CStr(pidKey)) Then
-                            pidAppear = pidAppear + CLng(custPIDs(aliasKey)(CStr(pidKey)))
+                            pidAppear = pidAppear + _
+                                CLng(custPIDs(aliasKey)(CStr(pidKey)))
                         End If
                     End If
                 End If
             Next aliasKey
 
             If Len(formulaJ) > 0 Then formulaJ = formulaJ & "+"
-            formulaJ = formulaJ & pidAppear & "+N(""" & CStr(pidKey) & """)"
+            formulaJ = formulaJ & pidAppear & _
+                "+N(""" & CStr(pidKey) & """)"
         Next pidKey
 
-        CustLog "EtapeCust3: Ligne " & row & " -> " & pidUnique & " uniques, formule=[=" & Left(formulaJ, 60) & "]", "INFO"
+        CustLog "EtapeCust3: Ligne " & row & " -> " & pidUnique & _
+            " uniques, formule=[=" & Left(formulaJ, 60) & "]", "INFO"
 
         ws.Cells(row, CUST_PID_LIST_COL).NumberFormat = "@"
         ws.Cells(row, CUST_PID_LIST_COL).Value = pidList
@@ -866,12 +880,14 @@ Public Function EtapeCust3_WriteRawResults( _
             CustLog "EtapeCust3: VERIF ECHOUEE ligne " & row, "ERROR"
             errCount = errCount + 1
         Else
-            CustLog "EtapeCust3: Ligne " & row & " OK: H=" & Left(pidList, 50) & " G=" & pidUnique, "OK"
+            CustLog "EtapeCust3: Ligne " & row & " OK: H=" & _
+                Left(pidList, 50) & " G=" & pidUnique, "OK"
         End If
 
         GoTo NextCust3
 WriteFail3:
-        CustLog "EtapeCust3: ERREUR ligne " & row & ": " & Err.Description, "ERROR"
+        CustLog "EtapeCust3: ERREUR ligne " & row & _
+            ": " & Err.Description, "ERROR"
         errCount = errCount + 1
         Err.Clear
         Resume NextCust3
@@ -916,7 +932,9 @@ Public Function EtapeCust4_ReadLTV( _
     Set allPIDs = CreateObject("Scripting.Dictionary")
     For Each k In custPIDs.Keys
         For Each pk In custPIDs(k).Keys
-            If Not allPIDs.Exists(CStr(pk)) Then allPIDs.Add CStr(pk), True
+            If Not allPIDs.Exists(CStr(pk)) Then
+                allPIDs.Add CStr(pk), True
+            End If
         Next pk
     Next k
 
@@ -979,7 +997,10 @@ Public Function EtapeCust4_ReadLTV( _
             ccy = UCase(Trim(fields(LTV_COL_CURRENCY)))
             ltvData(pid) = Array(committed, collateral, crds, ccy)
             foundCount = foundCount + 1
-            CustLog "EtapeCust4: PID " & pid & " (" & ccy & ") committed=" & Format(committed, "#,##0.00") & " collateral=" & Format(collateral, "#,##0.00") & " crds=[" & crds & "]", "INFO"
+            CustLog "EtapeCust4: PID " & pid & " (" & ccy & _
+                ") committed=" & Format(committed, "#,##0.00") & _
+                " collateral=" & Format(collateral, "#,##0.00") & _
+                " crds=[" & crds & "]", "INFO"
         End If
 NextLTVLine:
     Next i
@@ -992,7 +1013,8 @@ NextLTVLine:
         End If
     Next pk
 
-    CustLog "EtapeCust4: " & foundCount & "/" & allPIDs.Count & " trouves (" & missingCount & " manquants)", "OK"
+    CustLog "EtapeCust4: " & foundCount & "/" & allPIDs.Count & _
+        " trouves (" & missingCount & " manquants)", "OK"
     EtapeCust4_ReadLTV = True
 End Function
 
@@ -1061,22 +1083,26 @@ Public Function EtapeCust5_WriteLTVResults( _
                     rawCommitted = CDbl(ltvArr(0))
                     rawCollateral = CDbl(ltvArr(1))
 
-                    If UCase(Trim(pidCcy)) = "EUR" Or Len(Trim(pidCcy)) = 0 Then
+                    If UCase(Trim(pidCcy)) = "EUR" Or _
+                       Len(Trim(pidCcy)) = 0 Then
                         fxRate = 1
                     ElseIf fxRates.Exists(UCase(Trim(pidCcy))) Then
                         fxRate = CDbl(fxRates(UCase(Trim(pidCcy))))
                         If fxRate = 0 Then fxRate = 1
                     Else
                         fxRate = 1
-                        CustLog "EtapeCust5: devise """ & pidCcy & """ inconnue, pas de conversion", "WARN"
+                        CustLog "EtapeCust5: devise """ & pidCcy & _
+                            """ inconnue, pas de conversion", "WARN"
                     End If
 
                     If fxRate = 1 Then
                         partE = Replace(Format(rawCollateral, "0.00"), ",", ".")
                         partF = Replace(Format(rawCommitted, "0.00"), ",", ".")
                     Else
-                        partE = Replace(Format(rawCollateral, "0.00"), ",", ".") & "*" & Replace(Format(fxRate, "0.000000"), ",", ".")
-                        partF = Replace(Format(rawCommitted, "0.00"), ",", ".") & "*" & Replace(Format(fxRate, "0.000000"), ",", ".")
+                        partE = Replace(Format(rawCollateral, "0.00"), ",", ".") & _
+                            "*" & Replace(Format(fxRate, "0.000000"), ",", ".")
+                        partF = Replace(Format(rawCommitted, "0.00"), ",", ".") & _
+                            "*" & Replace(Format(fxRate, "0.000000"), ",", ".")
                     End If
 
                     partE = partE & "+N(""" & CStr(pidKey) & """)"
@@ -1098,7 +1124,11 @@ Public Function EtapeCust5_WriteLTVResults( _
                     rowTotalE(row) = CDbl(rowTotalE(row)) + convCollateral
                     rowTotalF(row) = CDbl(rowTotalF(row)) + convCommitted
 
-                    CustLog "EtapeCust5: PID " & pidKey & " (" & pidCcy & ") collateral=" & Format(rawCollateral, "#,##0.00") & "*" & Format(fxRate, "0.000000") & " committed=" & Format(rawCommitted, "#,##0.00") & "*" & Format(fxRate, "0.000000"), "INFO"
+                    CustLog "EtapeCust5: PID " & pidKey & " (" & pidCcy & _
+                        ") collateral=" & Format(rawCollateral, "#,##0.00") & _
+                        "*" & Format(fxRate, "0.000000") & _
+                        " committed=" & Format(rawCommitted, "#,##0.00") & _
+                        "*" & Format(fxRate, "0.000000"), "INFO"
 
                     crdsVal = CStr(ltvArr(2))
                     If Len(crdsVal) > 0 Then
@@ -1109,7 +1139,8 @@ Public Function EtapeCust5_WriteLTVResults( _
                         End If
                     End If
                 Else
-                    CustLog "EtapeCust5: PID " & pidKey & " absent du LTV", "WARN"
+                    CustLog "EtapeCust5: PID " & pidKey & _
+                        " absent du LTV", "WARN"
                 End If
             Next pidKey
         End If
@@ -1137,11 +1168,17 @@ Public Function EtapeCust5_WriteLTVResults( _
         ws.Cells(row, CUST_CRDS_COL).NumberFormat = "@"
         ws.Cells(row, CUST_CRDS_COL).Value = CStr(rowCRDS(rowKey))
 
-        CustLog "EtapeCust5: Ligne " & row & " formule E=[=" & Left(fE, 60) & "] formule F=[=" & Left(fF, 60) & "] total E=" & Format(CDbl(rowTotalE(rowKey)), "#,##0.00") & " total F=" & Format(CDbl(rowTotalF(rowKey)), "#,##0.00") & " CRDS=" & Left(CStr(rowCRDS(rowKey)), 30), "OK"
+        CustLog "EtapeCust5: Ligne " & row & _
+            " formule E=[=" & Left(fE, 60) & _
+            "] formule F=[=" & Left(fF, 60) & _
+            "] total E=" & Format(CDbl(rowTotalE(rowKey)), "#,##0.00") & _
+            " total F=" & Format(CDbl(rowTotalF(rowKey)), "#,##0.00") & _
+            " CRDS=" & Left(CStr(rowCRDS(rowKey)), 30), "OK"
 
         GoTo NextCust5
 WriteFail5:
-        CustLog "EtapeCust5: ERREUR ligne " & row & ": " & Err.Description, "ERROR"
+        CustLog "EtapeCust5: ERREUR ligne " & row & _
+            ": " & Err.Description, "ERROR"
         errCount = errCount + 1
         Err.Clear
         Resume NextCust5
@@ -1173,6 +1210,7 @@ Public Sub RunCustodian()
     Dim fxOK As Boolean
     Dim elapsed As Double
     Dim ws As Worksheet
+    Dim totalRow As Long
 
     startTime = Timer
     crashCount = 0
@@ -1204,7 +1242,8 @@ Public Sub RunCustodian()
     CustLog "Date commune: " & m_businessDate, "OK"
     CustLog "RAW: " & BuildRawPath(), "INFO"
     CustLog "LTV: " & BuildLTVPath(), "INFO"
-    CustLog "FX:  " & FX_LOG_FOLDER & FX_LOG_PREFIX & m_businessDate & FX_LOG_SUFFIX, "INFO"
+    CustLog "FX:  " & FX_LOG_FOLDER & FX_LOG_PREFIX & _
+        m_businessDate & FX_LOG_SUFFIX, "INFO"
 
     ' ETAPE 1
     On Error Resume Next
@@ -1299,20 +1338,25 @@ Public Sub RunCustodian()
     On Error Resume Next
     Set ws = ActiveWorkbook.Sheets(CUST_SHEET)
     If Not ws Is Nothing Then
-        Dim totalRow As Long
         totalRow = ws.Cells(ws.Rows.Count, CUST_COLLATERAL_COL).End(xlUp).Row + 1
         If totalRow > CUST_START_ROW Then
             ws.Cells(totalRow, CUST_COLLATERAL_COL).Formula = _
-                "=SUM(" & ws.Cells(CUST_START_ROW, CUST_COLLATERAL_COL).Address(False, False) & _
-                ":" & ws.Cells(totalRow - 1, CUST_COLLATERAL_COL).Address(False, False) & ")"
+                "=SUM(" & _
+                ws.Cells(CUST_START_ROW, CUST_COLLATERAL_COL).Address(False, False) & _
+                ":" & _
+                ws.Cells(totalRow - 1, CUST_COLLATERAL_COL).Address(False, False) & ")"
             ws.Cells(totalRow, CUST_COLLATERAL_COL).Font.Bold = True
             ws.Cells(totalRow, CUST_COMMITTED_COL).Formula = _
-                "=SUM(" & ws.Cells(CUST_START_ROW, CUST_COMMITTED_COL).Address(False, False) & _
-                ":" & ws.Cells(totalRow - 1, CUST_COMMITTED_COL).Address(False, False) & ")"
+                "=SUM(" & _
+                ws.Cells(CUST_START_ROW, CUST_COMMITTED_COL).Address(False, False) & _
+                ":" & _
+                ws.Cells(totalRow - 1, CUST_COMMITTED_COL).Address(False, False) & ")"
             ws.Cells(totalRow, CUST_COMMITTED_COL).Font.Bold = True
             ws.Cells(totalRow, CUST_PID_UNIQUE_COL).Formula = _
-                "=SUM(" & ws.Cells(CUST_START_ROW, CUST_PID_UNIQUE_COL).Address(False, False) & _
-                ":" & ws.Cells(totalRow - 1, CUST_PID_UNIQUE_COL).Address(False, False) & ")"
+                "=SUM(" & _
+                ws.Cells(CUST_START_ROW, CUST_PID_UNIQUE_COL).Address(False, False) & _
+                ":" & _
+                ws.Cells(totalRow - 1, CUST_PID_UNIQUE_COL).Address(False, False) & ")"
             ws.Cells(totalRow, CUST_PID_UNIQUE_COL).Font.Bold = True
             CustLog "Totaux ecrits ligne " & totalRow & " (cols E, F, G)", "OK"
         End If
@@ -1355,9 +1399,11 @@ Cleanup:
     Application.EnableEvents = True
     elapsed = Timer - startTime
     If crashCount = 0 Then
-        MsgBox "OK en " & Format(elapsed, "0.0") & "s" & vbCrLf & "Voir Log.", vbInformation
+        MsgBox "OK en " & Format(elapsed, "0.0") & "s" & _
+            vbCrLf & "Voir Log.", vbInformation
     Else
-        MsgBox crashCount & " erreur(s) en " & Format(elapsed, "0.0") & "s" & vbCrLf & "Voir Log.", vbExclamation
+        MsgBox crashCount & " erreur(s) en " & Format(elapsed, "0.0") & "s" & _
+            vbCrLf & "Voir Log.", vbExclamation
     End If
 End Sub
 
@@ -1369,10 +1415,15 @@ Private Sub FormatSheet()
     Dim ws As Worksheet
     Dim lr As Long
     Dim lastCol As Long
-    Dim dataRange As Range
     Dim headerRange As Range
     Dim totalRow As Long
     Dim r As Long
+    Dim rowRange As Range
+    Dim fxStartRow As Long
+    Dim fxLastRow As Long
+    Dim fxSearch As Range
+    Dim fxR As Long
+    Dim fxRow As Range
 
     On Error Resume Next
     Set ws = ActiveWorkbook.Sheets(CUST_SHEET)
@@ -1414,7 +1465,6 @@ Private Sub FormatSheet()
     End If
 
     For r = CUST_START_ROW To lr
-        Dim rowRange As Range
         Set rowRange = ws.Range(ws.Cells(r, 1), ws.Cells(r, lastCol))
 
         If r = totalRow Then
@@ -1429,9 +1479,9 @@ Private Sub FormatSheet()
         Else
             ' --- Lignes alternees ---
             If (r - CUST_START_ROW) Mod 2 = 0 Then
-                rowRange.Interior.Color = RGB(248, 249, 250) ' gris clair
+                rowRange.Interior.Color = RGB(248, 249, 250)
             Else
-                rowRange.Interior.Color = RGB(233, 236, 239) ' gris un peu plus
+                rowRange.Interior.Color = RGB(233, 236, 239)
             End If
             rowRange.Font.Color = RGB(33, 37, 41)
             rowRange.Font.Size = 10
@@ -1464,23 +1514,11 @@ Private Sub FormatSheet()
     ws.Range(ws.Cells(CUST_START_ROW, CUST_PID_TOTAL_COL), _
              ws.Cells(lr, CUST_PID_TOTAL_COL)).HorizontalAlignment = xlCenter
 
-    ' Largeurs colonnes
-    ws.Columns("A").ColumnWidth = 28
-    ws.Columns("B").ColumnWidth = 14
-    ws.Columns("C").ColumnWidth = 14
-    ws.Columns("D").ColumnWidth = 14
-    ws.Columns("E").ColumnWidth = 18
-    ws.Columns("F").ColumnWidth = 18
-    ws.Columns("G").ColumnWidth = 10
-    ws.Columns("H").ColumnWidth = 40
-    ws.Columns("I").ColumnWidth = 20
-    ws.Columns("J").ColumnWidth = 12
+    ' Largeurs colonnes automatiques
+    ws.Columns("A:J").AutoFit
 
     ' ==== TABLEAU FX (A:B, position dynamique) ====
     ' Chercher la 1ere cellule "Rate *" dans col A apres les custodians
-    Dim fxStartRow As Long
-    Dim fxLastRow As Long
-    Dim fxSearch As Range
     fxStartRow = 0
     Set fxSearch = ws.Range(ws.Cells(lr + 1, FX_LABEL_COL), _
                             ws.Cells(lr + 20, FX_LABEL_COL)).Find( _
@@ -1494,33 +1532,31 @@ Private Sub FormatSheet()
         With ws.Range(ws.Cells(fxStartRow - 1, FX_LABEL_COL), _
                       ws.Cells(fxStartRow - 1, FX_VALUE_COL))
             .Merge
-            .Interior.Color = RGB(0, 123, 255)       ' bleu accent
-            .Font.Color = RGB(255, 255, 255)
+            .Interior.Color = RGB(200, 220, 240)
+            .Font.Color = RGB(40, 60, 90)
             .Font.Bold = True
             .Font.Size = 11
             .HorizontalAlignment = xlCenter
             .VerticalAlignment = xlCenter
             .Borders(xlEdgeBottom).LineStyle = xlContinuous
-            .Borders(xlEdgeBottom).Color = RGB(0, 86, 179)
+            .Borders(xlEdgeBottom).Color = RGB(170, 195, 225)
             .Borders(xlEdgeBottom).Weight = xlMedium
         End With
         ws.Rows(fxStartRow - 1).RowHeight = 26
 
         ' Corps FX
-        Dim fxR As Long
         For fxR = fxStartRow To fxLastRow
-            Dim fxRow As Range
             Set fxRow = ws.Range(ws.Cells(fxR, FX_LABEL_COL), _
                                  ws.Cells(fxR, FX_VALUE_COL))
             If (fxR - fxStartRow) Mod 2 = 0 Then
-                fxRow.Interior.Color = RGB(219, 234, 254) ' bleu clair
+                fxRow.Interior.Color = RGB(232, 240, 250)
             Else
-                fxRow.Interior.Color = RGB(191, 219, 254) ' bleu moyen
+                fxRow.Interior.Color = RGB(215, 228, 245)
             End If
-            fxRow.Font.Color = RGB(30, 58, 95)
+            fxRow.Font.Color = RGB(40, 60, 90)
             fxRow.Font.Size = 10
             fxRow.Borders(xlEdgeBottom).LineStyle = xlContinuous
-            fxRow.Borders(xlEdgeBottom).Color = RGB(147, 197, 253)
+            fxRow.Borders(xlEdgeBottom).Color = RGB(190, 210, 235)
             fxRow.Borders(xlEdgeBottom).Weight = xlThin
         Next fxR
 
