@@ -141,90 +141,56 @@ End Sub
 ' HELPERS
 ' ================================================================================
 
-Private Function FindLastBusinessDate() As String
+Private Function FindCommonDate() As Boolean
     Dim d As Date
     Dim i As Long
-    Dim testPath As String
+    Dim pathRaw As String
+    Dim pathLTV As String
+    Dim pathFx As String
 
     If Len(m_businessDate) > 0 Then
-        FindLastBusinessDate = m_businessDate
+        FindCommonDate = True
         Exit Function
     End If
 
     d = Date - 1
-    For i = 1 To 10
-        testPath = NET_FOLDER & RAW_PREFIX & _
-                   Format(d, "YYYYMMDD") & RAW_SUFFIX
-        If FileExists(testPath) Then
-            CustLog "FindLastBusinessDate: " & Format(d, "YYYYMMDD") & _
-                    " trouve (J-" & i & ")", "OK"
+    For i = 1 To 30
+        pathRaw = NET_FOLDER & RAW_PREFIX & _
+                  Format(d, "YYYYMMDD") & RAW_SUFFIX
+        pathLTV = NET_FOLDER & LTV_PREFIX & _
+                  Format(d, "YYYYMMDD") & LTV_SUFFIX
+        pathFx = FX_LOG_FOLDER & FX_LOG_PREFIX & _
+                 Format(d, "YYYYMMDD") & FX_LOG_SUFFIX
+
+        If FileExists(pathRaw) And FileExists(pathLTV) And FileExists(pathFx) Then
             m_businessDate = Format(d, "YYYYMMDD")
-            FindLastBusinessDate = m_businessDate
+            CustLog "FindCommonDate: " & m_businessDate & _
+                    " (J-" & i & ") -- 3 fichiers presents", "OK"
+            FindCommonDate = True
             Exit Function
         End If
-        CustLog "FindLastBusinessDate: " & Format(d, "YYYYMMDD") & _
-                " absent, recul...", "INFO"
+
+        ' Log detaille pour diagnostic
+        CustLog "FindCommonDate: " & Format(d, "YYYYMMDD") & _
+            " RAW=" & IIf(FileExists(pathRaw), "OK", "NON") & _
+            " LTV=" & IIf(FileExists(pathLTV), "OK", "NON") & _
+            " FX=" & IIf(FileExists(pathFx), "OK", "NON"), "INFO"
         d = d - 1
     Next i
-    CustLog "FindLastBusinessDate: aucun fichier sur 10 jours!", "ERROR"
-    m_businessDate = Format(Date - 1, "YYYYMMDD")
-    FindLastBusinessDate = m_businessDate
-End Function
 
-Private Function FindLastLTVDate() As String
-    Dim d As Date
-    Dim i As Long
-    Dim testPath As String
-
-    d = Date - 1
-    For i = 1 To 10
-        testPath = NET_FOLDER & LTV_PREFIX & _
-                   Format(d, "YYYYMMDD") & LTV_SUFFIX
-        If FileExists(testPath) Then
-            CustLog "FindLastLTVDate: " & Format(d, "YYYYMMDD") & _
-                    " trouve (J-" & i & ")", "OK"
-            FindLastLTVDate = Format(d, "YYYYMMDD")
-            Exit Function
-        End If
-        CustLog "FindLastLTVDate: " & Format(d, "YYYYMMDD") & _
-                " absent, recul...", "INFO"
-        d = d - 1
-    Next i
-    CustLog "FindLastLTVDate: aucun fichier sur 10 jours!", "ERROR"
-    FindLastLTVDate = Format(Date - 1, "YYYYMMDD")
-End Function
-
-Private Function FindLastFxDate() As String
-    Dim d As Date
-    Dim i As Long
-    Dim testPath As String
-
-    d = Date - 1
-    For i = 1 To 10
-        testPath = FX_LOG_FOLDER & FX_LOG_PREFIX & _
-                   Format(d, "YYYYMMDD") & FX_LOG_SUFFIX
-        If FileExists(testPath) Then
-            CustLog "FindLastFxDate: " & Format(d, "YYYYMMDD") & _
-                    " trouve (J-" & i & ")", "OK"
-            FindLastFxDate = Format(d, "YYYYMMDD")
-            Exit Function
-        End If
-        CustLog "FindLastFxDate: " & Format(d, "YYYYMMDD") & _
-                " absent, recul...", "INFO"
-        d = d - 1
-    Next i
-    CustLog "FindLastFxDate: aucun fichier FX sur 10 jours!", "ERROR"
-    FindLastFxDate = ""
+    CustLog "FindCommonDate: aucune date commune sur 30 jours!", "ERROR"
+    m_businessDate = ""
+    FindCommonDate = False
 End Function
 
 Private Function BuildRawPath() As String
     BuildRawPath = NET_FOLDER & RAW_PREFIX & _
-                   FindLastBusinessDate() & RAW_SUFFIX
+                   m_businessDate & RAW_SUFFIX
 End Function
 
 Private Function BuildLTVPath() As String
     BuildLTVPath = NET_FOLDER & LTV_PREFIX & _
-                   FindLastLTVDate() & LTV_SUFFIX
+                   m_businessDate & LTV_SUFFIX
 End Function
 
 Private Function FetchEURRates(ByRef fxRates As Object) As Boolean
@@ -252,13 +218,7 @@ Private Function FetchEURRates(ByRef fxRates As Object) As Boolean
     chfUsd = 0
     cadUsd = 0
 
-    fxDate = FindLastFxDate()
-    If Len(fxDate) = 0 Then
-        CustLog "FetchEURRates: aucun fichier FX disponible", "ERROR"
-        FetchEURRates = False
-        Exit Function
-    End If
-
+    fxDate = m_businessDate
     filePath = FX_LOG_FOLDER & FX_LOG_PREFIX & fxDate & FX_LOG_SUFFIX
     CustLog "FetchEURRates: Fichier: " & filePath, "INFO"
 
@@ -1198,10 +1158,16 @@ Public Sub RunCustodian()
 
     CustLog "========== RunCustodian ==========", "INFO"
     CustLog "Classeur: " & ActiveWorkbook.Name, "INFO"
-    CustLog "Date RAWRISK: " & FindLastBusinessDate(), "INFO"
-    CustLog "Date LTV: " & FindLastLTVDate(), "INFO"
+
+    ' Recherche date commune (RAWRISK + LTV + FX)
+    If Not FindCommonDate() Then
+        CustLog "ABANDON: aucune date commune trouvee sur 30 jours", "ERROR"
+        GoTo Cleanup
+    End If
+    CustLog "Date commune: " & m_businessDate, "OK"
     CustLog "RAW: " & BuildRawPath(), "INFO"
     CustLog "LTV: " & BuildLTVPath(), "INFO"
+    CustLog "FX:  " & FX_LOG_FOLDER & FX_LOG_PREFIX & m_businessDate & FX_LOG_SUFFIX, "INFO"
 
     ' ETAPE 1
     On Error Resume Next
