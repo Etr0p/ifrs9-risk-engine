@@ -540,15 +540,24 @@ End Function
 Public Function EtapeCust1_ReadCustodians( _
         ByRef custNames As Object) As Boolean
     Dim ws As Worksheet
-    Dim r As Long
-    Dim v As String
+    Dim filePath As String
+    Dim lines() As String
+    Dim fields() As String
+    Dim sep As String
+    Dim i As Long
+    Dim custKey As String
+    Dim skipHeader As Boolean
+    Dim firstDataLine As Long
     Dim nameList As String
-    Dim parts() As String
-    Dim p As Long
-    Dim oneName As String
+    Dim r As Long
+    Dim lr As Long
+    ' -- ordered list (Dictionary preserves insertion order in VBA) --
+    Dim orderedNames As Object
 
     Set custNames = CreateObject("Scripting.Dictionary")
+    Set orderedNames = CreateObject("Scripting.Dictionary")
 
+    ' --- Verifier Sheet1 ---
     On Error Resume Next
     Set ws = ActiveWorkbook.Sheets(CUST_SHEET)
     On Error GoTo 0
@@ -558,42 +567,88 @@ Public Function EtapeCust1_ReadCustodians( _
         Exit Function
     End If
 
-    If IsEmpty(ws.Cells(CUST_START_ROW, CUST_NAME_COL).Value) Then
-        CustLog "EtapeCust1: Cellule A" & CUST_START_ROW & " vide", "ERROR"
+    ' --- Lire RAWRISK ---
+    filePath = BuildRawPath()
+    CustLog "EtapeCust1: Fichier: " & filePath, "INFO"
+
+    If Not FileExists(filePath) Then
+        CustLog "EtapeCust1: RAWRISK introuvable", "ERROR"
+        EtapeCust1_ReadCustodians = False
+        Exit Function
+    End If
+    If Not SafeReadFile(filePath, lines) Then
         EtapeCust1_ReadCustodians = False
         Exit Function
     End If
 
-    r = CUST_START_ROW
-    Do
+    sep = DetectSeparator(lines(0))
+    fields = Split(lines(0), sep)
+
+    skipHeader = False
+    If UBound(fields) >= RAW_COL_PID Then
+        If Not IsNumeric(Trim(fields(RAW_COL_PID))) Then
+            skipHeader = True
+            CustLog "EtapeCust1: Header detecte", "INFO"
+        End If
+    End If
+
+    firstDataLine = IIf(skipHeader, 1, 0)
+    If firstDataLine > UBound(lines) Then
+        CustLog "EtapeCust1: Aucune donnee dans RAWRISK", "ERROR"
+        EtapeCust1_ReadCustodians = False
+        Exit Function
+    End If
+
+    ' --- Extraire noms uniques col BL, filtrer BNP ---
+    For i = firstDataLine To UBound(lines)
+        If Len(Trim(lines(i))) = 0 Then GoTo NextLine1
         On Error Resume Next
-        v = ""
-        v = Trim(CStr(ws.Cells(r, CUST_NAME_COL).Value))
+        fields = Split(lines(i), sep)
         On Error GoTo 0
-        If Len(v) = 0 Then Exit Do
-        parts = Split(v, "/")
-        For p = 0 To UBound(parts)
-            oneName = UCase(Trim(parts(p)))
-            If Len(oneName) > 0 Then
-                If custNames.Exists(oneName) Then
-                    CustLog "EtapeCust1: Doublon ignore: " & oneName & " (ligne " & r & ")", "WARN"
-                Else
-                    custNames.Add oneName, r
-                    nameList = nameList & Trim(parts(p)) & ", "
-                End If
-            End If
-        Next p
-        r = r + 1
-    Loop
+        If UBound(fields) < RAW_COL_CUSTODIAN Then GoTo NextLine1
 
-    If custNames.Count = 0 Then
-        CustLog "EtapeCust1: Aucun custodian", "ERROR"
+        custKey = Trim(fields(RAW_COL_CUSTODIAN))
+        If Len(custKey) = 0 Then GoTo NextLine1
+
+        ' Filtre BNP (3 premieres lettres)
+        If UCase(Left(custKey, 3)) = "BNP" Then GoTo NextLine1
+
+        If Not orderedNames.Exists(UCase(custKey)) Then
+            orderedNames.Add UCase(custKey), custKey  ' garde la casse originale
+        End If
+NextLine1:
+    Next i
+
+    If orderedNames.Count = 0 Then
+        CustLog "EtapeCust1: Aucun custodian (tout filtre ou vide)", "ERROR"
         EtapeCust1_ReadCustodians = False
         Exit Function
     End If
+
+    CustLog "EtapeCust1: " & orderedNames.Count & " custodians uniques trouves (BNP filtres)", "OK"
+
+    ' --- Effacer anciennes donnees Sheet1 ---
+    lr = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row
+    If lr >= CUST_START_ROW Then
+        ws.Range(ws.Cells(CUST_START_ROW, CUST_NAME_COL), _
+                 ws.Cells(lr, CUST_PID_TOTAL_COL)).Clear
+        CustLog "EtapeCust1: Anciennes donnees effacees (lignes " & _
+            CUST_START_ROW & "-" & lr & ", cols A-J)", "INFO"
+    End If
+
+    ' --- Ecrire les noms dans col A (ordre d'apparition RAWRISK) ---
+    r = CUST_START_ROW
+    Dim k As Variant
+    For Each k In orderedNames.Keys
+        ws.Cells(r, CUST_NAME_COL).Value = orderedNames(k)  ' casse originale
+        custNames.Add CStr(k), r  ' cle = UCase pour le matching
+        nameList = nameList & orderedNames(k) & ", "
+        r = r + 1
+    Next k
 
     If Len(nameList) > 2 Then nameList = Left(nameList, Len(nameList) - 2)
-    CustLog "EtapeCust1: " & custNames.Count & " noms (alias inclus): " & nameList, "OK"
+    CustLog "EtapeCust1: " & custNames.Count & " custodians ecrits (lignes " & _
+        CUST_START_ROW & "-" & (r - 1) & "): " & nameList, "OK"
     EtapeCust1_ReadCustodians = True
 End Function
 
