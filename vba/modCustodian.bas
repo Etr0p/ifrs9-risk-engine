@@ -17,9 +17,9 @@ Private Const CUST_CRDS_COL As Long = 9 ' Col I
 Private Const CUST_PID_TOTAL_COL As Long = 10 ' Col J
 
 ' --- Zone affichage taux FX ---
-Private Const FX_DISPLAY_START_ROW As Long = 3
-Private Const FX_LABEL_COL As Long = 13 ' Col M
-Private Const FX_VALUE_COL As Long = 14 ' Col N
+Private Const FX_LABEL_COL As Long = 1 ' Col A
+Private Const FX_VALUE_COL As Long = 2 ' Col B
+Private Const FX_GAP_ROWS As Long = 7  ' ecart sous derniere ligne col A
 
 ' --- Network path ---
 Private Const NET_FOLDER As String = "\\dfs\root\Fo\Appli\hftbpss\eod\"
@@ -331,7 +331,8 @@ Private Sub WriteFxDisplay(fxRates As Object)
     On Error GoTo 0
     If ws Is Nothing Then Exit Sub
 
-    r = FX_DISPLAY_START_ROW
+    ' Position dynamique : derniere ligne col A + FX_GAP_ROWS
+    r = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row + FX_GAP_ROWS
 
     If fxRates.Exists("USD") Then
         ws.Cells(r, FX_LABEL_COL).Value = "Rate USD/EUR"
@@ -373,8 +374,7 @@ Private Sub WriteFxDisplay(fxRates As Object)
         r = r + 1
     End If
 
-    CustLog "WriteFxDisplay: taux ecrits lignes " & _
-        FX_DISPLAY_START_ROW & "-" & (r - 1), "OK"
+    CustLog "WriteFxDisplay: taux ecrits jusqu'a ligne " & (r - 1), "OK"
 End Sub
 
 Private Function ToEUR(ByVal amount As Double, _
@@ -1255,7 +1255,6 @@ Public Sub RunCustodian()
             Set fxRates = CreateObject("Scripting.Dictionary")
             fxRates("EUR") = 1
         End If
-        WriteFxDisplay fxRates
     End If
 
     ' ETAPE 4
@@ -1288,12 +1287,12 @@ Public Sub RunCustodian()
         CustLog "EtapeCust5: SKIP", "WARN"
     End If
 
-    ' LIGNE TOTAUX E, F, G
+    ' LIGNE TOTAUX E, F, G (basee sur derniere ligne col E)
     On Error Resume Next
     Set ws = ActiveWorkbook.Sheets(CUST_SHEET)
     If Not ws Is Nothing Then
         Dim totalRow As Long
-        totalRow = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row + 1
+        totalRow = ws.Cells(ws.Rows.Count, CUST_COLLATERAL_COL).End(xlUp).Row + 1
         If totalRow > CUST_START_ROW Then
             ws.Cells(totalRow, CUST_COLLATERAL_COL).Formula = _
                 "=SUM(" & ws.Cells(CUST_START_ROW, CUST_COLLATERAL_COL).Address(False, False) & _
@@ -1315,6 +1314,17 @@ Public Sub RunCustodian()
         Err.Clear
     End If
     On Error GoTo 0
+
+    ' AFFICHAGE TAUX FX (apres totaux, 7 lignes sous derniere ligne col A)
+    If fxOK Then
+        On Error Resume Next
+        WriteFxDisplay fxRates
+        If Err.Number <> 0 Then
+            CustLog "WriteFxDisplay CRASH: " & Err.Description, "ERROR"
+            Err.Clear
+        End If
+        On Error GoTo 0
+    End If
 
     ' MISE EN PAGE
     On Error Resume Next
@@ -1363,7 +1373,8 @@ Private Sub FormatSheet()
 
     On Error GoTo FormatErr
 
-    lr = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row
+    ' lr base sur col E (col A contient aussi le tableau FX plus bas)
+    lr = ws.Cells(ws.Rows.Count, CUST_COLLATERAL_COL).End(xlUp).Row
     If lr < CUST_START_ROW Then lr = CUST_START_ROW
     lastCol = CUST_PID_TOTAL_COL ' Col J
 
@@ -1452,52 +1463,58 @@ Private Sub FormatSheet()
     ws.Columns("I").ColumnWidth = 20
     ws.Columns("J").ColumnWidth = 12
 
-    ' ==== TABLEAU FX (M:N) ====
+    ' ==== TABLEAU FX (A:B, position dynamique) ====
+    ' Chercher la 1ere cellule "Rate *" dans col A apres les custodians
+    Dim fxStartRow As Long
     Dim fxLastRow As Long
-    fxLastRow = ws.Cells(ws.Rows.Count, FX_LABEL_COL).End(xlUp).Row
-    If fxLastRow < FX_DISPLAY_START_ROW Then fxLastRow = FX_DISPLAY_START_ROW
+    Dim fxSearch As Range
+    fxStartRow = 0
+    Set fxSearch = ws.Range(ws.Cells(lr + 1, FX_LABEL_COL), _
+                            ws.Cells(lr + 20, FX_LABEL_COL)).Find( _
+                            What:="Rate *", LookIn:=xlValues, LookAt:=xlPart)
+    If Not fxSearch Is Nothing Then
+        fxStartRow = fxSearch.Row
+        fxLastRow = ws.Cells(ws.Rows.Count, FX_LABEL_COL).End(xlUp).Row
 
-    ' Titre
-    ws.Cells(FX_DISPLAY_START_ROW - 1, FX_LABEL_COL).Value = "FX Rates"
-    With ws.Range(ws.Cells(FX_DISPLAY_START_ROW - 1, FX_LABEL_COL), _
-                  ws.Cells(FX_DISPLAY_START_ROW - 1, FX_VALUE_COL))
-        .Merge
-        .Interior.Color = RGB(0, 123, 255)       ' bleu accent
-        .Font.Color = RGB(255, 255, 255)
-        .Font.Bold = True
-        .Font.Size = 11
-        .HorizontalAlignment = xlCenter
-        .VerticalAlignment = xlCenter
-        .Borders(xlEdgeBottom).LineStyle = xlContinuous
-        .Borders(xlEdgeBottom).Color = RGB(0, 86, 179)
-        .Borders(xlEdgeBottom).Weight = xlMedium
-    End With
-    ws.Rows(FX_DISPLAY_START_ROW - 1).RowHeight = 26
+        ' Titre une ligne au-dessus
+        ws.Cells(fxStartRow - 1, FX_LABEL_COL).Value = "FX Rates"
+        With ws.Range(ws.Cells(fxStartRow - 1, FX_LABEL_COL), _
+                      ws.Cells(fxStartRow - 1, FX_VALUE_COL))
+            .Merge
+            .Interior.Color = RGB(0, 123, 255)       ' bleu accent
+            .Font.Color = RGB(255, 255, 255)
+            .Font.Bold = True
+            .Font.Size = 11
+            .HorizontalAlignment = xlCenter
+            .VerticalAlignment = xlCenter
+            .Borders(xlEdgeBottom).LineStyle = xlContinuous
+            .Borders(xlEdgeBottom).Color = RGB(0, 86, 179)
+            .Borders(xlEdgeBottom).Weight = xlMedium
+        End With
+        ws.Rows(fxStartRow - 1).RowHeight = 26
 
-    ' Corps FX
-    Dim fxR As Long
-    For fxR = FX_DISPLAY_START_ROW To fxLastRow
-        Dim fxRow As Range
-        Set fxRow = ws.Range(ws.Cells(fxR, FX_LABEL_COL), _
-                             ws.Cells(fxR, FX_VALUE_COL))
-        If (fxR - FX_DISPLAY_START_ROW) Mod 2 = 0 Then
-            fxRow.Interior.Color = RGB(219, 234, 254) ' bleu clair
-        Else
-            fxRow.Interior.Color = RGB(191, 219, 254) ' bleu moyen
-        End If
-        fxRow.Font.Color = RGB(30, 58, 95)
-        fxRow.Font.Size = 10
-        fxRow.Borders(xlEdgeBottom).LineStyle = xlContinuous
-        fxRow.Borders(xlEdgeBottom).Color = RGB(147, 197, 253)
-        fxRow.Borders(xlEdgeBottom).Weight = xlThin
-    Next fxR
+        ' Corps FX
+        Dim fxR As Long
+        For fxR = fxStartRow To fxLastRow
+            Dim fxRow As Range
+            Set fxRow = ws.Range(ws.Cells(fxR, FX_LABEL_COL), _
+                                 ws.Cells(fxR, FX_VALUE_COL))
+            If (fxR - fxStartRow) Mod 2 = 0 Then
+                fxRow.Interior.Color = RGB(219, 234, 254) ' bleu clair
+            Else
+                fxRow.Interior.Color = RGB(191, 219, 254) ' bleu moyen
+            End If
+            fxRow.Font.Color = RGB(30, 58, 95)
+            fxRow.Font.Size = 10
+            fxRow.Borders(xlEdgeBottom).LineStyle = xlContinuous
+            fxRow.Borders(xlEdgeBottom).Color = RGB(147, 197, 253)
+            fxRow.Borders(xlEdgeBottom).Weight = xlThin
+        Next fxR
 
-    ' Labels FX en gras
-    ws.Range(ws.Cells(FX_DISPLAY_START_ROW, FX_LABEL_COL), _
-             ws.Cells(fxLastRow, FX_LABEL_COL)).Font.Bold = True
-
-    ws.Columns("M").ColumnWidth = 16
-    ws.Columns("N").ColumnWidth = 12
+        ' Labels FX en gras
+        ws.Range(ws.Cells(fxStartRow, FX_LABEL_COL), _
+                 ws.Cells(fxLastRow, FX_LABEL_COL)).Font.Bold = True
+    End If
 
     CustLog "FormatSheet: mise en page appliquee", "OK"
     Exit Sub
