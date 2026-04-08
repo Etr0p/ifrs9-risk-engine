@@ -1532,14 +1532,14 @@ Private Sub FormatSheet()
         With ws.Range(ws.Cells(fxStartRow - 1, FX_LABEL_COL), _
                       ws.Cells(fxStartRow - 1, FX_VALUE_COL))
             .Merge
-            .Interior.Color = RGB(200, 220, 240)
-            .Font.Color = RGB(40, 60, 90)
+            .Interior.Color = RGB(245, 235, 220)
+            .Font.Color = RGB(90, 70, 50)
             .Font.Bold = True
             .Font.Size = 11
             .HorizontalAlignment = xlCenter
             .VerticalAlignment = xlCenter
             .Borders(xlEdgeBottom).LineStyle = xlContinuous
-            .Borders(xlEdgeBottom).Color = RGB(170, 195, 225)
+            .Borders(xlEdgeBottom).Color = RGB(220, 205, 185)
             .Borders(xlEdgeBottom).Weight = xlMedium
         End With
         ws.Rows(fxStartRow - 1).RowHeight = 26
@@ -1549,14 +1549,14 @@ Private Sub FormatSheet()
             Set fxRow = ws.Range(ws.Cells(fxR, FX_LABEL_COL), _
                                  ws.Cells(fxR, FX_VALUE_COL))
             If (fxR - fxStartRow) Mod 2 = 0 Then
-                fxRow.Interior.Color = RGB(232, 240, 250)
+                fxRow.Interior.Color = RGB(252, 246, 235)
             Else
-                fxRow.Interior.Color = RGB(215, 228, 245)
+                fxRow.Interior.Color = RGB(245, 237, 222)
             End If
-            fxRow.Font.Color = RGB(40, 60, 90)
+            fxRow.Font.Color = RGB(90, 70, 50)
             fxRow.Font.Size = 10
             fxRow.Borders(xlEdgeBottom).LineStyle = xlContinuous
-            fxRow.Borders(xlEdgeBottom).Color = RGB(190, 210, 235)
+            fxRow.Borders(xlEdgeBottom).Color = RGB(230, 218, 200)
             fxRow.Borders(xlEdgeBottom).Weight = xlThin
         Next fxR
 
