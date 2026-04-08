@@ -1288,6 +1288,36 @@ Public Sub RunCustodian()
         CustLog "EtapeCust5: SKIP", "WARN"
     End If
 
+    ' LIGNE TOTAUX E, F, G
+    On Error Resume Next
+    Set ws = ActiveWorkbook.Sheets(CUST_SHEET)
+    If Not ws Is Nothing Then
+        Dim totalRow As Long
+        totalRow = ws.Cells(ws.Rows.Count, CUST_NAME_COL).End(xlUp).Row + 1
+        If totalRow > CUST_START_ROW Then
+            ws.Cells(totalRow, CUST_NAME_COL).Value = "TOTAL"
+            ws.Cells(totalRow, CUST_NAME_COL).Font.Bold = True
+            ws.Cells(totalRow, CUST_COLLATERAL_COL).Formula = _
+                "=SUM(" & ws.Cells(CUST_START_ROW, CUST_COLLATERAL_COL).Address(False, False) & _
+                ":" & ws.Cells(totalRow - 1, CUST_COLLATERAL_COL).Address(False, False) & ")"
+            ws.Cells(totalRow, CUST_COLLATERAL_COL).Font.Bold = True
+            ws.Cells(totalRow, CUST_COMMITTED_COL).Formula = _
+                "=SUM(" & ws.Cells(CUST_START_ROW, CUST_COMMITTED_COL).Address(False, False) & _
+                ":" & ws.Cells(totalRow - 1, CUST_COMMITTED_COL).Address(False, False) & ")"
+            ws.Cells(totalRow, CUST_COMMITTED_COL).Font.Bold = True
+            ws.Cells(totalRow, CUST_PID_UNIQUE_COL).Formula = _
+                "=SUM(" & ws.Cells(CUST_START_ROW, CUST_PID_UNIQUE_COL).Address(False, False) & _
+                ":" & ws.Cells(totalRow - 1, CUST_PID_UNIQUE_COL).Address(False, False) & ")"
+            ws.Cells(totalRow, CUST_PID_UNIQUE_COL).Font.Bold = True
+            CustLog "Totaux ecrits ligne " & totalRow & " (cols E, F, G)", "OK"
+        End If
+    End If
+    If Err.Number <> 0 Then
+        CustLog "Erreur ecriture totaux: " & Err.Description, "ERROR"
+        Err.Clear
+    End If
+    On Error GoTo 0
+
     If crashCount = 0 Then
         CustLog "========== SUCCES ==========", "OK"
     Else
