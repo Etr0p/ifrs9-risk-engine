@@ -606,12 +606,20 @@ NextLine1:
         CustLog "EtapeCust1: " & savedBCD.Count & " custodians B:D sauvegardes", "INFO"
     End If
 
-    ' --- Effacer anciennes donnees Sheet1 ---
-    If lr >= CUST_START_ROW Then
+    ' --- Effacer anciennes donnees Sheet1 (max de toutes les cols A-J) ---
+    Dim clearLr As Long
+    Dim c As Long
+    clearLr = lr
+    For c = CUST_NAME_COL To CUST_PID_TOTAL_COL
+        Dim colLr As Long
+        colLr = ws.Cells(ws.Rows.Count, c).End(xlUp).Row
+        If colLr > clearLr Then clearLr = colLr
+    Next c
+    If clearLr >= CUST_START_ROW Then
         ws.Range(ws.Cells(CUST_START_ROW, CUST_NAME_COL), _
-                 ws.Cells(lr, CUST_PID_TOTAL_COL)).Clear
+                 ws.Cells(clearLr, CUST_PID_TOTAL_COL)).Clear
         CustLog "EtapeCust1: Anciennes donnees effacees (lignes " & _
-            CUST_START_ROW & "-" & lr & ", cols A-J)", "INFO"
+            CUST_START_ROW & "-" & clearLr & ", cols A-J)", "INFO"
     End If
 
     ' --- Ecrire les noms dans col A (ordre d'apparition RAWRISK) ---
@@ -1386,14 +1394,14 @@ Private Sub FormatSheet()
     ' ==== EN-TETE LIGNE 1 (A1:J1) ====
     Set headerRange = ws.Range(ws.Cells(1, 1), ws.Cells(1, lastCol))
     With headerRange
-        .Interior.Color = RGB(33, 37, 41)       ' gris tres fonce
-        .Font.Color = RGB(255, 255, 255)         ' blanc
+        .Interior.Color = RGB(252, 228, 236)     ' rose pale
+        .Font.Color = RGB(80, 40, 60)            ' texte fonce
         .Font.Bold = True
         .Font.Size = 11
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
         .Borders(xlEdgeBottom).LineStyle = xlContinuous
-        .Borders(xlEdgeBottom).Color = RGB(0, 123, 255)  ' accent bleu
+        .Borders(xlEdgeBottom).Color = RGB(230, 180, 200)
         .Borders(xlEdgeBottom).Weight = xlMedium
     End With
     ws.Rows(1).RowHeight = 28
@@ -1410,13 +1418,13 @@ Private Sub FormatSheet()
         Set rowRange = ws.Range(ws.Cells(r, 1), ws.Cells(r, lastCol))
 
         If r = totalRow Then
-            ' --- Ligne total ---
-            rowRange.Interior.Color = RGB(33, 37, 41)
-            rowRange.Font.Color = RGB(255, 255, 255)
+            ' --- Ligne total : pas de couleur, juste gras ---
+            rowRange.Interior.Color = RGB(255, 255, 255)
+            rowRange.Font.Color = RGB(33, 37, 41)
             rowRange.Font.Bold = True
             rowRange.Font.Size = 11
             rowRange.Borders(xlEdgeTop).LineStyle = xlContinuous
-            rowRange.Borders(xlEdgeTop).Color = RGB(0, 123, 255)
+            rowRange.Borders(xlEdgeTop).Color = RGB(200, 200, 200)
             rowRange.Borders(xlEdgeTop).Weight = xlMedium
         Else
             ' --- Lignes alternees ---
