@@ -17,9 +17,9 @@ Private Const CUST_CRDS_COL As Long = 9 ' Col I
 Private Const CUST_PID_TOTAL_COL As Long = 10 ' Col J
 
 ' --- Zone affichage taux FX ---
-Private Const FX_DISPLAY_START_ROW As Long = 25
-Private Const FX_LABEL_COL As Long = 1 ' Col A
-Private Const FX_VALUE_COL As Long = 2 ' Col B
+Private Const FX_DISPLAY_START_ROW As Long = 3
+Private Const FX_LABEL_COL As Long = 13 ' Col M
+Private Const FX_VALUE_COL As Long = 14 ' Col N
 
 ' --- Network path ---
 Private Const NET_FOLDER As String = "\\dfs\root\Fo\Appli\hftbpss\eod\"
